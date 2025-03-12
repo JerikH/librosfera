@@ -108,7 +108,7 @@ busquedaSchema.statics.obtenerTerminosPopulares = async function(limite = 10, di
   ]);
 };
 
-// Método estático para obtener búsquedas recientes de un usuario////
+// Método estático para obtener búsquedas recientes de un usuario/////
 busquedaSchema.statics.busquedasRecientesUsuario = function(idUsuario, limite = 10) {
   return this.find({ id_usuario: idUsuario })
     .sort({ fecha_busqueda: -1 })
