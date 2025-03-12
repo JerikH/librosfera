@@ -7,7 +7,7 @@ const rootSchema = Usuario.discriminator('root', new Schema({
     }
   }));
   
-  // USUARIO ADMINISTRADOR555
+  // USUARIO ADMINISTRADOR55
   const administradorSchema = Usuario.discriminator('administrador', new Schema({
     DNI: {
       type: String,

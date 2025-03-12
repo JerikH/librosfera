@@ -147,4 +147,4 @@ recomendacionSchema.statics.obtenerRecomendacionesUsuario = function(idUsuario, 
   .populate('id_libro');
 };
 
-module.exports = Recomendacion;
+module.exports = Recomendacion; ///

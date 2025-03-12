@@ -399,7 +399,7 @@ inventarioSchema.statics.obtenerAgotados = function(limite = 20) {
   .populate('id_libro', 'titulo autor editorial ISBN');
 };
 
-// Obtener historial de movimientos para un libro
+// Obtener historial de movimientos para un libro/
 inventarioSchema.statics.obtenerHistorialLibro = function(idLibro, desde, hasta, tipoMovimiento = null) {
   const query = { id_libro: idLibro };
   
