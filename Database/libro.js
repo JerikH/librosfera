@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const libroSchema = new Schema({
-  // Identificador único autogenerado para el libro
+  // Identificador único autogenerado para el libro/
   id_libro: {
     type: String,
     default: function() {
