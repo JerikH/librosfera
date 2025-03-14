@@ -7,7 +7,7 @@ const options = {
   collection: 'usuarios'
 };
 
-// Esquema base para todos los usuarios/
+// Esquema base para todos los usuarios
 const usuarioSchema = new Schema({
   usuario: {
     type: String,
@@ -16,7 +16,7 @@ const usuarioSchema = new Schema({
     trim: true
   },
   password: {
-    type: String, //
+    type: String,
     required: true
   },
   email: {
@@ -37,6 +37,11 @@ const usuarioSchema = new Schema({
   activo: {
     type: Boolean,
     default: true
+  },
+  tipo_usuario: {
+    type: String,
+    enum: ['cliente', 'administrador', 'root'],
+    required: true
   }
 }, options);
 
