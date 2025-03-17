@@ -17,6 +17,8 @@ const userRoutes = require('./routes/userRoutes');
 // const reservationRoutes = require('./routes/reservationRoutes');
 // const searchRoutes = require('./routes/searchRoutes');
 
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpecs = require('./config/swagger');
 // Inicializar app
 const app = express();
 
@@ -49,6 +51,11 @@ app.use('/api/v1/users', userRoutes);
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'success', message: 'API funcionando correctamente' });
 });
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }'
+}));
 
 // Middleware de manejo de errores
 app.use(notFound);
