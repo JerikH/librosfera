@@ -1,7 +1,9 @@
+// src/server.js
 const dotenv = require('dotenv');
-const mongoose = require('mongoose');
+const { connectDB } = require('../../Database/config/dbConfig');
+const initRootUser = require('../../Database/scripts/initRootUser');
 
-// Cargar variables de entorno
+// Cargar variables de entorno antes de importar otros módulos
 dotenv.config();
 
 // Importar aplicación Express
@@ -11,57 +13,55 @@ const app = require('./app');
 process.on('uncaughtException', (err) => {
   console.error('ERROR NO CAPTURADO! 💥 Cerrando aplicación...');
   console.error(err.name, err.message);
+  console.error(err.stack);
   process.exit(1);
 });
 
-const uri = process.env.MONGO_URI;
-const clientOptions = { serverApi: { version: '1', strict: true, deprecationErrors: true } };
-
-async function conectarMongoDB() {
+// Función principal para iniciar el servidor
+async function iniciarServidor() {
   try {
-    console.log("Intentando conectar a MongoDB...");
-    await mongoose.connect(uri, clientOptions);
-    console.log("Estado de conexión:", mongoose.connection.readyState);
-
-    // Intentar un ping para asegurarse
-    await mongoose.connection.db.admin().command({ ping: 1 });
-    console.log("MongoDB está respondiendo correctamente.");
-
-    // Crear una nueva base de datos y colección
-    const db = mongoose.connection.db;
-    const collection = db.collection("prueba");
+    // Conectar a MongoDB
+    await connectDB();
     
-    // Insertar datos de prueba
-    await collection.insertOne({ mensaje: "Datos de prueba" });
-    console.log("Datos insertados en la base de datos de prueba.");
-
-    // Esperar 30 segundos antes de borrar los datos
-    await new Promise(resolve => setTimeout(resolve, 30000));
-    
-    // Borrar los datos y la colección
-    await collection.deleteMany({});
-    await db.dropCollection("prueba");
-    console.log("Datos y base de datos eliminados.");
-
-    // Iniciar servidor después de la limpieza de datos
+    // Definir puerto
     const PORT = process.env.PORT || 5000;
-    const server = app.listen(PORT, () =>
-      console.log(`Servidor ejecutándose en modo ${process.env.NODE_ENV} en puerto ${PORT}`)
-    );
-
+    await initRootUser();
+    // Iniciar servidor HTTP
+    const server = app.listen(PORT, () => {
+      console.log(`
+🚀 Servidor iniciado:
+- Modo: ${process.env.NODE_ENV}
+- Puerto: ${PORT}
+- Tiempo: ${new Date().toISOString()}
+      `);
+    });
+    
     // Manejar rechazos de promesas no capturados
     process.on('unhandledRejection', (err) => {
-      console.error('ERROR DE PROMESA NO MANEJADA! 💥 Cerrando aplicación...');
+      console.error('ERROR DE PROMESA NO MANEJADA! 💥');
       console.error(err.name, err.message);
+      console.error(err.stack);
+      
+      // Cerrar servidor y salir
       server.close(() => {
+        console.log('Servidor cerrado debido a un error no manejado.');
         process.exit(1);
       });
     });
-
-  } catch (err) {
-    console.error("Error al conectar a MongoDB:", err);
+    
+    // Manejar señales de terminación
+    process.on('SIGTERM', () => {
+      console.log('👋 SIGTERM recibido. Cerrando servidor graciosamente...');
+      server.close(() => {
+        console.log('Proceso terminado.');
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error al iniciar el servidor:', error);
     process.exit(1);
   }
 }
 
-conectarMongoDB();
+// Iniciar servidor
+iniciarServidor();
