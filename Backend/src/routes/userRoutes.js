@@ -15,8 +15,10 @@ const {
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 // Rutas públicas
-router.post('/register', registerUser);
 router.post('/login', loginUser);
+
+// Registro de usuarios (clientes sin autenticación, otros roles con autenticación)
+router.post('/register', registerUser);
 
 // Rutas protegidas para cualquier usuario autenticado
 router.get('/profile', protect, getUserProfile);
@@ -29,7 +31,7 @@ router.get('/:id', protect, authorize('administrador', 'root'), getUserById);
 router.put('/:id', protect, authorize('administrador', 'root'), updateUser);
 router.delete('/:id', protect, authorize('administrador', 'root'), deleteUserById);
 
-// Ruta para crear usuarios administradores (solo accesible por root)
-router.post('/admin', protect, authorize('root'), registerUser);
+// Rutas específicas para administradores y root
+router.post('/admin', protect, authorize('root'), registerUser); // Ruta específica para crear administradores
 
 module.exports = router;
