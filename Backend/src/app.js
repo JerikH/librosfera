@@ -9,13 +9,13 @@ const rateLimit = require('express-rate-limit');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // Importar rutas
-const productRoutes = require('./routes/productRoutes');
-const categoryRoutes = require('./routes/categoryRoutes');
+// const productRoutes = require('./routes/productRoutes');
+// const categoryRoutes = require('./routes/categoryRoutes');
 const userRoutes = require('./routes/userRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-const cartRoutes = require('./routes/cartRoutes');
-const reservationRoutes = require('./routes/reservationRoutes');
-const searchRoutes = require('./routes/searchRoutes');
+// const orderRoutes = require('./routes/orderRoutes');
+// const cartRoutes = require('./routes/cartRoutes');
+// const reservationRoutes = require('./routes/reservationRoutes');
+// const searchRoutes = require('./routes/searchRoutes');
 
 // Inicializar app
 const app = express();
@@ -37,13 +37,13 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Rutas de la API
-app.use('/api/v1/products', productRoutes);
-app.use('/api/v1/categories', categoryRoutes);
+// app.use('/api/v1/products', productRoutes);
+// app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/orders', orderRoutes);
-app.use('/api/v1/cart', cartRoutes);
-app.use('/api/v1/reservations', reservationRoutes);
-app.use('/api/v1/search', searchRoutes);
+// app.use('/api/v1/orders', orderRoutes);
+// app.use('/api/v1/cart', cartRoutes);
+// app.use('/api/v1/reservations', reservationRoutes);
+// app.use('/api/v1/search', searchRoutes);
 
 // Ruta de estado
 app.get('/api/health', (req, res) => {

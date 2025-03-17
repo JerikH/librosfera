@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
-const Usuario = require('./usuario.model'); // Importamos el modelo base
+const Usuario = require('./usuarioBase'); // Importamos el modelo base
 
 // Esquema de dirección para reutilizar
 const direccionSchema = new Schema({
