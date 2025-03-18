@@ -23,7 +23,7 @@ const addressSchema = new Schema({
     type: String, 
     required: [true, 'El país es obligatorio'] 
   },
-  // Campos opcionales que pueden ser útiles
+  /// Campos opcionales que pueden ser útiles
   estado_provincia: { 
     type: String
   },
