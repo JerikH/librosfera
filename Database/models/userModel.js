@@ -2,8 +2,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const addressSchema = require('./schemas/addressSchema');
-const birthplaceSchema = require('./schemas/birthplaceSchema');
-const paymentMethodSchema = require('./schemas/paymentMethodSchema');
+
 
 /**
  * Configuración de opciones para el discriminador
@@ -90,7 +89,7 @@ const personaSchema = new Schema({
     required: [true, 'La fecha de nacimiento es obligatoria']
   },
   lugar_nacimiento: {
-    type: require('./schemas/birthplaceSchema'),
+    type: String,
     required: [true, 'El lugar de nacimiento es obligatorio']
   },
   genero: {
@@ -173,10 +172,7 @@ const Cliente = Usuario.discriminator('cliente', new Schema({
     }]
   },
 
-  metodo_pago: {
-    type: [require('./schemas/paymentMethodSchema')],
-    default: []
-  },
+  
   historial_compras: {
     type: [{
       fecha: {
