@@ -1,8 +1,8 @@
 // src/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
 const { promisify } = require('util');
-const { userService } = require('../../../Database/services');
-const { Usuario } = require('../../../Database/models');
+const { userService } = require('../../Database/services');
+const { Usuario } = require('../../Database/models');
 const AppError = require('../utils/appError');
 const catchAsync = require('../utils/catchAsync');
 

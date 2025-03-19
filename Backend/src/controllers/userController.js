@@ -1,7 +1,7 @@
 // src/controllers/userController.js
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { userService } = require('../../../Database/services');
+const { userService } = require('../../Database/services');
 const AppError = require('../utils/appError');
 const catchAsync = require('../utils/catchAsync');
 

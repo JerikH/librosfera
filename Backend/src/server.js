@@ -1,7 +1,7 @@
 // src/server.js
 const dotenv = require('dotenv');
-const { connectDB } = require('../../Database/config/dbConfig');
-const initRootUser = require('../../Database/scripts/initRootUser');
+const { connectDB } = require('../Database/config/dbConfig');
+const initRootUser = require('../Database/scripts/initRootUser');
 
 // Cargar variables de entorno antes de importar otros módulos
 dotenv.config();
