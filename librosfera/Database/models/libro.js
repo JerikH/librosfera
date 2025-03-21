@@ -24,7 +24,7 @@ const libroSchema = new Schema({
   
   // Implementamos el nuevo esquema de autor
   autor: {
-    type: [authorSchema],
+    type: authorSchema,
     required: true
   },
   
