@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const { metodoPagoSchema } = require('./schemas/metodoPago');
+const addressSchema = require('./schemas/addressSchema');
+
 const Schema = mongoose.Schema;
 const carritoSchema = new Schema({
   // Identificador único del carrito
@@ -55,10 +57,7 @@ const carritoSchema = new Schema({
   // Información de envío si ya se ha seleccionado
   info_envio: {
     direccion: {
-      calle: String,
-      ciudad: String,
-      codigo_postal: String,
-      pais: String
+      type: [addressSchema]
     },
     metodo_envio: {
       type: String,
@@ -68,12 +67,6 @@ const carritoSchema = new Schema({
     notas_envio: String
   },
   
-  // Método de pago seleccionado
-  metodo_pago: {
-   
-      type: metodoPagoSchema,
-     
-  }
 });
 
 // Índices para operaciones comunes
@@ -141,16 +134,7 @@ carritoSchema.methods.agregarDireccionEnvio = function(direccion, metodoEnvio, t
   return this.save();
 };
 
-// Seleccionar método de pago
-carritoSchema.methods.seleccionarMetodoPago = function(tipo, idTarjeta = null, usarSaldo = false) {
-  this.metodo_pago = {
-    tipo: tipo,
-    id_tarjeta: idTarjeta,
-    usar_saldo: usarSaldo
-  };
-  
-  return this.save();
-};
+
 
 // Convertir a compra
 carritoSchema.methods.convertirACompra = async function() {

@@ -55,6 +55,12 @@ const inventarioSchema = new Schema({
     min: 1
   },
   
+  id_tienda: {
+    type: Schema.Types.ObjectId,
+    ref: 'Tienda_Fisica',
+    index: true
+  },
+  
   // Registro de movimientos de inventario
   movimientos: [{
     tipo: {

@@ -37,20 +37,7 @@ const libroSchema = new Schema({
     index: true
   },
   
-  // ISBN/ISSN (sistema internacional de identificación de libros)
-  ISBN: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    validate: {
-      validator: function(v) {
-        // Validación simple para ISBN-10 e ISBN-13
-        return /^(?:\d[- ]?){9}[\dXx]$/.test(v) || /^(?:\d[- ]?){13}$/.test(v);
-      },
-      message: props => `${props.value} no es un formato válido de ISBN`
-    }
-  },
+  
   
   // Información editorial y publicación
   editorial: {
