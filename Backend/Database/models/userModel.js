@@ -165,7 +165,7 @@ const Cliente = Usuario.discriminator('cliente', new Schema({
   preferencias: {
     temas: [{
       type: String,
-      enum: ['Ficcion', 'No Ficción', 'Ciencia ficcion', 'Fantasía', 'Romance', 'Biografía', 'Historia', 'Ciencia', 'Filosofía', 'Arte', 'Tecnología']
+      enum: ['Ficción', 'No Ficción', 'Ciencia Ficción', 'Fantasía', 'Romance', 'Biografía', 'Historia', 'Ciencia', 'Filosofía', 'Arte', 'Tecnología']
     }],
     autores: [{
       type: String
