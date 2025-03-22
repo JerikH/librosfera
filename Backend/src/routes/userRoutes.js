@@ -23,7 +23,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /users/register:
+ * /api/v1//users/register:
  *   post:
  *     summary: Registrar un nuevo usuario cliente
  *     tags: [Usuarios]
@@ -136,7 +136,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /users/login:
+ * /api/v1//users/login:
  *   post:
  *     summary: Iniciar sesión
  *     tags: [Usuarios]
@@ -185,7 +185,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /users/profile:
+ * /api/v1//users/profile:
  *   get:
  *     summary: Obtener perfil de usuario
  *     tags: [Usuarios]
@@ -298,7 +298,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /users:
+ * /api/v1//users:
  *   get:
  *     summary: Obtener lista de usuarios (solo admin y root)
  *     tags: [Usuarios]
@@ -377,7 +377,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /users/{id}:
+ * /api/v1//users/{id}:
  *   get:
  *     summary: Obtener usuario por ID (solo admin y root)
  *     tags: [Usuarios]
@@ -509,7 +509,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /users/admin:
+ * /api/v1//users/admin:
  *   post:
  *     summary: Crear usuario administrador (solo root)
  *     tags: [Usuarios]
