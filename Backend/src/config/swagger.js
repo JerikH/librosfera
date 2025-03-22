@@ -88,6 +88,77 @@ const options = {
               example: 'Error al procesar la solicitud'
             }
           }
+        },
+        // Nuevos esquemas para recuperación de contraseña
+        PasswordResetRequest: {
+          type: 'object',
+          required: ['email'],
+          properties: {
+            email: {
+              type: 'string',
+              format: 'email',
+              description: 'Email asociado a la cuenta de usuario',
+              example: 'usuario@ejemplo.com'
+            }
+          }
+        },
+        TokenVerifyResponse: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              example: 'success'
+            },
+            message: {
+              type: 'string',
+              example: 'Token válido'
+            },
+            data: {
+              type: 'object',
+              properties: {
+                email: {
+                  type: 'string',
+                  example: 'us****@ejemplo.com'
+                }
+              }
+            }
+          }
+        },
+        PasswordResetBody: {
+          type: 'object',
+          required: ['verificationCode', 'password', 'passwordConfirm'],
+          properties: {
+            verificationCode: {
+              type: 'string',
+              description: 'Código de verificación de 6 dígitos',
+              example: '123456'
+            },
+            password: {
+              type: 'string',
+              format: 'password',
+              description: 'Nueva contraseña (debe cumplir con los requisitos de complejidad)',
+              example: 'Abc123$%^'
+            },
+            passwordConfirm: {
+              type: 'string',
+              format: 'password',
+              description: 'Confirmación de la nueva contraseña',
+              example: 'Abc123$%^'
+            }
+          }
+        },
+        SuccessResponse: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              example: 'success'
+            },
+            message: {
+              type: 'string',
+              example: 'Operación realizada con éxito'
+            }
+          }
         }
       }
     },
