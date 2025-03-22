@@ -1,6 +1,49 @@
-import React from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
 
-export default function CreateAdminPage({ onCancel }) {
+const CreateAdminPage = () => {
+
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+
+
+  const { email, password } = formData;
+
+  const onChange = e => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const onSubmit = async e => {
+    e.preventDefault();
+    
+    try {
+      const config = {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      };
+      console.log(formData);
+      // Make POST request to backend API
+      const response = await axios.post('http://localhost:5000/api/v1/users/login', formData, config);
+      
+      // Print the response
+      console.log('Response received:', response.data);
+      
+      // Clear form
+      setFormData({
+        email: '',
+        password: ''
+      });
+      
+      // Reload the page to show the new item
+      // In a production app, you would use state management instead
+      //window.location.reload();
+    } catch (err) {
+      console.error('Error adding item:', err.response.data);
+    }
+  }; 
   return (
     <div className="w-full min-h-screen p-6">
       <div className="max-w-md mx-auto">
@@ -23,6 +66,10 @@ export default function CreateAdminPage({ onCancel }) {
               type="email"
               defaultValue="jdavidt99@gmail.com"
               className="flex-1 p-2 border border-gray-300 rounded"
+              name="email"
+              id="email"
+              value={email}
+              onChange={onChange}
             />
           </div>
           
@@ -33,6 +80,10 @@ export default function CreateAdminPage({ onCancel }) {
               type="password"
               defaultValue="dxv896@"
               className="flex-1 p-2 border border-gray-300 rounded"
+              name="password"
+              id="password"
+              value={password}
+              onChange={onChange}
             />
           </div>
           
@@ -46,7 +97,7 @@ export default function CreateAdminPage({ onCancel }) {
             </button>
             <button 
               type="button" 
-              onClick={onCancel}
+              //onClick={}
               className="bg-gray-200 text-gray-800 py-2 px-16 rounded font-medium hover:bg-gray-300 transition-colors"
             >
               Cancelar
@@ -70,4 +121,6 @@ export default function CreateAdminPage({ onCancel }) {
       </div>*/}
     </div>
   );
-}
+};
+
+export default CreateAdminPage;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import RegistrationPage from '../RegistrationPage'; // Import the registration component
+import RegistrationPage from './RegistrationPage'; // Import the registration component
 import PasswordResetPage from '../PasswordResetPage'; // Import the password reset component
 import axios from 'axios';
 
