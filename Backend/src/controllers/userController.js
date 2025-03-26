@@ -159,6 +159,81 @@ const registerUser = catchAsync(async (req, res, next) => {
 });
 
 /**
+ * @desc    Crear un administrador con datos mínimos (solo email y password)
+ * @route   POST /api/v1/users/admin
+ * @access  Private/Root
+ */
+const createAdmin = catchAsync(async (req, res, next) => {
+  const { email, password, usuario, ...restData } = req.body;
+  
+  // Verificar datos mínimos obligatorios
+  if (!email || !password) {
+    return next(new AppError('Email y contraseña son obligatorios', 400));
+  }
+  
+  // Verificar que el usuario sea root
+  if (!req.user || req.user.tipo_usuario !== 'root') {
+    return next(new AppError('Solo usuarios root pueden crear administradores', 403));
+  }
+  
+  // Verificar disponibilidad de email y usuario
+  const disponible = await userService.verificarDisponibilidad(
+    email, 
+    usuario || null
+  );
+  
+  if (!disponible) {
+    return next(new AppError('El email o nombre de usuario ya está en uso', 400));
+  }
+  
+  // Encriptar contraseña
+  const salt = await bcrypt.genSalt(10);
+  const passwordHash = await bcrypt.hash(password, salt);
+  
+  // Datos básicos del usuario
+  const userData = {
+    email,
+    password: passwordHash,
+    tipo_usuario: 'administrador'
+  };
+  
+  // Agregar usuario si se proporciona
+  if (usuario) {
+    userData.usuario = usuario;
+  } else {
+    // Generar nombre de usuario a partir del email si no se proporciona
+    userData.usuario = email.split('@')[0] + '_admin';
+  }
+  
+  try {
+    // Crear administrador con datos mínimos
+    const nuevoAdmin = await userService.crearAdministrador(userData, restData);
+    
+    // Eliminar password de la respuesta
+    if (nuevoAdmin && nuevoAdmin.password) {
+      delete nuevoAdmin.password;
+    }
+    
+    // Verificar si el perfil está completo
+    const perfilCompleto = nuevoAdmin.DNI && nuevoAdmin.nombres && nuevoAdmin.apellidos;
+    
+    // Responder con información del administrador y token
+    res.status(201).json({
+      status: 'success',
+      message: perfilCompleto 
+        ? 'Administrador creado con perfil completo' 
+        : 'Administrador creado con datos mínimos. Se requiere completar el perfil',
+      data: {
+        ...nuevoAdmin,
+        token: generateToken(nuevoAdmin._id),
+      },
+    });
+  } catch (error) {
+    return next(new AppError(`Error al crear administrador: ${error.message}`, 500));
+  }
+});
+
+/**
  * @desc    Autenticar usuario / obtener token
  * @route   POST /api/v1/users/login
  * @access  Public
@@ -523,5 +598,6 @@ module.exports = {
   getUsers,
   getUserById,
   updateUser,
-  deleteUserById
+  deleteUserById,
+  createAdmin,
 };
