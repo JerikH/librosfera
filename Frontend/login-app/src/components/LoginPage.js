@@ -1,8 +1,58 @@
 import React, { useState } from 'react';
-import RegistrationPage from './RegistrationPage'; // Import the registration component
-import PasswordResetPage from './PasswordResetPage'; // Import the password reset component
+import RegistrationPage from '../RegistrationPage'; // Import the registration component
+import PasswordResetPage from '../PasswordResetPage'; // Import the password reset component
+import axios from 'axios';
 
-export default function LoginPage() {
+const LoginPage = () => {
+
+
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+
+
+  const { email, password } = formData;
+
+  const onChange = e => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const onSubmit = async e => {
+    e.preventDefault();
+    
+    try {
+      const config = {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      };
+      console.log(formData);
+      // Make POST request to backend API
+      const response = await axios.post('http://localhost:5000/api/v1/users/login', formData, config);
+      
+      // Print the response
+      console.log('Response received:', response.data);
+      
+      // Clear form
+      setFormData({
+        email: '',
+        password: ''
+      });
+      
+      // Reload the page to show the new item
+      // In a production app, you would use state management instead
+      //window.location.reload();
+    } catch (err) {
+      console.error('Error adding item:', err.response.data);
+    }
+  };
+
+
+
+
+
+
   const [showRegistration, setShowRegistration] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   
@@ -62,13 +112,17 @@ export default function LoginPage() {
               </a>
             </p>
             
-            <form className="w-full max-w-lg">
+            <form className="w-full max-w-lg" onSubmit={onSubmit}>
               {/* Email Field */}
               <div className="mb-6">
                 <input
                   type="email"
                   placeholder="Correo Electrónico"
                   className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  name="email"
+                  id="email"
+                  value={email}
+                  onChange={onChange}
                 />
               </div>
               
@@ -78,6 +132,10 @@ export default function LoginPage() {
                   type="password"
                   placeholder="Contraseña"
                   className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  name="password"
+                  id="password"
+                  value={password}
+                  onChange={onChange}
                 />
               </div>
               
@@ -124,4 +182,6 @@ export default function LoginPage() {
       </div>
     </div>
   );
-}
+};
+
+export default LoginPage;
