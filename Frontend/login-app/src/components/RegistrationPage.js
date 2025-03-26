@@ -8,6 +8,27 @@ const RegistrationPage = () => {
     navigate('/Login');
   };
 
+  const getCookie = (name) => {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  };
+
+  const PrintCookies = () => {
+    // console.log(getCookie("authToken")); // Output: your_jwt_token
+    const rawData = getCookie("data");
+    if (rawData) {
+        try {
+            const parsedData = JSON.parse(rawData);
+            console.log(parsedData); // Correct JSON object
+            console.log(parsedData.Data.usuario);
+        } catch (error) {
+            console.error("Error parsing JSON:", error);
+        }
+    } else {
+        console.log("Cookie not found!");
+    }
+  };
+
   const [formData, setFormData] = useState({
     nombres: '',
     apellidos: '',
@@ -432,7 +453,7 @@ const RegistrationPage = () => {
           <button 
             type="button" 
             className="w-full text-blue-500 py-2 rounded font-medium hover:underline"
-            onClick={onBackToLogin}
+            onClick={PrintCookies}
           >
             Iniciar sesión
           </button>
