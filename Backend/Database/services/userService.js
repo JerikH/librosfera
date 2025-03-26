@@ -95,20 +95,49 @@ const userService = {
   },
 
   /**
-   * Crea un nuevo usuario de tipo administrador
-   * @param {Object} userData - Datos básicos del usuario
-   * @param {Object} profileData - Datos de perfil del administrador
-   * @param {Object} adminData - Datos específicos del administrador
-   * @returns {Promise<Object>} Datos del nuevo administrador creado
-   */
-  async crearAdministrador(userData, profileData, adminData = {}) {
+ * Crea un nuevo usuario de tipo administrador con datos mínimos
+ * @param {Object} userData - Datos básicos del usuario (email, password, usuario)
+ * @param {Object} profileData - Datos de perfil del administrador (opcionales)
+ * @param {Object} adminData - Datos específicos del administrador (opcionales)
+ * @returns {Promise<Object>} Datos del nuevo administrador creado
+ */
+  async crearAdministrador(userData, profileData = {}, adminData = {}) {
     try {
-      // Combinar todos los datos
-      const nuevoAdmin = new Administrador({
+      // Validar que al menos tengamos los datos básicos
+      if (!userData.email || !userData.password) {
+        throw new Error('Email y contraseña son obligatorios para crear un administrador');
+      }
+      
+      // Si no se proporciona un nombre de usuario, generarlo a partir del email
+      if (!userData.usuario) {
+        userData.usuario = userData.email.split('@')[0] + '_admin';
+      }
+      
+      // Crear objeto con datos mínimos
+      const datosAdmin = {
         ...userData,
-        ...profileData,
-        ...adminData
-      });
+        tipo_usuario: 'administrador',
+        perfil_completo: false, // Indicar que el perfil no está completo
+        fecha_creacion: new Date()
+      };
+      
+      // Añadir datos de perfil si se proporcionan
+      if (Object.keys(profileData).length > 0) {
+        Object.assign(datosAdmin, profileData);
+        
+        // Si se proporcionan suficientes datos personales, marcar el perfil como completo
+        if (profileData.nombres && profileData.apellidos && profileData.DNI) {
+          datosAdmin.perfil_completo = true;
+        }
+      }
+      
+      // Añadir datos específicos de administrador si se proporcionan
+      if (Object.keys(adminData).length > 0) {
+        Object.assign(datosAdmin, adminData);
+      }
+      
+      // Crear instancia del modelo
+      const nuevoAdmin = new Administrador(datosAdmin);
       
       // Guardar en la base de datos
       await nuevoAdmin.save();
