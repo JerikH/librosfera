@@ -3,8 +3,19 @@ import RegistrationPage from './RegistrationPage'; // Import the registration co
 import PasswordResetPage from '../PasswordResetPage'; // Import the password reset component
 import axios from 'axios';
 
-const LoginPage = () => {
+const clearCookies = () => {
+  document.cookie.split(";").forEach((cookie) => {
+    document.cookie = cookie
+      .replace(/^ +/, "") // Remove leading spaces
+      .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
+  });
+  console.log("Cookies cleared!");
+};
 
+
+
+const LoginPage = () => {
+  //clearCookies();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -17,6 +28,18 @@ const LoginPage = () => {
   const onChange = e => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  const Redirect = (response) => {
+    // const token = response.data.data.token
+    const userData = { authToken: response.data.data.token , Data: response.data.data };
+    console.log(response.data.data.token);
+
+    // document.cookie = "authToken=${token}; path=/; max-age=3600; Secure;"
+    document.cookie = `data=${encodeURIComponent(JSON.stringify(userData))}; path=/; max-age=3600; Secure;`;
+
+
+  }
+
 
   const onSubmit = async e => {
     e.preventDefault();
@@ -43,14 +66,17 @@ const LoginPage = () => {
       // Reload the page to show the new item
       // In a production app, you would use state management instead
       //window.location.reload();
+      if(response){
+        Redirect(response);
+      }
+
     } catch (err) {
       console.error('Error adding item:', err.response.data);
     }
   };
 
 
-
-
+  
 
 
   const [showRegistration, setShowRegistration] = useState(false);
