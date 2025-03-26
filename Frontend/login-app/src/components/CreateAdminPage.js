@@ -1,15 +1,85 @@
 import React, { useState } from 'react';
+import { href, useNavigate } from 'react-router-dom';
+import { Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import axios from 'axios';
 
-const CreateAdminPage = () => {
+const getCookie = (name) => {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+};
 
+// const PrintCookies = () => {
+//   // console.log(getCookie("authToken")); // Output: your_jwt_token
+//   const rawData = getCookie("data");
+//   if (rawData) {
+//       try {
+//           const parsedData = JSON.parse(rawData);
+//           console.log(parsedData); // Correct JSON object
+//           console.log(parsedData.Data.usuario);
+//       } catch (error) {
+//           console.error("Error parsing JSON:", error);
+//       }
+//   } else {
+//       console.log("Cookie not found!");
+//   }
+// };
+
+
+
+
+const CheckUserPerms = () => {
+  // 
+
+  //   return null;
+  
+
+  
+  // const parsedData = JSON.parse(rawData);
+
+  // const token = parsedData.Data.token;
+  //console.log(rawData);
+};
+
+CheckUserPerms();
+
+
+
+const CreateAdminPage = () => {
+  const navigate = useNavigate();
+  const rawData = getCookie("data");
+
+
+  const [tokenG, setTokenG] = useState(null);
   const [formData, setFormData] = useState({
-    email: '',
-    password: ''
+      email: '',
+      password: ''
   });
 
+  useEffect(() => {
+      console.log("Function executed before component renders!");
+      
+      if (!rawData) {
+          console.log("Nope, redirecting...");
+          navigate("/Login", { replace: true });
+          return;
+      }
+
+      try {
+          const parsedData = JSON.parse(rawData); 
+          setTokenG(parsedData.Data.token);
+      } catch (error) {
+          console.error("Error parsing data:", error);
+          navigate("/Login", { replace: true });
+      }
+  }, [rawData, navigate]);
+
+  if (!rawData) {
+      return null; // ✅ Prevent further execution
+  }
 
   const { email, password } = formData;
+
 
   const onChange = e => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -17,6 +87,7 @@ const CreateAdminPage = () => {
 
   const onSubmit = async e => {
     e.preventDefault();
+    //console.log(tokenG);
     
     try {
       const config = {
@@ -26,8 +97,40 @@ const CreateAdminPage = () => {
       };
       console.log(formData);
       // Make POST request to backend API
-      const response = await axios.post('http://localhost:5000/api/v1/users/login', formData, config);
-      
+      const response = await axios.post(
+        "http://localhost:5000/api/v1/users/admin",
+        {
+          usuario: "admin_test",
+          email: "admin_test@ejemplo.com",
+          password: "Admin456",
+          tipo_usuario: "administrador",
+          DNI: "66666666Y",
+          nombres: "Laura",
+          apellidos: "Martín Sáez",
+          fecha_nacimiento: "1988-04-23",
+          lugar_nacimiento: "Sevilla",
+          genero: "Femenino",
+          direcciones: [
+            {
+              calle: "Avenida de la Constitución 15",
+              ciudad: "Sevilla",
+              codigo_postal: "41001",
+              pais: "España",
+            },
+          ],
+          telefono: "654321987",
+          cargo: "Coordinadora de Pedidos",
+          departamento: "Logística",
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${String(tokenG)}`,
+          },
+        }
+      );
+
+
       // Print the response
       console.log('Response received:', response.data);
       
@@ -58,7 +161,7 @@ const CreateAdminPage = () => {
           <h1 className="text-2xl font-bold">Crear Administrador</h1>
         </div>
         
-        <form className="space-y-6">
+        <form className="space-y-6" onSubmit={onSubmit}>
           {/* Email Field with Label */}
           <div className="flex items-center">
             <label className="w-36 text-right pr-4">Correo electrónico</label>
