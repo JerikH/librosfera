@@ -10,7 +10,8 @@ const {
   getUsers,
   getUserById,
   updateUser,
-  deleteUserById
+  deleteUserById,
+  createAdmin,
 } = require('../controllers/userController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
@@ -509,9 +510,9 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /api/v1//users/admin:
+ * /users/admin:
  *   post:
- *     summary: Crear usuario administrador (solo root)
+ *     summary: Crear usuario administrador con datos mínimos (solo root)
  *     tags: [Usuarios]
  *     security:
  *       - bearerAuth: []
@@ -522,53 +523,43 @@ const { protect, authorize } = require('../middleware/authMiddleware');
  *           schema:
  *             type: object
  *             required:
- *               - usuario
  *               - email
  *               - password
- *               - tipo_usuario
- *               - DNI
- *               - nombres
- *               - apellidos
- *               - cargo
- *               - departamento
  *             properties:
- *               usuario:
- *                 type: string
- *                 example: admin1
  *               email:
  *                 type: string
  *                 format: email
  *                 example: admin@ejemplo.com
+ *                 description: Correo electrónico (obligatorio)
  *               password:
  *                 type: string
  *                 format: password
  *                 example: Admin123
- *               tipo_usuario:
+ *                 description: Contraseña (obligatorio)
+ *               usuario:
  *                 type: string
- *                 enum: [administrador]
- *                 example: administrador
+ *                 example: admin1
+ *                 description: Nombre de usuario (opcional, generado automáticamente si no se proporciona)
  *               DNI:
  *                 type: string
  *                 example: 87654321B
+ *                 description: Documento de identidad (opcional)
  *               nombres:
  *                 type: string
  *                 example: Ana
+ *                 description: Nombres (opcional)
  *               apellidos:
  *                 type: string
  *                 example: Martínez Ruiz
- *               fecha_nacimiento:
- *                 type: string
- *                 format: date
- *                 example: 1985-10-22
- *               lugar_nacimiento:
- *                 type: string
- *                 example: Barcelona
+ *                 description: Apellidos (opcional)
  *               cargo:
  *                 type: string
  *                 example: Gerente de Ventas
+ *                 description: Cargo en la empresa (opcional)
  *               departamento:
  *                 type: string
  *                 example: Ventas
+ *                 description: Departamento (opcional)
  *     responses:
  *       201:
  *         description: Administrador creado exitosamente
@@ -580,8 +571,30 @@ const { protect, authorize } = require('../middleware/authMiddleware');
  *                 status:
  *                   type: string
  *                   example: success
+ *                 message:
+ *                   type: string
+ *                   example: Administrador creado con datos mínimos. Se requiere completar el perfil
  *                 data:
- *                   $ref: '#/components/schemas/Usuario'
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       example: 60d0fe4f5311236168a109cb
+ *                     usuario:
+ *                       type: string
+ *                       example: admin@ejemplo.com_admin
+ *                     email:
+ *                       type: string
+ *                       example: admin@ejemplo.com
+ *                     tipo_usuario:
+ *                       type: string
+ *                       example: administrador
+ *                     perfil_completo:
+ *                       type: boolean
+ *                       example: false
+ *                     token:
+ *                       type: string
+ *                       example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *       401:
  *         description: No autorizado
  *         content:
@@ -614,6 +627,7 @@ router.put('/:id', protect, authorize('administrador', 'root'), updateUser);
 router.delete('/:id', protect, authorize('administrador', 'root'), deleteUserById);
 
 // Rutas específicas para administradores y root
-router.post('/admin', protect, authorize('root'), registerUser); // Ruta específica para crear administradores
+// router.post('/admin', protect, authorize('root'), registerUser); // Ruta específica para crear administradores
+router.post('/admin', protect, authorize('root'), createAdmin);
 
 module.exports = router;

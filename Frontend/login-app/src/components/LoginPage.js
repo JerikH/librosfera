@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import RegistrationPage from './RegistrationPage'; // Import the registration component
-import PasswordResetPage from '../PasswordResetPage'; // Import the password reset component
+import PasswordResetPage from './PasswordRequestRecuperation'; // Import the password reset component
 import axios from 'axios';
 
 const clearCookies = () => {
@@ -172,14 +172,11 @@ const LoginPage = () => {
                   Recordarme
                 </label>
                 <a 
-                  href="#" 
+                  href="/RequestChangePassword" 
                   className="text-gray-500"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setShowPasswordReset(true);
-                  }}
+                  
                 >
-                  Cambiar Contraseña
+                  Recuperar Contraseña
                 </a>
               </div>
               

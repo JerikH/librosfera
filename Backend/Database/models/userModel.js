@@ -135,14 +135,42 @@ const Root = Usuario.discriminator('root', new Schema({
 
 // Discriminador para Usuario Administrador
 const Administrador = Usuario.discriminator('administrador', new Schema({
-  ...personaSchema.obj,  // Usar los campos de personaSchema
+  ...personaSchema.obj,  // Usar los campos de personaSchema pero ninguno será obligatorio
+  DNI: {
+    type: String,
+    unique: true,
+    sparse: true, // Permite múltiples documentos con valor null
+    required: false // Era obligatorio, ahora es opcional
+  },
+  nombres: {
+    type: String,
+    required: false // Era obligatorio, ahora es opcional
+  },
+  apellidos: {
+    type: String,
+    required: false // Era obligatorio, ahora es opcional
+  },
+  fecha_nacimiento: {
+    type: Date,
+    required: false // Era obligatorio, ahora es opcional
+  },
+  lugar_nacimiento: {
+    type: String,
+    required: false // Era obligatorio, ahora es opcional
+  },
+  direcciones: {
+    type: [addressSchema],
+    default: [] // Valor predeterminado como array vacío
+  },
   cargo: {
     type: String,
-    required: [true, 'El cargo es obligatorio']
+    default: 'Pendiente de asignar',
+    required: false // Era obligatorio, ahora es opcional
   },
   departamento: {
     type: String,
-    required: [true, 'El departamento es obligatorio']
+    default: 'General',
+    required: false // Era obligatorio, ahora es opcional
   },
   permisos: {
     type: [String],
@@ -151,6 +179,11 @@ const Administrador = Usuario.discriminator('administrador', new Schema({
   supervisor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Usuario'
+  },
+  // Campos adicionales para control
+  perfil_completo: {
+    type: Boolean,
+    default: false // Indica si el administrador ha completado su perfil
   }
 }));
 
