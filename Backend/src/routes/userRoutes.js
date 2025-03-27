@@ -510,7 +510,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /api/v1//users/admin:
+ * /users/admin:
  *   post:
  *     summary: Crear usuario administrador con datos mínimos (solo root)
  *     tags: [Usuarios]
