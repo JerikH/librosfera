@@ -26,22 +26,28 @@ const getCookie = (name) => {
 // };
 
 
+const verifyToken = async (token) => {
+  try {
+    const response = await axios.get('http://localhost:5000/api/v1/auth/verify-token', {
+      headers: {
+        'Authorization': `Bearer ${String(token)}`,
+      },
+    });
 
-
-const CheckUserPerms = () => {
-  // 
-
-  //   return null;
-  
-
-  
-  // const parsedData = JSON.parse(rawData);
-
-  // const token = parsedData.Data.token;
-  //console.log(rawData);
+    // If request is successful, return true
+    console.log(response);
+    if(response.status === 200){
+      console.log(response.data.user.tipo_usuario);
+      console.log(response.data.user.tipo_usuario == "root");
+      return response.data.user.tipo_usuario == "root";
+    }
+    return false;
+  } catch (err) {
+    // If there is an error, return false
+    // setError(err.response ? err.response.data : 'Error verifying token');
+    return false;
+  }
 };
-
-CheckUserPerms();
 
 
 
@@ -57,21 +63,37 @@ const CreateAdminPage = () => {
   });
 
   useEffect(() => {
+    const checkAuth = async () => {
       console.log("Function executed before component renders!");
       
       if (!rawData) {
+        console.log("Nope, redirecting...");
+        navigate("/Login", { replace: true });
+        return;
+      }
+      
+      try {
+        const parsedData = JSON.parse(rawData);
+        console.log("verify response:");
+        
+        // Use await here to get the actual boolean result
+        const isVerified = await verifyToken(parsedData.Data.token);
+        
+        if (!isVerified) {
           console.log("Nope, redirecting...");
           navigate("/Login", { replace: true });
           return;
-      }
-
-      try {
-          const parsedData = JSON.parse(rawData); 
-          setTokenG(parsedData.Data.token);
+        }
+        
+        setTokenG(parsedData.Data.token);
       } catch (error) {
-          console.error("Error parsing data:", error);
-          navigate("/Login", { replace: true });
+        console.error("Error parsing data:", error);
+        navigate("/Login", { replace: true });
       }
+    };
+    
+    // Call the async function
+    checkAuth();
   }, [rawData, navigate]);
 
   if (!rawData) {
@@ -95,33 +117,11 @@ const CreateAdminPage = () => {
           'Content-Type': 'application/json'
         }
       };
-      console.log(formData);
+      //console.log(formData);
       // Make POST request to backend API
       const response = await axios.post(
         "http://localhost:5000/api/v1/users/admin",
-        {
-          usuario: "admin_test",
-          email: "admin_test@ejemplo.com",
-          password: "Admin456",
-          tipo_usuario: "administrador",
-          DNI: "66666666Y",
-          nombres: "Laura",
-          apellidos: "Martín Sáez",
-          fecha_nacimiento: "1988-04-23",
-          lugar_nacimiento: "Sevilla",
-          genero: "Femenino",
-          direcciones: [
-            {
-              calle: "Avenida de la Constitución 15",
-              ciudad: "Sevilla",
-              codigo_postal: "41001",
-              pais: "España",
-            },
-          ],
-          telefono: "654321987",
-          cargo: "Coordinadora de Pedidos",
-          departamento: "Logística",
-        },
+        formData,
         {
           headers: {
             "Content-Type": "application/json",
