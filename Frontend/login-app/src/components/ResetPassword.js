@@ -110,6 +110,9 @@ export default function ResetPassword({ onBackToLogin }) {
       </div>
     );
   }
+  const handleBackToLogin = () => {
+    navigate('/Login', { replace: true });
+  };
   
   return (
     <div className="flex h-screen w-full">
@@ -229,7 +232,7 @@ export default function ResetPassword({ onBackToLogin }) {
                 <button 
                   type="button" 
                   className="text-gray-500 hover:underline"
-                  onClick={onBackToLogin}
+                  onClick={handleBackToLogin}
                 >
                   Volver a iniciar sesión
                 </button>
