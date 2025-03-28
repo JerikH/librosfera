@@ -1,21 +1,100 @@
-import React, { useState } from 'react';
-import RegistrationPage from '../RegistrationPage'; // Import the registration component
-import PasswordResetPage from '../PasswordResetPage'; // Import the password reset component
+import React, { useState, useEffect } from 'react';
+import RegistrationPage from './RegistrationPage'; // Import the registration component
+import PasswordResetPage from './PasswordRequestRecuperation'; // Import the password reset component
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+
+const clearCookies = () => {
+  document.cookie.split(";").forEach((cookie) => {
+    document.cookie = cookie
+      .replace(/^ +/, "") // Remove leading spaces
+      .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
+  });
+  console.log("Cookies cleared!");
+};
+
+const getCookie = (name) => {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+};
+
+const verifyToken = async (token) => {
+  try {
+    const response = await axios.get('http://localhost:5000/api/v1/auth/verify-token', {
+      headers: {
+        'Authorization': `Bearer ${String(token)}`,
+      },
+    });
+
+    // If request is successful, return true
+    console.log(response);
+    if(response.status === 200){
+      return true;
+    }
+    return false;
+  } catch (err) {
+    // If there is an error, return false
+    return false;
+  }
+};
 
 const LoginPage = () => {
+  //clearCookies();
 
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
 
+  // Check for existing token when component mounts
+  useEffect(() => {
+    const checkExistingToken = async () => {
+      try {
+        const rawData = getCookie("data");
+        
+        if (rawData) {
+          const parsedData = JSON.parse(rawData);
+          if (parsedData && parsedData.Data && parsedData.Data.token) {
+            // Verify token validity
+            const isValid = await verifyToken(parsedData.Data.token);
+            
+            if (isValid) {
+              console.log("Valid token found, redirecting to Welcome page");
+              navigate('/Welcome');
+              return;
+            } else {
+              console.log("Token found but invalid or expired");
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error checking existing token:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkExistingToken();
+  }, [navigate]);
 
   const { email, password } = formData;
 
   const onChange = e => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const Redirect = (response) => {
+    // const token = response.data.data.token
+    const userData = { authToken: response.data.data.token , Data: response.data.data };
+    console.log(response.data.data.token);
+
+    // document.cookie = "authToken=${token}; path=/; max-age=3600; Secure;"
+    document.cookie = `data=${encodeURIComponent(JSON.stringify(userData))}; path=/; max-age=3600; Secure;`;
   };
 
   const onSubmit = async e => {
@@ -40,18 +119,22 @@ const LoginPage = () => {
         password: ''
       });
       
-      // Reload the page to show the new item
-      // In a production app, you would use state management instead
-      //window.location.reload();
+      setSuccessMessage('Ingreso satisfactorio.');
+      if(response){
+        Redirect(response);
+        navigate('/Welcome');
+      }
+
     } catch (err) {
-      console.error('Error adding item:', err.response.data);
+      if(err.message == 'Request failed with status code 401'){
+        console.error('Error adding item:', err.response.data);
+        setErrorMessage(err.response.data.message);
+      }else{
+        setErrorMessage("Error conectando con la base de datos");
+        console.log(err.message);
+      }
     }
   };
-
-
-
-
-
 
   const [showRegistration, setShowRegistration] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
@@ -64,6 +147,20 @@ const LoginPage = () => {
   // If password reset page should be shown, render it instead
   if (showPasswordReset) {
     return <PasswordResetPage onBackToLogin={() => setShowPasswordReset(false)} />;
+  }
+
+  // Show loading indicator while checking token validity
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="spinner-border animate-spin inline-block w-8 h-8 border-4 rounded-full border-t-transparent border-blue-600" role="status">
+            <span className="sr-only">Loading...</span>
+          </div>
+          <p className="mt-2">Verificando sesión...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -101,16 +198,26 @@ const LoginPage = () => {
             <h2 className="text-4xl font-bold mb-6">Iniciar Sesión</h2>
             <p className="mb-6">
               ¿No tienes cuenta? <a 
-                href="#" 
+                href="/Register"  
                 className="text-blue-600 font-medium"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setShowRegistration(true);
-                }}
               >
                 Crear Cuenta
               </a>
             </p>
+
+             {/* Success Message */}
+             {successMessage && (
+              <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
+                <p>{successMessage}</p>
+              </div>
+            )}
+            
+            {/* Error Message */}
+            {errorMessage && (
+              <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+                <p>{errorMessage}</p>
+              </div>
+            )}
             
             <form className="w-full max-w-lg" onSubmit={onSubmit}>
               {/* Email Field */}
@@ -146,14 +253,10 @@ const LoginPage = () => {
                   Recordarme
                 </label>
                 <a 
-                  href="#" 
+                  href="/RequestChangePassword" 
                   className="text-gray-500"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setShowPasswordReset(true);
-                  }}
                 >
-                  Cambiar Contraseña
+                  Recuperar Contraseña
                 </a>
               </div>
               
