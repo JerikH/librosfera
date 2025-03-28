@@ -60,11 +60,7 @@ const RegistrationPage = () => {
   const [success, setSuccess] = useState('');
 
   // Sample preferences list
-  const availablePreferences = [
-    'Ficción', 'No ficción', 'Ciencia ficción', 'Fantasía', 
-    'Misterio', 'Romance', 'Biografía', 'Historia', 
-    'Ciencia', 'Filosofía', 'Arte', 'Tecnología'
-  ];
+  const availablePreferences = ['Ficción', 'No Ficción', 'Ciencia Ficción', 'Fantasía', 'Romance', 'Biografía', 'Historia', 'Ciencia', 'Filosofía', 'Arte', 'Tecnología'];
 
   const genderOptions = ['Masculino', 'Femenino', 'No binario', 'Prefiero no decir'];
   
@@ -133,23 +129,17 @@ const RegistrationPage = () => {
         }
       };
       // Make POST request to register API
-      const response = await axios.post('http://localhost:5000/api/v1/users/register', JSON.stringify(userData), config);
+      const response = await axios.post('http://localhost:5000/api/v1/users/register', userData, config);
+      console.log("response");
       console.log(response);
-      // Parse response
-      const data = response;
-      
-      // Check if registration was successful
-      if ((data.status != 201)) {
-        throw new Error(data.message || 'Error al registrarse');
-      }
       
       // Handle successful registration
-      console.log('Registration successful:', data);
+      console.log('Registration successful:', response.data);
       setSuccess('¡Registro exitoso! Redirigiendo...');
       
       // Store user data in localStorage
-      localStorage.setItem('userToken', data.data.token);
-      localStorage.setItem('userData', JSON.stringify(data.data));
+      localStorage.setItem('userToken', response.data.data.token);
+      localStorage.setItem('userData', JSON.stringify(response.data.data));
       
       // Redirect to login after a short delay
       setTimeout(() => {
@@ -157,8 +147,28 @@ const RegistrationPage = () => {
       }, 2500);
       
     } catch (err) {
-      setError(err.message || 'Error al conectar con el servidor');
       console.error('Registration error:', err);
+      
+      // Handle specific error messages based on API response
+      if (err.response) {
+        if (err.response.data) {
+          // Check for specific error types and display appropriate messages
+          if (err.response.data.message && err.response.data.message.includes('email')) {
+            setError('Este correo electrónico ya está registrado. Por favor use otro.');
+          } else if (err.response.data.message && err.response.data.message.includes('DNI')) {
+            setError('Este número de documento ya está registrado. Por favor verifique sus datos.');
+          } else if (err.response.data.message && err.response.data.message.includes('usuario')) {
+            setError('Este nombre de usuario ya está en uso. Por favor elija otro.');
+          } else {
+            // Use the server's error message if available
+            setError(err.response.data.message || 'Error al registrarse. Por favor intente nuevamente.');
+          }
+        } else {
+          setError('Error al registrarse. Por favor intente nuevamente.');
+        }
+      } else {
+        setError('Error al conectar con el servidor. Por favor verifique su conexión.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -168,7 +178,19 @@ const RegistrationPage = () => {
     <div className="w-full max-w-md mx-auto p-4">
       <h1 className="text-2xl font-bold text-center mb-6">Registrarse</h1>
       
+      {/* Show error message */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+          {error}
+        </div>
+      )}
       
+      {/* Show success message */}
+      {success && (
+        <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg">
+          {success}
+        </div>
+      )}
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
         {/* Nombre */}
@@ -425,19 +447,7 @@ const RegistrationPage = () => {
             className="w-full p-2 border-t-0 border-l-0 border-r-0 border-b border-gray-300 focus:outline-none focus:border-blue-500 focus:ring-0"
           />
         </div>
-          {/* Show success message */}
-        {success && (
-          <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg">
-            {success}
-          </div>
-        )}
         
-        {/* Show error message */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
         {/* Submit Buttons */}
         <div className="mt-4 flex flex-col gap-2">
         <button 
@@ -453,7 +463,7 @@ const RegistrationPage = () => {
           <button 
             type="button" 
             className="w-full text-blue-500 py-2 rounded font-medium hover:underline"
-            onClick={PrintCookies}
+            onClick={onBackToLogin}
           >
             Iniciar sesión
           </button>

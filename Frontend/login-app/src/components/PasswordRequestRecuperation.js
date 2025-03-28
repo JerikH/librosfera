@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 export default function PasswordResetRequest({ onBackToLogin }) {
   const [email, setEmail] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-
+  const navigate = useNavigate();
+  
   const onSubmit = async e => {
     e.preventDefault();
     
@@ -36,6 +38,11 @@ export default function PasswordResetRequest({ onBackToLogin }) {
       console.error('Error:', err.response?.data || err.message);
       setErrorMessage('Ha ocurrido un error. Por favor, inténtalo de nuevo más tarde.');
     }
+  };
+  
+  // Function to handle navigation back to login
+  const handleBackToLogin = () => {
+    navigate('/Login', { replace: true });
   };
   
   return (
@@ -107,7 +114,7 @@ export default function PasswordResetRequest({ onBackToLogin }) {
                 <button 
                   type="button" 
                   className="text-gray-500 hover:underline"
-                  onClick={onBackToLogin}
+                  onClick={handleBackToLogin}
                 >
                   Volver a iniciar sesión
                 </button>
