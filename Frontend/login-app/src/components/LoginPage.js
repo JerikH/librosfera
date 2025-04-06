@@ -1,0 +1,290 @@
+import React, { useState, useEffect } from 'react';
+import RegistrationPage from './RegistrationPage'; // Import the registration component
+import PasswordResetPage from './PasswordRequestRecuperation'; // Import the password reset component
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+
+const clearCookies = () => {
+  document.cookie.split(";").forEach((cookie) => {
+    document.cookie = cookie
+      .replace(/^ +/, "") // Remove leading spaces
+      .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
+  });
+  console.log("Cookies cleared!");
+};
+
+const getCookie = (name) => {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+};
+
+const verifyToken = async (token) => {
+  try {
+    const response = await axios.get('http://localhost:5000/api/v1/auth/verify-token', {
+      headers: {
+        'Authorization': `Bearer ${String(token)}`,
+      },
+    });
+
+    // If request is successful, return true
+    console.log(response);
+    if(response.status === 200){
+      return true;
+    }
+    return false;
+  } catch (err) {
+    // If there is an error, return false
+    return false;
+  }
+};
+
+const LoginPage = () => {
+  //clearCookies();
+
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+
+  // Check for existing token when component mounts
+  useEffect(() => {
+    const checkExistingToken = async () => {
+      try {
+        const rawData = getCookie("data");
+        
+        if (rawData) {
+          const parsedData = JSON.parse(rawData);
+          if (parsedData && parsedData.Data && parsedData.Data.token) {
+            // Verify token validity
+            const isValid = await verifyToken(parsedData.Data.token);
+            
+            if (isValid) {
+              console.log("Valid token found, redirecting to Welcome page");
+              navigate('/Welcome');
+              return;
+            } else {
+              console.log("Token found but invalid or expired");
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error checking existing token:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkExistingToken();
+  }, [navigate]);
+
+  const { email, password } = formData;
+
+  const onChange = e => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const Redirect = (response) => {
+    // const token = response.data.data.token
+    const userData = { authToken: response.data.data.token , Data: response.data.data };
+    console.log(response.data.data.token);
+
+    // document.cookie = "authToken=${token}; path=/; max-age=3600; Secure;"
+    document.cookie = `data=${encodeURIComponent(JSON.stringify(userData))}; path=/; max-age=3600; Secure;`;
+  };
+
+  const onSubmit = async e => {
+    e.preventDefault();
+    
+    try {
+      const config = {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      };
+      console.log(formData);
+      // Make POST request to backend API
+      const response = await axios.post('http://localhost:5000/api/v1/users/login', formData, config);
+      
+      // Print the response
+      console.log('Response received:', response.data);
+      
+      // Clear form
+      setFormData({
+        email: '',
+        password: ''
+      });
+      
+      setSuccessMessage('Ingreso satisfactorio.');
+      if(response){
+        Redirect(response);
+        navigate('/Welcome');
+      }
+
+    } catch (err) {
+      if(err.message == 'Request failed with status code 401'){
+        console.error('Error adding item:', err.response.data);
+        setErrorMessage(err.response.data.message);
+      }else{
+        setErrorMessage("Error conectando con la base de datos");
+        console.log(err.message);
+      }
+    }
+  };
+
+  const [showRegistration, setShowRegistration] = useState(false);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  
+  // If registration page should be shown, render it instead
+  if (showRegistration) {
+    return <RegistrationPage onBackToLogin={() => setShowRegistration(false)} />;
+  }
+  
+  // If password reset page should be shown, render it instead
+  if (showPasswordReset) {
+    return <PasswordResetPage onBackToLogin={() => setShowPasswordReset(false)} />;
+  }
+
+  // Show loading indicator while checking token validity
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="spinner-border animate-spin inline-block w-8 h-8 border-4 rounded-full border-t-transparent border-blue-600" role="status">
+            <span className="sr-only">Loading...</span>
+          </div>
+          <p className="mt-2">Verificando sesión...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen w-full">
+      {/* Left Side - Black Background with Logo */}
+      <div className="hidden md:flex md:w-1/2 bg-black text-white flex-col items-center justify-center">
+        <div className="mb-6 w-2/5">
+          <img 
+            src="/l2.png" 
+            alt="Librosfera Logo" 
+            className="w-full h-auto"
+          />
+        </div>
+        <h1 className="text-5xl font-bold mb-2">Librosfera</h1>
+        <p className="text-xl">Tu librería de confianza</p>
+      </div>
+      
+      {/* Right Side - Login Form */}
+      <div className="w-full md:w-1/2 flex flex-col h-full">
+        <div className="flex flex-col justify-between h-full p-10">
+          {/* Top Section (Only visible on mobile) */}
+          <div className="md:hidden flex flex-col items-center mb-6">
+            <div className="w-2/5 mb-4">
+              <img 
+                src="/l2.png" 
+                alt="Librosfera Logo" 
+                className="w-full h-auto"
+              />
+            </div>
+            <h1 className="text-3xl font-bold">Librosfera</h1>
+          </div>
+          
+          {/* Login Form Section */}
+          <div className="flex-grow flex flex-col justify-center">
+            <h2 className="text-4xl font-bold mb-6">Iniciar Sesión</h2>
+            <p className="mb-6">
+              ¿No tienes cuenta? <a 
+                href="/Register"  
+                className="text-blue-600 font-medium"
+              >
+                Crear Cuenta
+              </a>
+            </p>
+
+             {/* Success Message */}
+             {successMessage && (
+              <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
+                <p>{successMessage}</p>
+              </div>
+            )}
+            
+            {/* Error Message */}
+            {errorMessage && (
+              <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+                <p>{errorMessage}</p>
+              </div>
+            )}
+            
+            <form className="w-full max-w-lg" onSubmit={onSubmit}>
+              {/* Email Field */}
+              <div className="mb-6">
+                <input
+                  type="email"
+                  placeholder="Correo Electrónico"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  name="email"
+                  id="email"
+                  value={email}
+                  onChange={onChange}
+                />
+              </div>
+              
+              {/* Password Field */}
+              <div className="mb-6">
+                <input
+                  type="password"
+                  placeholder="Contraseña"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  name="password"
+                  id="password"
+                  value={password}
+                  onChange={onChange}
+                />
+              </div>
+              
+              {/* Remember Me and Change Password */}
+              <div className="flex items-center justify-between mb-6">
+                <label className="flex items-center select-none">
+                  <input type="checkbox" className="mr-2" />
+                  Recordarme
+                </label>
+                <a 
+                  href="/RequestChangePassword" 
+                  className="text-gray-500"
+                >
+                  Recuperar Contraseña
+                </a>
+              </div>
+              
+              {/* Login Button */}
+              <button 
+                type="submit" 
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Iniciar sesión
+              </button>
+            </form>
+          </div>
+          
+          {/* Bottom Registration Link */}
+          <div className="mt-auto">
+            <p className="text-gray-500 text-center">
+              ¿Eres nuevo? <a 
+                href="/Register" 
+                className="text-blue-600 font-medium"
+              >
+                Registrarse
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LoginPage;
