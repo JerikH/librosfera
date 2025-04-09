@@ -48,7 +48,7 @@ const registerUser = catchAsync(async (req, res, next) => {
   else if (isAdminRegistration) {
     // Log detallado para depuración
     console.log('Solicitud de creación de administrador:');
-    console.log('Usuario autenticado:', req.user ? `${req.user._id} (${req.user.tipo_usuario})` : 'No autenticado');
+    //  console.log('Usuario autenticado:', req.user ? ${req.user._id} (${req.user.tipo_usuario}) : 'No autenticado');
     console.log('Ruta:', req.originalUrl);
     
     if (!req.user) {
@@ -122,6 +122,40 @@ const registerUser = catchAsync(async (req, res, next) => {
       telefono_alternativo,
       foto_perfil
     };
+    
+    // Validación de fecha de nacimiento para asegurar mayoría de edad
+    if (profileData.fecha_nacimiento) {
+      // Convertir a objeto Date si viene como string
+      const fechaNacimiento = new Date(profileData.fecha_nacimiento);
+      const fechaActual = new Date();
+      
+      // Verificar si es una fecha válida
+      if (isNaN(fechaNacimiento.getTime())) {
+        return next(new AppError('La fecha de nacimiento no es válida', 400));
+      }
+      
+      // Verificar que no sea una fecha futura
+      if (fechaNacimiento > fechaActual) {
+        return next(new AppError('La fecha de nacimiento no puede ser una fecha futura', 400));
+      }
+      
+      // Calcular edad
+      let edad = fechaActual.getFullYear() - fechaNacimiento.getFullYear();
+      const mesActual = fechaActual.getMonth();
+      const diaActual = fechaActual.getDate();
+      const mesNacimiento = fechaNacimiento.getMonth();
+      const diaNacimiento = fechaNacimiento.getDate();
+      
+      // Ajustar edad si aún no ha cumplido años en el año actual
+      if (mesActual < mesNacimiento || (mesActual === mesNacimiento && diaActual < diaNacimiento)) {
+        edad--;
+      }
+      
+      // Verificar que tenga al menos 18 años
+      if (edad < 18) {
+        return next(new AppError('El usuario debe tener al menos 18 años cumplidos', 400));
+      }
+    }
     
     tipoData = restTipoData;
   } else {
