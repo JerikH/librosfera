@@ -21,8 +21,73 @@ const generateToken = (id) => {
  * @route   POST /api/v1/users/register
  * @access  Public
  */
+// Función para sanitizar texto (previene XSS)
+const sanitizeText = (text) => {
+  if (!text) return text;
+  // Convertir a string si no lo es
+  const str = String(text);
+  // Escapar caracteres HTML peligrosos
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+// Función para normalizar texto
+const normalizeText = (text) => {
+  if (!text) return text;
+  // Convertir a string y recortar espacios
+  return String(text).trim();
+};
+
+// Función para sanitizar y validar longitud
+const sanitizeAndValidateLength = (text, fieldName, minLength = 1, maxLength = 100) => {
+  if (!text) return { value: text, isValid: true };
+  
+  const sanitized = sanitizeText(normalizeText(text));
+  
+  if (sanitized.length < minLength) {
+    return { 
+      value: sanitized, 
+      isValid: false, 
+      error: `El campo ${fieldName} debe tener al menos ${minLength} caracteres` 
+    };
+  }
+  
+  if (sanitized.length > maxLength) {
+    return { 
+      value: sanitized, 
+      isValid: false, 
+      error: `El campo ${fieldName} no puede exceder los ${maxLength} caracteres` 
+    };
+  }
+  
+  return { value: sanitized, isValid: true };
+};
+
 const registerUser = catchAsync(async (req, res, next) => {
-  const { usuario, email, password, tipo_usuario, ...restData } = req.body;
+  // Sanitizar campos básicos
+  const usuario = normalizeText(req.body.usuario);
+  const email = normalizeText(req.body.email);
+  const password = req.body.password;
+  const tipo_usuario = normalizeText(req.body.tipo_usuario);
+  const { ...restData } = req.body;
+
+  // Validar longitudes
+  const validaciones = [
+    sanitizeAndValidateLength(usuario, 'Usuario', 3, 50),
+    sanitizeAndValidateLength(email, 'Email', 5, 100),
+    sanitizeAndValidateLength(tipo_usuario, 'Tipo de usuario', 1, 20)
+  ];
+  
+  // Verificar si hay errores de validación
+  for (const validacion of validaciones) {
+    if (!validacion.isValid) {
+      return next(new AppError(validacion.error, 400));
+    }
+  }
 
   // Verificar tipo de usuario válido
   if (!['cliente', 'administrador', 'root'].includes(tipo_usuario)) {
@@ -86,9 +151,20 @@ const registerUser = catchAsync(async (req, res, next) => {
     return next(new AppError('El usuario o email ya están registrados', 400));
   }
 
+  // Validar formato de email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return next(new AppError('El formato del email no es válido', 400));
+  }
+
   // Encriptar contraseña
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(password, salt);
+
+  // Validar complejidad de contraseña
+  if (password.length < 8) {
+    return next(new AppError('La contraseña debe tener al menos 8 caracteres', 400));
+  }
 
   // Datos básicos del usuario
   const userData = {
@@ -110,20 +186,115 @@ const registerUser = catchAsync(async (req, res, next) => {
       ...restTipoData 
     } = restData;
     
+    // Sanitizar datos del perfil
+    const sanitizedDNI = sanitizeText(normalizeText(DNI));
+    const sanitizedNombres = sanitizeText(normalizeText(nombres));
+    const sanitizedApellidos = sanitizeText(normalizeText(apellidos));
+    const sanitizedLugarNacimiento = sanitizeText(normalizeText(lugar_nacimiento));
+    const sanitizedGenero = sanitizeText(normalizeText(genero));
+    const sanitizedTelefono = sanitizeText(normalizeText(telefono));
+    const sanitizedTelefonoAlt = sanitizeText(normalizeText(telefono_alternativo));
+    
+    // Validar longitudes de campos clave
+    const profileValidaciones = [
+      sanitizeAndValidateLength(sanitizedNombres, 'Nombres', 2, 100),
+      sanitizeAndValidateLength(sanitizedApellidos, 'Apellidos', 2, 100),
+      sanitizeAndValidateLength(sanitizedLugarNacimiento, 'Lugar de nacimiento', 2, 150),
+      sanitizeAndValidateLength(sanitizedDNI, 'DNI', 5, 20)
+    ];
+    
+    // Verificar errores de validación
+    for (const validacion of profileValidaciones) {
+      if (!validacion.isValid) {
+        return next(new AppError(validacion.error, 400));
+      }
+    }
+    
+    // Sanitizar direcciones si existen
+    let sanitizedDirecciones = [];
+    if (direcciones) {
+      if (Array.isArray(direcciones)) {
+        sanitizedDirecciones = direcciones.map(dir => {
+          if (typeof dir === 'object') {
+            // Si es un objeto con propiedades
+            const sanitizedDir = {};
+            for (const [key, value] of Object.entries(dir)) {
+              if (typeof value === 'string') {
+                const validacion = sanitizeAndValidateLength(value, key, 1, 200);
+                if (!validacion.isValid) {
+                  return next(new AppError(validacion.error, 400));
+                }
+                sanitizedDir[key] = validacion.value;
+              } else {
+                sanitizedDir[key] = value;
+              }
+            }
+            return sanitizedDir;
+          } else if (typeof dir === 'string') {
+            // Si es simplemente un string
+            const validacion = sanitizeAndValidateLength(dir, 'Dirección', 5, 200);
+            if (!validacion.isValid) {
+              return next(new AppError(validacion.error, 400));
+            }
+            return validacion.value;
+          }
+          return dir;
+        });
+      } else if (typeof direcciones === 'string') {
+        const validacion = sanitizeAndValidateLength(direcciones, 'Dirección', 5, 200);
+        if (!validacion.isValid) {
+          return next(new AppError(validacion.error, 400));
+        }
+        sanitizedDirecciones = [validacion.value];
+      } else if (typeof direcciones === 'object') {
+        // Si es un solo objeto
+        const sanitizedDir = {};
+        for (const [key, value] of Object.entries(direcciones)) {
+          if (typeof value === 'string') {
+            const validacion = sanitizeAndValidateLength(value, key, 1, 200);
+            if (!validacion.isValid) {
+              return next(new AppError(validacion.error, 400));
+            }
+            sanitizedDir[key] = validacion.value;
+          } else {
+            sanitizedDir[key] = value;
+          }
+        }
+        sanitizedDirecciones = [sanitizedDir];
+      }
+    }
+    
     profileData = { 
-      DNI, 
-      nombres, 
-      apellidos, 
-      fecha_nacimiento, 
-      lugar_nacimiento, 
-      genero,
-      direcciones: direcciones ? Array.isArray(direcciones) ? direcciones : [direcciones] : [],
-      telefono,
-      telefono_alternativo,
-      foto_perfil
+      DNI: sanitizedDNI, 
+      nombres: sanitizedNombres, 
+      apellidos: sanitizedApellidos, 
+      fecha_nacimiento,
+      lugar_nacimiento: sanitizedLugarNacimiento, 
+      genero: sanitizedGenero,
+      direcciones: sanitizedDirecciones,
+      telefono: sanitizedTelefono,
+      telefono_alternativo: sanitizedTelefonoAlt,
+      foto_perfil: foto_perfil
     };
     
-    // Validación de fecha de nacimiento para asegurar mayoría de edad
+    // Validación de DNI si está presente
+    if (profileData.DNI) {
+      // La validación exacta dependerá del formato específico que uses para DNI
+      // Este es un ejemplo simple
+      if (profileData.DNI.length < 5) {
+        return next(new AppError('El formato del DNI no es válido', 400));
+      }
+    }
+
+    // Validación de teléfono si está presente
+    if (profileData.telefono) {
+      const telefonoRegex = /^\+?[0-9]{8,15}$/;
+      if (!telefonoRegex.test(profileData.telefono)) {
+        return next(new AppError('El formato del teléfono no es válido', 400));
+      }
+    }
+    
+    // Validación mejorada de fecha de nacimiento para asegurar edad razonable
     if (profileData.fecha_nacimiento) {
       // Convertir a objeto Date si viene como string
       const fechaNacimiento = new Date(profileData.fecha_nacimiento);
@@ -155,11 +326,49 @@ const registerUser = catchAsync(async (req, res, next) => {
       if (edad < 18) {
         return next(new AppError('El usuario debe tener al menos 18 años cumplidos', 400));
       }
+      
+      // Verificar que la edad sea razonable (menos de 120 años)
+      const EDAD_MAXIMA = 120;
+      if (edad > EDAD_MAXIMA) {
+        return next(new AppError(`La edad no puede ser mayor a ${EDAD_MAXIMA} años`, 400));
+      }
     }
     
     tipoData = restTipoData;
   } else {
-    tipoData = restData;
+    // Sanitizar todos los campos en restData para tipo root
+    tipoData = {};
+    
+    for (const [key, value] of Object.entries(restData)) {
+      if (typeof value === 'string') {
+        // Sanitizar y validar longitud para campos de texto
+        const validacion = sanitizeAndValidateLength(value, key, 1, 200);
+        if (!validacion.isValid) {
+          return next(new AppError(validacion.error, 400));
+        }
+        tipoData[key] = validacion.value;
+      } else if (typeof value === 'object' && value !== null) {
+        // Para objetos anidados, aplicamos sanitización recursiva
+        if (Array.isArray(value)) {
+          tipoData[key] = value.map(item => 
+            typeof item === 'string' ? sanitizeText(normalizeText(item)) : item
+          );
+        } else {
+          // Para objetos que no son arrays
+          tipoData[key] = {};
+          for (const [subKey, subValue] of Object.entries(value)) {
+            if (typeof subValue === 'string') {
+              tipoData[key][subKey] = sanitizeText(normalizeText(subValue));
+            } else {
+              tipoData[key][subKey] = subValue;
+            }
+          }
+        }
+      } else {
+        // Para números, booleanos, etc.
+        tipoData[key] = value;
+      }
+    }
   }
 
   // Crear usuario según su tipo

@@ -76,12 +76,14 @@ const userService = {
       // Generar ID de cliente único
       const idCliente = `CLI${Date.now().toString().slice(-8)}`;
       
-      // Combinar todos los datos
+      const encryptedPassword = userData.password;
+      
       const nuevoCliente = new Cliente({
-        ...userData,
         ...profileData,
+        ...clientData,
         id_cliente: idCliente,
-        ...clientData
+        ...userData,
+        password: encryptedPassword
       });
       
       // Guardar en la base de datos
