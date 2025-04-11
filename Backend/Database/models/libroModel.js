@@ -358,6 +358,6 @@ libroSchema.statics.obtenerLibrosConDescuento = function() {
   });
 };
 
-const Libro = mongoose.model('Libro', libroSchema);
+const libroModel = mongoose.model('Libro', libroSchema);
 
-module.exports = Libro;
+module.exports = libroModel;

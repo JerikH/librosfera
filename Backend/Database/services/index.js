@@ -7,6 +7,8 @@
 // Exportar servicios disponibles
 module.exports = {
     userService: require('./userService'),
+    libroService: require('./libroService'),
+
     
     // Aquí se pueden exportar otros servicios cuando se creen
     // productService: require('./productService'),

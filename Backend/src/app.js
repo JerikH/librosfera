@@ -1,4 +1,5 @@
-// src/app.js
+// src/app.js - Modificaciones necesarias para integrar las rutas de libros
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -18,6 +19,7 @@ const authRoutes = require('./routes/authRoutes');
 // const cartRoutes = require('./routes/cartRoutes');
 // const reservationRoutes = require('./routes/reservationRoutes');
 // const searchRoutes = require('./routes/searchRoutes');
+const libroRoutes = require('./routes/libroRoutes'); 
 
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
@@ -50,6 +52,7 @@ app.use('/api/v1/auth', authRoutes);
 // app.use('/api/v1/cart', cartRoutes);
 // app.use('/api/v1/reservations', reservationRoutes);
 // app.use('/api/v1/search', searchRoutes);
+app.use('/api/v1/libros', libroRoutes); // Registrar las rutas de libros
 
 // Ruta de estado
 app.get('/api/health', (req, res) => {
