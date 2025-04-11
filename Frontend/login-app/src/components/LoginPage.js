@@ -65,7 +65,7 @@ const LoginPage = () => {
             
             if (isValid) {
               console.log("Valid token found, redirecting to Welcome page");
-              navigate('/Welcome');
+              navigate('/Profile');
               return;
             } else {
               console.log("Token found but invalid or expired");
@@ -122,7 +122,7 @@ const LoginPage = () => {
       setSuccessMessage('Ingreso satisfactorio.');
       if(response){
         Redirect(response);
-        navigate('/Welcome');
+        navigate('/Profile');
       }
 
     } catch (err) {
