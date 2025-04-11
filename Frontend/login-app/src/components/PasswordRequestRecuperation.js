@@ -28,8 +28,9 @@ export default function PasswordResetRequest({ onBackToLogin }) {
       }, config);
       
       // Check for success status
+      console.log(response);
       if (response.data.status === "success") {
-        setSuccessMessage('Se ha enviado un correo electrónico con instrucciones para recuperar tu contraseña.');
+        setSuccessMessage(response.data.message);
         // Clear form
         setEmail('');
       }

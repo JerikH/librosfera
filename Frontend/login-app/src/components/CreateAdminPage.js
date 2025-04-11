@@ -33,6 +33,8 @@ const CreateAdminPage = () => {
   const navigate = useNavigate();
   const rawData = getCookie("data");
 
+  const [success, setSuccess] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [tokenG, setTokenG] = useState(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -114,9 +116,11 @@ const CreateAdminPage = () => {
         email: '',
         password: ''
       });
+      setSuccess('Administrador creado con exito!');
       
     } catch (err) {
       console.error('Error adding item:', err.response?.data || err.message);
+      setErrorMessage('Error creando administrador');
     }
   }; 
 
@@ -134,6 +138,19 @@ const CreateAdminPage = () => {
           </div>
           <h1 className="text-2xl font-bold">Crear Administrador</h1>
         </div>
+
+        {success && (
+          <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg">
+            {success}
+          </div>
+        )}
+
+        {/* Error Message */}
+        {errorMessage && (
+              <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+                <p>{errorMessage}</p>
+              </div>
+        )}
         
         <form className="space-y-6" onSubmit={onSubmit}>
           {/* Email Field with Label */}
