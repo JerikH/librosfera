@@ -5,6 +5,7 @@ import RegistrationPage from './components/RegistrationPage'; // Import the regi
 import PasswordResetRequest from './components/PasswordRequestRecuperation';
 import PasswordResetPage from './components/ResetPassword';
 import WelcomePage from './components/Welcome';
+import UserProfile from './components/UserProfile'
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/RequestChangePassword" element={<PasswordResetRequest />} />
         <Route path="/reset-password/:token" element={<PasswordResetPage />} />
         <Route path="/Welcome" element={<WelcomePage />} />
+        <Route path="/Profile" element={<UserProfile />} />
       </Routes>
     </Router>
   );
