@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import Sidebar from './Sidebar';
-import Dashboard from './Dashboard';
-import ProfilePage from './ProfilePage';
-import PurchasesPage from './PurchasesPage';
-import CartPage from './CartPage';
-import CardPage from './CardPage';
-import { fetchUserData, logoutUser } from './authUtils';
+import Sidebar from './UserProfilePageComponents/Sidebar';
+import Dashboard from './UserProfilePageComponents/Dashboard';
+import ProfilePage from './UserProfilePageComponents/ProfilePage';
+import PurchasesPage from './UserProfilePageComponents/PurchasesPage';
+import CartPage from './UserProfilePageComponents/CartPage';
+import CardPage from './UserProfilePageComponents/CardPage';
+import { fetchUserData, logoutUser } from './UserProfilePageComponents/authUtils';
 
 const UserProfile = () => {
   const [activeTab, setActiveTab] = useState('home');
