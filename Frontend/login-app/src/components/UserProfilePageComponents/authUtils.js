@@ -39,6 +39,18 @@ export const fetchUserData = async () => {
       return { success: false, error: 'Su sesión ha expirado' };
     }
 
+    // Debug the user data
+    console.log("User data structure:", userDataFromCookie.Data);
+    
+    // Add a property to help with admin check (for compatibility with your AdminProfile component)
+    // This is used by the AdminProfile component to check if the user is an admin
+    if (userDataFromCookie.Data.tipo_usuario === 'administrador' || 
+        userDataFromCookie.Data.tipo_usuario === 'root') {
+      userDataFromCookie.Data.isAdmin = true;
+    } else {
+      userDataFromCookie.Data.isAdmin = false;
+    }
+
     // Return user data from cookie
     return { success: true, data: userDataFromCookie.Data };
   } catch (err) {
