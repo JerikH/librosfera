@@ -64,8 +64,19 @@ const LoginPage = () => {
             const isValid = await verifyToken(parsedData.Data.token);
             
             if (isValid) {
-              console.log("Valid token found, redirecting to Welcome page");
-              navigate('/Profile');
+              console.log("Valid token found, checking user type for redirect");
+              
+              // Check user type for proper redirection
+              if (parsedData.Data.tipo_usuario === 'administrador') {
+                console.log("Admin user detected, redirecting to AdminProfile");
+                navigate('/AdminProfile');
+              } else if (parsedData.Data.tipo_usuario === 'root') {
+                console.log("Root user detected, redirecting to Profile");
+                navigate('/Profile');
+              } else {
+                console.log("Regular user detected, redirecting to Profile");
+                navigate('/Profile');
+              }
               return;
             } else {
               console.log("Token found but invalid or expired");
@@ -89,12 +100,22 @@ const LoginPage = () => {
   };
 
   const Redirect = (response) => {
-    // const token = response.data.data.token
-    const userData = { authToken: response.data.data.token , Data: response.data.data };
-    console.log(response.data.data.token);
-
-    // document.cookie = "authToken=${token}; path=/; max-age=3600; Secure;"
+    // Store user data in cookie
+    const userData = { authToken: response.data.data.token, Data: response.data.data };
+    console.log("User data being stored:", userData.Data);
     document.cookie = `data=${encodeURIComponent(JSON.stringify(userData))}; path=/; max-age=3600; Secure;`;
+    
+    // Determine redirect based on user type
+    if (userData.Data.tipo_usuario === 'administrador') {
+      console.log("Admin login detected, redirecting to AdminProfile");
+      navigate('/AdminProfile');
+    } else if (userData.Data.tipo_usuario === 'root') {
+      console.log("Root login detected, redirecting to Profile");
+      navigate('/Profile');
+    } else {
+      console.log("Regular user login detected, redirecting to Profile");
+      navigate('/Profile');
+    }
   };
 
   const onSubmit = async e => {
@@ -106,12 +127,13 @@ const LoginPage = () => {
           'Content-Type': 'application/json'
         }
       };
-      console.log(formData);
+      console.log("Login attempt with:", formData);
+      
       // Make POST request to backend API
       const response = await axios.post('http://localhost:5000/api/v1/users/login', formData, config);
       
       // Print the response
-      console.log('Response received:', response.data);
+      console.log('Login response received:', response.data);
       
       // Clear form
       setFormData({
@@ -122,12 +144,11 @@ const LoginPage = () => {
       setSuccessMessage('Ingreso satisfactorio.');
       if(response){
         Redirect(response);
-        navigate('/Profile');
       }
 
     } catch (err) {
       if(err.message == 'Request failed with status code 401'){
-        console.error('Error adding item:', err.response.data);
+        console.error('Login error:', err.response.data);
         setErrorMessage(err.response.data.message);
       }else{
         setErrorMessage("Error conectando con la base de datos");
