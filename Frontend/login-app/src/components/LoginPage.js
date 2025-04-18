@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import RegistrationPage from './RegistrationPage'; // Import the registration component
-import PasswordResetPage from './PasswordRequestRecuperation'; // Import the password reset component
+import RegistrationPage from './RegistrationPage';
+import PasswordResetPage from './PasswordRequestRecuperation';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const clearCookies = () => {
   document.cookie.split(";").forEach((cookie) => {
     document.cookie = cookie
-      .replace(/^ +/, "") // Remove leading spaces
+      .replace(/^ +/, "")
       .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
   });
   console.log("Cookies cleared!");
@@ -74,8 +74,8 @@ const LoginPage = () => {
                 console.log("Root user detected, redirecting to Profile");
                 navigate('/Profile');
               } else {
-                console.log("Regular user detected, redirecting to Profile");
-                navigate('/Profile');
+                console.log("Regular user detected, redirecting to Home");
+                navigate('/Home'); // Redirección a nueva página principal
               }
               return;
             } else {
@@ -113,8 +113,8 @@ const LoginPage = () => {
       console.log("Root login detected, redirecting to Profile");
       navigate('/Profile');
     } else {
-      console.log("Regular user login detected, redirecting to Profile");
-      navigate('/Profile');
+      console.log("Regular user login detected, redirecting to Home");
+      navigate('/Home'); // Redirección a nueva página principal
     }
   };
 
