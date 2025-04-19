@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 
 // Importar configuraciones
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
@@ -14,6 +15,7 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 const userRoutes = require('./routes/userRoutes');
 const passwordResetRoutes = require('./routes/passwordResetRoutes');
 const authRoutes = require('./routes/authRoutes');
+const libroRoutes = require('./routes/libroRoutes'); // Nueva importación
 // const orderRoutes = require('./routes/orderRoutes');
 // const cartRoutes = require('./routes/cartRoutes');
 // const reservationRoutes = require('./routes/reservationRoutes');
@@ -40,12 +42,17 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Directorio estático para archivos subidos
+const uploadsPath = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsPath));
+
 // Rutas de la API
 // app.use('/api/v1/products', productRoutes);
 // app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/users', passwordResetRoutes);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/libros', libroRoutes); // Nueva ruta para libros
 // app.use('/api/v1/orders', orderRoutes);
 // app.use('/api/v1/cart', cartRoutes);
 // app.use('/api/v1/reservations', reservationRoutes);
