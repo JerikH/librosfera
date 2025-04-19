@@ -3,6 +3,39 @@ const Schema = mongoose.Schema;
 const authorSchema = require('./schemas/authorSchema');
 const bookPriceSchema = require('./schemas/bookPriceSchema');
 
+// Esquema para manejar las imágenes del libro con orden específico
+const libroImageSchema = new Schema({
+  url: {
+    type: String,
+    required: true
+  },
+  nombre_archivo: {
+    type: String,
+    required: true
+  },
+  orden: {
+    type: Number,
+    default: 0 // 0 es la imagen principal/portada
+  },
+  tipo: {
+    type: String,
+    enum: ['portada', 'contraportada', 'contenido', 'detalle'],
+    default: 'detalle'
+  },
+  fecha_subida: {
+    type: Date,
+    default: Date.now
+  },
+  alt_text: {
+    type: String,
+    default: 'Imagen de libro'
+  },
+  activa: {
+    type: Boolean,
+    default: true
+  }
+});
+
 const libroSchema = new Schema({
   // Identificador único autogenerado para el libro
   id_libro: {
@@ -22,10 +55,16 @@ const libroSchema = new Schema({
     index: true
   },
   
-  // Implementamos el nuevo esquema de autor
+  // Implementamos el nuevo esquema de autor como array
   autor: {
     type: [authorSchema],
-    required: true
+    required: true,
+    validate: {
+      validator: function(v) {
+        return Array.isArray(v) && v.length > 0;
+      },
+      message: 'Debe proporcionar al menos un autor'
+    }
   },
   
   // Mantenemos el campo de autor como string para compatibilidad
@@ -36,8 +75,6 @@ const libroSchema = new Schema({
     trim: true,
     index: true
   },
-  
-  
   
   // Información editorial y publicación
   editorial: {
@@ -126,8 +163,11 @@ const libroSchema = new Schema({
     trim: true
   }],
   
-  // URLs de imágenes de portada y contraportada
-  imagenes: {
+  // Nuevo esquema mejorado para imágenes con orden
+  imagenes: [libroImageSchema],
+  
+  // Campo para mantener compatibilidad con código existente
+  imagenes_legacy: {
     portada: String,
     contraportada: String,
     adicionales: [String]
@@ -151,6 +191,14 @@ const libroSchema = new Schema({
       type: Number,
       default: 0
     }
+  },
+  
+  // ISBN para libros (formato internacional)
+  ISBN: {
+    type: String,
+    trim: true,
+    sparse: true,
+    index: true
   },
   
   // Metadatos de sistema
@@ -191,7 +239,13 @@ const libroSchema = new Schema({
       type: Date,
       default: Date.now
     }
-  }]
+  }],
+  
+  // Campo para control de versiones optimista (evitar condiciones de carrera)
+  version: {
+    type: Number,
+    default: 0
+  }
 });
 
 // ÍNDICES COMPUESTOS
@@ -200,15 +254,39 @@ libroSchema.index({ 'autor_nombre_completo': 1, titulo: 1 });
 libroSchema.index({ genero: 1, 'autor_nombre_completo': 1 });
 libroSchema.index({ estado: 1, precio: 1 });
 libroSchema.index({ anio_publicacion: 1, genero: 1 });
+libroSchema.index({ 'palabras_clave': 1 });
+libroSchema.index({ 'imagenes.orden': 1 });
+
+// Índice de texto para búsquedas full-text
+libroSchema.index({ 
+  titulo: 'text', 
+  autor_nombre_completo: 'text',
+  descripcion: 'text',
+  palabras_clave: 'text'
+}, {
+  weights: {
+    titulo: 10,
+    autor_nombre_completo: 5,
+    palabras_clave: 3,
+    descripcion: 1
+  },
+  name: 'libro_text_index'
+});
 
 // MIDDLEWARES
 // Actualizar fecha cada vez que se modifica el documento
 libroSchema.pre('save', function(next) {
   this.ultima_actualizacion = new Date();
   
+  // Incrementar versión para control optimista
+  this.version += 1;
+  
   // Actualizar el campo autor_nombre_completo para búsquedas
-  if (this.autor) {
-    this.autor_nombre_completo = `${this.autor.nombre} ${this.autor.apellidos}`;
+  if (this.autor && Array.isArray(this.autor) && this.autor.length > 0) {
+    // Compilar nombres de todos los autores
+    this.autor_nombre_completo = this.autor.map(a => 
+      `${a.nombre} ${a.apellidos}`
+    ).join(', ');
   }
   
   // Actualizar el campo precio simple con el precio calculado
@@ -219,23 +297,43 @@ libroSchema.pre('save', function(next) {
   next();
 });
 
+// Middleware pre-update para asegurarse de incrementar la versión
+libroSchema.pre('findOneAndUpdate', function(next) {
+  this.update({}, { $inc: { version: 1 } });
+  next();
+});
+
 // MÉTODOS VIRTUALES
 // Calcular disponibilidad de ejemplares
 libroSchema.virtual('ejemplares_disponibles').get(function() {
   return this.ejemplares.filter(ejemplar => ejemplar.disponible).length;
 });
 
-// Nombre completo del autor (para compatibilidad)
-libroSchema.virtual('nombre_autor_completo').get(function() {
-  if (this.autor) {
-    return `${this.autor.nombre} ${this.autor.apellidos}`;
+// Obtener imagen de portada principal
+libroSchema.virtual('imagen_portada').get(function() {
+  // Primero buscar en el nuevo sistema
+  if (this.imagenes && this.imagenes.length > 0) {
+    // Buscar imagen tipo portada con orden 0 o la primera portada
+    const portada = this.imagenes.find(img => img.tipo === 'portada' && img.orden === 0) ||
+                    this.imagenes.find(img => img.tipo === 'portada') ||
+                    // Si no encuentra, retornar la primera imagen
+                    this.imagenes.sort((a, b) => a.orden - b.orden)[0];
+    
+    if (portada) return portada.url;
   }
-  return this.autor_nombre_completo || '';
+  
+  // Fallback al sistema anterior
+  return this.imagenes_legacy && this.imagenes_legacy.portada || '';
 });
 
 // MÉTODOS DE INSTANCIA
 // Agregar un nuevo ejemplar al libro
 libroSchema.methods.agregarEjemplar = function(codigo, estadoFisico = 'excelente', ubicacion = '') {
+  // Verificar que el código no exista ya
+  if (this.ejemplares.some(e => e.codigo === codigo)) {
+    throw new Error(`Ya existe un ejemplar con el código ${codigo}`);
+  }
+  
   this.ejemplares.push({
     codigo: codigo,
     estado_fisico: estadoFisico,
@@ -271,7 +369,7 @@ libroSchema.methods.agregarDescuento = function(tipo, valor, fechaInicio, fechaF
   this.precio_info.descuentos.push({
     tipo: tipo,
     valor: valor,
-    fecha_inicio: fechaInicio,
+    fecha_inicio: fechaInicio || new Date(),
     fecha_fin: fechaFin,
     codigo_promocion: codigoPromocion,
     activo: true
@@ -280,10 +378,82 @@ libroSchema.methods.agregarDescuento = function(tipo, valor, fechaInicio, fechaF
   return this.save();
 };
 
+// Añadir una imagen al libro
+libroSchema.methods.agregarImagen = function(imagenData) {
+  if (!this.imagenes) {
+    this.imagenes = [];
+  }
+  
+  // Si no se especifica un orden, colocarlo al final
+  if (imagenData.orden === undefined) {
+    // Buscar el mayor orden actual y sumar 1
+    const maxOrden = this.imagenes.reduce((max, img) => 
+      img.orden > max ? img.orden : max, -1);
+    imagenData.orden = maxOrden + 1;
+  }
+  
+  // Si es portada con orden 0, verificar si ya existe y actualizar
+  if (imagenData.tipo === 'portada' && imagenData.orden === 0) {
+    const portadaIndex = this.imagenes.findIndex(
+      img => img.tipo === 'portada' && img.orden === 0
+    );
+    
+    if (portadaIndex >= 0) {
+      // Actualizar portada existente
+      this.imagenes[portadaIndex] = {
+        ...this.imagenes[portadaIndex],
+        ...imagenData
+      };
+    } else {
+      // Agregar nueva portada
+      this.imagenes.push(imagenData);
+    }
+  } else {
+    // Agregar imagen normal
+    this.imagenes.push(imagenData);
+  }
+  
+  // Ordenar imágenes por orden
+  this.imagenes.sort((a, b) => a.orden - b.orden);
+  
+  this.markModified('imagenes');
+  return this.save();
+};
+
+// Actualizar orden de imágenes
+libroSchema.methods.actualizarOrdenImagenes = function(ordenesNuevos) {
+  // ordenesNuevos es un array de objetos {id_imagen, orden_nuevo}
+  ordenesNuevos.forEach(item => {
+    const imagen = this.imagenes.id(item.id_imagen);
+    if (imagen) {
+      imagen.orden = item.orden_nuevo;
+    }
+  });
+  
+  // Ordenar imágenes por orden
+  this.imagenes.sort((a, b) => a.orden - b.orden);
+  
+  this.markModified('imagenes');
+  return this.save();
+};
+
+// Eliminar una imagen
+libroSchema.methods.eliminarImagen = function(imagenId) {
+  const imagenIndex = this.imagenes.findIndex(img => img._id.toString() === imagenId);
+  
+  if (imagenIndex >= 0) {
+    this.imagenes.splice(imagenIndex, 1);
+    this.markModified('imagenes');
+    return this.save();
+  }
+  
+  return Promise.reject(new Error('Imagen no encontrada'));
+};
+
 // MÉTODOS ESTÁTICOS
 // Buscar libros por criterios múltiples
 libroSchema.statics.buscarPorCriterios = function(criterios) {
-  const query = {};
+  const query = { activo: true }; // Por defecto solo mostrar activos
   
   // Mapeo de criterios de búsqueda desde la UI a la estructura de MongoDB
   if (criterios.titulo) query.titulo = { $regex: criterios.titulo, $options: 'i' };
@@ -297,26 +467,45 @@ libroSchema.statics.buscarPorCriterios = function(criterios) {
   // Rango de precios
   if (criterios.precio_min || criterios.precio_max) {
     query.precio = {};
-    if (criterios.precio_min) query.precio.$gte = criterios.precio_min;
-    if (criterios.precio_max) query.precio.$lte = criterios.precio_max;
+    if (criterios.precio_min) query.precio.$gte = parseFloat(criterios.precio_min);
+    if (criterios.precio_max) query.precio.$lte = parseFloat(criterios.precio_max);
   }
   
   // Rango de fechas
   if (criterios.anio_min || criterios.anio_max) {
     query.anio_publicacion = {};
-    if (criterios.anio_min) query.anio_publicacion.$gte = criterios.anio_min;
-    if (criterios.anio_max) query.anio_publicacion.$lte = criterios.anio_max;
+    if (criterios.anio_min) query.anio_publicacion.$gte = parseInt(criterios.anio_min);
+    if (criterios.anio_max) query.anio_publicacion.$lte = parseInt(criterios.anio_max);
   }
   
   if (criterios.solo_disponibles) {
     query.stock = { $gt: 0 };
   }
   
-  if (criterios.incluir_inactivos !== true) {
-    query.activo = true;
+  // Búsqueda de texto
+  if (criterios.q) {
+    query.$text = { $search: criterios.q };
+  }
+  
+  // Permitir incluir inactivos solo a administradores
+  if (criterios.incluir_inactivos === true) {
+    delete query.activo;
   }
   
   return this.find(query);
+};
+
+// Buscar por texto (método optimizado para búsqueda de texto)
+libroSchema.statics.buscarPorTexto = function(texto, limite = 20) {
+  return this.find(
+    { 
+      $text: { $search: texto },
+      activo: true
+    },
+    { score: { $meta: "textScore" } }
+  )
+  .sort({ score: { $meta: "textScore" } })
+  .limit(limite);
 };
 
 libroSchema.statics.marcarComoHistoricoAgotado = function(idLibro) {
@@ -358,6 +547,64 @@ libroSchema.statics.obtenerLibrosConDescuento = function() {
   });
 };
 
-const libroModel = mongoose.model('Libro', libroSchema);
+// Obtener libros destacados (mejores calificaciones)
+libroSchema.statics.obtenerLibrosDestacados = function(limite = 10) {
+  return this.find({ 
+    activo: true,
+    'calificaciones.cantidad': { $gte: 3 }, // Al menos 3 calificaciones
+    stock: { $gt: 0 } // Con stock disponible
+  })
+  .sort({ 'calificaciones.promedio': -1 })
+  .limit(limite);
+};
 
-module.exports = libroModel;
+// Añadir calificación a un libro
+libroSchema.statics.agregarCalificacion = function(idLibro, calificacion) {
+  return this.findById(idLibro).then(libro => {
+    if (!libro) {
+      throw new Error('Libro no encontrado');
+    }
+    
+    // Calcular nuevo promedio
+    const numCalificaciones = libro.calificaciones.cantidad;
+    const promedioActual = libro.calificaciones.promedio;
+    
+    const nuevoPromedio = ((promedioActual * numCalificaciones) + calificacion) / (numCalificaciones + 1);
+    
+    return this.findByIdAndUpdate(
+      idLibro,
+      {
+        $set: {
+          'calificaciones.promedio': nuevoPromedio,
+          ultima_actualizacion: new Date()
+        },
+        $inc: { 'calificaciones.cantidad': 1 }
+      },
+      { new: true }
+    );
+  });
+};
+
+// Verificar si existe un código de ejemplar
+libroSchema.statics.verificarCodigoEjemplar = function(codigo) {
+  return this.findOne({ 'ejemplares.codigo': codigo })
+    .then(libro => !!libro);
+};
+
+// Desactivar todos los descuentos de un libro
+libroSchema.statics.desactivarDescuentos = function(idLibro) {
+  return this.findByIdAndUpdate(
+    idLibro,
+    { 
+      $set: { 
+        'precio_info.descuentos.$[].activo': false,
+        ultima_actualizacion: new Date()
+      }
+    },
+    { new: true }
+  );
+};
+
+const Libro = mongoose.model('Libro', libroSchema);
+
+module.exports = Libro;

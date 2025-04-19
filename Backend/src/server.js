@@ -2,6 +2,8 @@
 const dotenv = require('dotenv');
 const { connectDB } = require('../Database/config/dbConfig');
 const initRootUser = require('../Database/scripts/initRootUser');
+const fs = require('fs');
+const path = require('path');
 
 // Cargar variables de entorno antes de importar otros módulos
 dotenv.config();
@@ -17,15 +19,45 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+// Crear directorios necesarios para uploads
+const createRequiredDirectories = () => {
+  const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+  const librosDir = path.join(uploadDir, 'libros');
+  
+  try {
+    if (!fs.existsSync(uploadDir)) {
+      console.log(`Creando directorio de uploads: ${uploadDir}`);
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    if (!fs.existsSync(librosDir)) {
+      console.log(`Creando directorio para imágenes de libros: ${librosDir}`);
+      fs.mkdirSync(librosDir, { recursive: true });
+    }
+    
+    console.log('✅ Directorios para uploads creados correctamente');
+    return true;
+  } catch (error) {
+    console.error('❌ Error al crear directorios de uploads:', error);
+    return false;
+  }
+};
+
 // Función principal para iniciar el servidor
 async function iniciarServidor() {
   try {
     // Conectar a MongoDB
     await connectDB();
     
+    // Inicializar usuario root
+    await initRootUser();
+    
+    // Crear directorios necesarios
+    createRequiredDirectories();
+    
     // Definir puerto
     const PORT = process.env.PORT || 5000;
-    await initRootUser();
+    
     // Iniciar servidor HTTP
     const server = app.listen(PORT, () => {
       console.log(`
