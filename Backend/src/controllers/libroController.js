@@ -336,7 +336,7 @@ const eliminarLibroPermanente = catchAsync(async (req, res, next) => {
 });
 
 /**
- * @desc    Buscar libros por texto y registrar búsqueda
+ * @desc    Buscar libros por texto y registrar búsqueda usando Atlas Search
  * @route   GET /api/v1/libros/buscar
  * @access  Public
  */
@@ -381,15 +381,16 @@ const buscarLibros = catchAsync(async (req, res, next) => {
       solo_disponibles: solo_disponibles === 'true'
     };
     
-    // Si no hay texto de búsqueda, intentar buscar por otros filtros
-    if (!q && Object.values(filtros).every(v => !v)) {
+    // Si no hay texto de búsqueda ni filtros, solicitar al menos uno
+    const hayFiltros = Object.values(filtros).some(v => v);
+    if (!q && !hayFiltros) {
       return next(new AppError('Se requiere al menos un término de búsqueda o filtro', 400));
     }
 
     console.log('Buscando libros con término:', q);
     console.log('Filtros adicionales:', JSON.stringify(filtros, null, 2));
     
-    // Realizar búsqueda y registrar en historial
+    // Realizar búsqueda con Atlas Search y registrar en historial
     const resultado = await libroService.buscarYRegistrar(
       q,
       filtros,
@@ -406,6 +407,116 @@ const buscarLibros = catchAsync(async (req, res, next) => {
   } catch (error) {
     console.error('Error en controlador buscarLibros:', error);
     return next(new AppError(`Error en búsqueda de libros: ${error.message}`, 500));
+  }
+});
+
+/**
+ * @desc    Autocompletado de términos para búsqueda
+ * @route   GET /api/v1/libros/autocompletar
+ * @access  Public
+ */
+const autocompletarTerminos = catchAsync(async (req, res, next) => {
+  try {
+    let { q, campo = 'titulo', limit = 10 } = req.query;
+    
+    if (!q || q.trim() === '') {
+      return res.status(200).json({
+        status: 'success',
+        resultados: 0,
+        data: []
+      });
+    }
+    
+    // Decodificar parámetro de búsqueda
+    try {
+      q = decodeURIComponent(q);
+    } catch (e) {
+      console.warn('Error decodificando término para autocompletar:', e.message);
+    }
+    
+    // Validar campo para búsqueda
+    const camposPermitidos = ['titulo', 'autor_nombre_completo', 'genero', 'editorial'];
+    if (!camposPermitidos.includes(campo)) {
+      campo = 'titulo'; // Valor por defecto si no es válido
+    }
+    
+    // Obtener sugerencias de autocompletado
+    const sugerencias = await libroService.buscarAutocomplete(
+      q,
+      campo,
+      parseInt(limit) || 10
+    );
+    
+    return res.status(200).json({
+      status: 'success',
+      resultados: sugerencias.length,
+      data: sugerencias
+    });
+  } catch (error) {
+    console.error('Error en controlador autocompletarTerminos:', error);
+    return next(new AppError(`Error en autocompletado: ${error.message}`, 500));
+  }
+});
+
+/**
+ * @desc    Búsqueda difusa (fuzzy) para términos mal escritos o con errores tipográficos
+ * @route   GET /api/v1/libros/busqueda-difusa
+ * @access  Public
+ */
+const busquedaDifusa = catchAsync(async (req, res, next) => {
+  try {
+    let { q, campos, limit = 20 } = req.query;
+    
+    if (!q || q.trim() === '') {
+      return next(new AppError('Se requiere un término de búsqueda', 400));
+    }
+    
+    // Decodificar parámetro de búsqueda
+    try {
+      q = decodeURIComponent(q);
+    } catch (e) {
+      console.warn('Error decodificando término para búsqueda difusa:', e.message);
+    }
+    
+    // Procesar campos si se especifican
+    let camposBusqueda = ['titulo', 'autor_nombre_completo']; // Valores por defecto
+    if (campos) {
+      try {
+        // Permitir que se pasen como array o como string separada por comas
+        if (typeof campos === 'string') {
+          camposBusqueda = campos.split(',').map(c => c.trim());
+        } else if (Array.isArray(campos)) {
+          camposBusqueda = campos;
+        }
+        
+        // Validar que sean campos permitidos
+        const camposPermitidos = ['titulo', 'autor_nombre_completo', 'genero', 'editorial', 'descripcion', 'palabras_clave'];
+        camposBusqueda = camposBusqueda.filter(c => camposPermitidos.includes(c));
+        
+        // Si no queda ningún campo válido, usar los predeterminados
+        if (camposBusqueda.length === 0) {
+          camposBusqueda = ['titulo', 'autor_nombre_completo'];
+        }
+      } catch (e) {
+        console.warn('Error procesando campos para búsqueda difusa:', e.message);
+      }
+    }
+    
+    // Realizar búsqueda difusa
+    const resultados = await libroService.busquedaDifusa(
+      q,
+      camposBusqueda,
+      parseInt(limit) || 20
+    );
+    
+    return res.status(200).json({
+      status: 'success',
+      resultados: resultados.length,
+      data: resultados
+    });
+  } catch (error) {
+    console.error('Error en controlador busquedaDifusa:', error);
+    return next(new AppError(`Error en búsqueda difusa: ${error.message}`, 500));
   }
 });
 
@@ -1094,5 +1205,7 @@ module.exports = {
   eliminarImagenLibro,
   reservarStockLibro,
   liberarStockLibro,
-  confirmarCompraLibro
+  confirmarCompraLibro,
+  autocompletarTerminos, 
+  busquedaDifusa 
 };

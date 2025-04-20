@@ -1,8 +1,10 @@
 #!/bin/bash
+export LANG=es_ES.UTF-8
+export LC_ALL=es_ES.UTF-8
 # Script de pruebas completo para el sistema de gestión de libros
 
 # Ajuste estos parámetros a su entorno
-BASE_URL="http://localhost:9999"
+BASE_URL="http://localhost:5000"
 
 # Colores para mensajes en consola
 GREEN='\033[0;32m'
@@ -17,6 +19,25 @@ declare -a IMAGEN_IDS
 declare -a BUSQUEDA_IDS
 declare -a USER_TOKENS
 declare -a CODIGOS_EJEMPLARES
+
+declare -a LIBRO_TITULOS=(
+  "El nombre del viento"
+  "1984"
+  "Rayuela"
+  "Don Quijote de la Mancha"
+  "El principito"
+  "Crimen y castigo"
+  "Cien años de soledad"
+)
+declare -a PORTADA_FILENAMES=(
+  "portada_el_nombre_del_viento.jpg"
+  "portada_1984.jpg"
+  "portada_rayuela.jpg"
+  "portada_don_quijote_de_la_mancha.jpg"
+  "portada_el_principito.jpg"
+  "portada_crimen_y_castigo.jpg"
+  "portada_cien_anios_de_soledad.jpg"
+)
 
 # Función para obtener tokens de autenticación
 obtener_tokens() {
@@ -46,7 +67,7 @@ obtener_tokens() {
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $ROOT_TOKEN" \
     -d '{
-      "email": "admin_test@example.com",
+      "email": "jerikdavid0789@gmail.com",
       "password": "AdminPass123!",
       "usuario": "admin_test"
     }')
@@ -59,7 +80,7 @@ obtener_tokens() {
     ADMIN_LOGIN_RESPONSE=$(curl -s -X POST "$BASE_URL/api/v1/users/login" \
       -H "Content-Type: application/json" \
       -d '{
-        "email": "admin_test@example.com",
+        "email": "jerikdavid0789@gmail.com",
         "password": "AdminPass123!"
       }')
     
@@ -80,7 +101,7 @@ obtener_tokens() {
   
   # Array de nombres y datos para usuarios
   USUARIOS=(
-    "cliente_test1 cliente_test1@example.com Password123! Cliente1 Test 12345678A"
+    "cliente_test1 jerik.hincapie@utp.edu.co Password123! Cliente1 Test 12345678A"
     "cliente_test2 cliente_test2@example.com Password123! Cliente2 Test 12345678B"
     "cliente_test3 cliente_test3@example.com Password123! Cliente3 Test 12345678C"
   )
@@ -163,7 +184,7 @@ print_response() {
   echo -e "${BLUE}--- FIN DE RESPUESTA ---${NC}\n"
 }
 
-# Función para crear un libro
+# Función para crear un libro y subir su portada
 crear_libro() {
   local titulo=$1
   local autor_nombre=$2
@@ -172,6 +193,21 @@ crear_libro() {
   local genero=$5
   local precio=$6
   local nacionalidad=$7
+  
+  # Encontrar el índice del título en el array
+  local index=-1
+  for i in "${!LIBRO_TITULOS[@]}"; do
+    if [[ "${LIBRO_TITULOS[$i]}" == "$titulo" ]]; then
+      index=$i
+      break
+    fi
+  done
+  
+  # Si no se encuentra el título, usar un nombre de archivo predeterminado
+  local ruta_imagen="imagen.jpg"
+  if [ $index -ne -1 ]; then
+    ruta_imagen="${PORTADA_FILENAMES[$index]}"
+  fi
   
   echo -e "${YELLOW}Creando un nuevo libro '$titulo'...${NC}"
   CREAR_RESPUESTA=$(curl -s -X POST "$BASE_URL/api/v1/libros" \
@@ -199,6 +235,25 @@ crear_libro() {
   if [ ! -z "$LIBRO_ID" ] && [ "$LIBRO_ID" != "null" ]; then
     LIBRO_IDS+=("$LIBRO_ID")
     echo -e "${GREEN}ID del libro '$titulo' creado: $LIBRO_ID${NC}"
+    
+    # Subir imagen de portada para este libro
+    echo -e "${YELLOW}Subiendo portada para el libro '$titulo'...${NC}"
+    IMAGEN_RESPUESTA=$(curl -s -X POST "$BASE_URL/api/v1/libros/$LIBRO_ID/imagenes" \
+      -H "Authorization: Bearer $ADMIN_TOKEN" \
+      -F "imagen=@$ruta_imagen" \
+      -F "tipo=portada" \
+      -F "orden=0" \
+      -F "alt_text=Portada del libro $titulo")
+    
+    print_response "$IMAGEN_RESPUESTA" "SUBIR IMAGEN DE PORTADA PARA '$titulo'"
+    
+    # Extraer ID de la imagen
+    IMAGEN_ID=$(echo "$IMAGEN_RESPUESTA" | grep -o '"_id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ ! -z "$IMAGEN_ID" ] && [ "$IMAGEN_ID" != "null" ]; then
+      IMAGEN_IDS+=("$IMAGEN_ID")
+      echo -e "${GREEN}ID de la imagen de portada: $IMAGEN_ID${NC}"
+    fi
+    
     return 0
   else
     echo -e "${RED}Error al crear el libro '$titulo'${NC}"
@@ -206,25 +261,33 @@ crear_libro() {
   fi
 }
 
-# Función para verificar que existe una imagen de prueba
-verificar_imagen_prueba() {
-  if [ ! -f "imagen.jpg" ]; then
-    echo -e "${YELLOW}Imagen de prueba no encontrada. Creando una imagen genérica...${NC}"
-    # Usar caracteres ASCII para crear un archivo simple
-    echo -e "P6\n10 10\n255\n" > imagen.ppm
-    for i in {1..300}; do  # 10x10x3 bytes (RGB para cada píxel)
-      printf "%c%c%c" $(($RANDOM % 256)) $(($RANDOM % 256)) $(($RANDOM % 256)) >> imagen.ppm
-    done
-    # Intentando convertir a jpg con ImageMagick si está disponible
-    if command -v convert &> /dev/null; then
-      convert imagen.ppm imagen.jpg
-      rm imagen.ppm
-      echo -e "${GREEN}Imagen de prueba creada: imagen.jpg${NC}"
-    else
-      mv imagen.ppm imagen.jpg
-      echo -e "${YELLOW}ImageMagick no disponible. Usando archivo de prueba imagen.jpg (podría no ser válido)${NC}"
+# Función para verificar/crear imágenes de prueba para cada libro
+verificar_imagenes_prueba() {
+  echo -e "${YELLOW}Verificando/creando imágenes de portada para libros...${NC}"
+  
+  for i in "${!LIBRO_TITULOS[@]}"; do
+    local titulo="${LIBRO_TITULOS[$i]}"
+    local ruta_imagen="${PORTADA_FILENAMES[$i]}"
+    
+    if [ ! -f "$ruta_imagen" ]; then
+      echo -e "${YELLOW}Creando imagen de portada para '$titulo'...${NC}"
+      # Usar caracteres ASCII para crear un archivo simple
+      echo -e "P6\n10 10\n255\n" > "temp.ppm"
+      for j in {1..300}; do  # 10x10x3 bytes (RGB para cada píxel)
+        printf "%c%c%c" $(($RANDOM % 256)) $(($RANDOM % 256)) $(($RANDOM % 256)) >> "temp.ppm"
+      done
+      
+      # Intentando convertir a jpg con ImageMagick si está disponible
+      if command -v convert &> /dev/null; then
+        convert "temp.ppm" "$ruta_imagen"
+        rm "temp.ppm"
+        echo -e "${GREEN}Imagen de portada creada: $ruta_imagen${NC}"
+      else
+        mv "temp.ppm" "$ruta_imagen"
+        echo -e "${YELLOW}ImageMagick no disponible. Usando archivo de prueba $ruta_imagen (podría no ser válido)${NC}"
+      fi
     fi
-  fi
+  done
 }
 
 # Función para realizar una búsqueda de libros
@@ -288,11 +351,18 @@ subir_imagen() {
   local tipo=$2
   local orden=$3
   local alt_text=$4
+  local custom_filename=$5  # Nombre de archivo personalizado (opcional)
+  
+  # Si no se especifica un nombre de archivo personalizado, usar imagen.jpg
+  local filename="imagen.jpg"
+  if [ ! -z "$custom_filename" ]; then
+    filename="$custom_filename"
+  fi
   
   echo -e "\n${YELLOW}Subiendo imagen tipo '$tipo' al libro ID $libro_id...${NC}"
   IMAGEN_RESPUESTA=$(curl -s -X POST "$BASE_URL/api/v1/libros/$libro_id/imagenes" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
-    -F "imagen=@imagen.jpg" \
+    -F "imagen=@$filename" \
     -F "tipo=$tipo" \
     -F "orden=$orden" \
     -F "alt_text=$alt_text")
@@ -379,7 +449,7 @@ ejecutar_pruebas_completas() {
   obtener_tokens
   
   # Verificar que existe una imagen de prueba
-  verificar_imagen_prueba
+  verificar_imagenes_prueba
   
   # 1. CREACIÓN DE LIBROS CON DIFERENTES DATOS
   echo -e "\n${YELLOW}==================================================${NC}"
@@ -426,10 +496,7 @@ ejecutar_pruebas_completas() {
   buscar_libros "Ciencia%20Ficcion" "${USER_TOKENS[1]}" "2"
   
   # Usuario 3 - Busca por literatura latinoamericana
-  buscar_libros "García%20Márquez" "${USER_TOKENS[2]}" "3"
-  buscar_libros "Cortázar" "${USER_TOKENS[2]}" "3"
-  buscar_libros "Realismo%20Mágico" "${USER_TOKENS[2]}" "3"
-  buscar_libros "Literatura%20Latinoamericana" "${USER_TOKENS[2]}" "3"
+  buscar_libros "Literatura%20Sudamericana" "${USER_TOKENS[2]}" "3"
   
   # 4. REGISTRO DE INTERACCIONES CON LIBROS
   echo -e "\n${YELLOW}==================================================${NC}"
@@ -518,11 +585,6 @@ ejecutar_pruebas_completas() {
       "ubicacion": "Tienda Principal, Estante A1"
     }')
   print_response "$ACTUALIZAR_EJEMPLAR_RESPUESTA" "ACTUALIZAR EJEMPLAR"
-  
-  # 6.4 Subir imágenes
-  subir_imagen "$PRIMER_LIBRO" "portada" "0" "Portada principal de El nombre del viento"
-  subir_imagen "$PRIMER_LIBRO" "contraportada" "1" "Contraportada de El nombre del viento"
-  subir_imagen "$PRIMER_LIBRO" "detalle" "2" "Detalle de la portada de El nombre del viento"
   
   # 6.5 Actualizar orden de imágenes (si hay suficientes imágenes)
   if [ ${#IMAGEN_IDS[@]} -ge 2 ]; then

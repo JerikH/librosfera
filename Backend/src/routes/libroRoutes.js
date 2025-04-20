@@ -25,7 +25,9 @@ const {
   eliminarImagenLibro,
   reservarStockLibro,
   liberarStockLibro,
-  confirmarCompraLibro
+  confirmarCompraLibro,
+  autocompletarTerminos, 
+  busquedaDifusa 
 } = require('../controllers/libroController');
 
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -87,21 +89,253 @@ router.get('/', getLibros);
  * @swagger
  * /api/v1/libros/buscar:
  *   get:
- *     summary: Buscar libros por texto y registrar búsqueda
+ *     summary: Buscar libros por texto y aplicar filtros con Atlas Search
+ *     description: Realiza una búsqueda avanzada de libros utilizando Atlas Search, que resuelve problemas de tildes y coincidencias parciales. Los resultados se ordenan por relevancia.
  *     tags: [Libros]
  *     parameters:
  *       - in: query
  *         name: q
  *         schema:
  *           type: string
- *         description: Texto a buscar (título, autor, descripción)
+ *         description: Término de búsqueda (insensible a tildes, permite coincidencias parciales)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Cantidad máxima de resultados a devolver
+ *       - in: query
+ *         name: genero
+ *         schema:
+ *           type: string
+ *         description: Filtrar por género
+ *       - in: query
+ *         name: editorial
+ *         schema:
+ *           type: string
+ *         description: Filtrar por editorial
+ *       - in: query
+ *         name: idioma
+ *         schema:
+ *           type: string
+ *         description: Filtrar por idioma
+ *       - in: query
+ *         name: estado
+ *         schema:
+ *           type: string
+ *           enum: [nuevo, usado]
+ *         description: Filtrar por estado del libro
+ *       - in: query
+ *         name: precio_min
+ *         schema:
+ *           type: number
+ *         description: Precio mínimo
+ *       - in: query
+ *         name: precio_max
+ *         schema:
+ *           type: number
+ *         description: Precio máximo
+ *       - in: query
+ *         name: solo_disponibles
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Solo mostrar libros con stock disponible
  *     responses:
  *       200:
- *         description: Resultados de búsqueda
+ *         description: Resultados de búsqueda ordenados por relevancia
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 resultados:
+ *                   type: integer
+ *                   description: Cantidad de resultados encontrados
+ *                   example: 5
+ *                 id_busqueda:
+ *                   type: string
+ *                   description: Identificador único de la búsqueda
+ *                   example: 64a2e5c9f15d71f5019d498
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                         example: 60a12e5c9f15d71f5019d495
+ *                       titulo:
+ *                         type: string
+ *                         example: Cien años de soledad
+ *                       autor_nombre_completo:
+ *                         type: string
+ *                         example: Gabriel García Márquez
+ *                       editorial:
+ *                         type: string
+ *                         example: Sudamericana
+ *                       genero:
+ *                         type: string
+ *                         example: Novela
+ *                       precio:
+ *                         type: number
+ *                         example: 45000
+ *                       stock:
+ *                         type: integer
+ *                         example: 15
+ *                       activo:
+ *                         type: boolean
+ *                         example: true
  *       400:
- *         description: Se requiere un término de búsqueda
+ *         description: Se requiere al menos un término de búsqueda o filtro
+ *       500:
+ *         description: Error del servidor
  */
 router.get('/buscar', buscarLibros);
+
+/**
+ * @swagger
+ * /api/v1/libros/autocompletar:
+ *   get:
+ *     summary: Obtener sugerencias de autocompletado mientras el usuario escribe
+ *     description: Proporciona resultados de autocompletado en tiempo real basados en un prefijo parcial. Ideal para implementar campos de búsqueda predictivos.
+ *     tags: [Libros]
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Prefijo o texto parcial para autocompletar
+ *       - in: query
+ *         name: campo
+ *         schema:
+ *           type: string
+ *           enum: [titulo, autor_nombre_completo, genero, editorial]
+ *           default: titulo
+ *         description: Campo en el que buscar el autocompletado
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Cantidad máxima de sugerencias a devolver
+ *     responses:
+ *       200:
+ *         description: Sugerencias de autocompletado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 resultados:
+ *                   type: integer
+ *                   description: Cantidad de sugerencias encontradas
+ *                   example: 3
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                         example: 60a12e5c9f15d71f5019d495
+ *                       titulo:
+ *                         type: string
+ *                         example: Cien años de soledad
+ *                       score:
+ *                         type: number
+ *                         description: Puntuación de relevancia
+ *                         example: 9.87
+ *       400:
+ *         description: Parámetros de búsqueda inválidos
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/autocompletar', autocompletarTerminos);
+
+/**
+ * @swagger
+ * /api/v1/libros/busqueda-difusa:
+ *   get:
+ *     summary: Realizar búsqueda difusa tolerante a errores tipográficos
+ *     description: Ejecuta una búsqueda "fuzzy" que encuentra resultados relevantes incluso cuando hay errores tipográficos, variaciones ortográficas o términos escritos incorrectamente.
+ *     tags: [Libros]
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Término de búsqueda (puede contener errores o variaciones)
+ *       - in: query
+ *         name: campos
+ *         schema:
+ *           type: string
+ *           default: titulo,autor_nombre_completo
+ *         description: Campos donde buscar (separados por comas)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Cantidad máxima de resultados a devolver
+ *     responses:
+ *       200:
+ *         description: Resultados de búsqueda difusa ordenados por relevancia
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 resultados:
+ *                   type: integer
+ *                   description: Cantidad de resultados encontrados
+ *                   example: 2
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                         example: 60a12e5c9f15d71f5019d495
+ *                       titulo:
+ *                         type: string
+ *                         example: Cien años de soledad
+ *                       autor_nombre_completo:
+ *                         type: string
+ *                         example: Gabriel García Márquez
+ *                       editorial:
+ *                         type: string
+ *                         example: Sudamericana
+ *                       genero:
+ *                         type: string
+ *                         example: Novela
+ *                       precio:
+ *                         type: number
+ *                         example: 45000
+ *                       stock:
+ *                         type: integer
+ *                         example: 15
+ *                       activo:
+ *                         type: boolean
+ *                         example: true
+ *       400:
+ *         description: Se requiere un término de búsqueda
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/busqueda-difusa', busquedaDifusa);
 
 /**
  * @swagger
