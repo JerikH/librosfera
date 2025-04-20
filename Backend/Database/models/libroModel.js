@@ -299,7 +299,12 @@ libroSchema.pre('save', function(next) {
 
 // Middleware pre-update para asegurarse de incrementar la versión
 libroSchema.pre('findOneAndUpdate', function(next) {
-  this.update({}, { $inc: { version: 1 } });
+  const update = this.getUpdate() || {};
+  if (!update.$inc) {
+    update.$inc = {};
+  }
+  update.$inc.version = 1;
+  this.setUpdate(update);
   next();
 });
 
