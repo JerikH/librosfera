@@ -223,7 +223,7 @@ const libroSchema = new Schema({
     codigo: {
       type: String,
       required: true,
-      unique: true
+      index: { unique: true, sparse: true }
     },
     estado_fisico: {
       type: String,
