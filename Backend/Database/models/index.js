@@ -5,6 +5,15 @@
  */
 
 const userModels = require('./userModel');
+const Libro = require('./libroModel');
+const Inventario = require('./inventarioModel');
+const TiendaFisica = require('./tiendaFisicaModel');
+const Transaccion = require('./transaccionModel');
+const Busqueda = require('./busquedaModel');
+const Carrito = require('./carritoModel');
+const CarritoItem = require('./carritoItemsModel');
+const Devolucion = require('./devolucionModel');
+const Recomendacion = require('./recomendacionModel');
 
 module.exports = {
   // Exportar modelos de usuario
@@ -13,7 +22,14 @@ module.exports = {
   Administrador: userModels.Administrador,
   Cliente: userModels.Cliente,
   
-  // Aquí se pueden exportar otros modelos cuando se creen
-  // Producto: require('./productModel'),
-  // Pedido: require('./orderModel'),
+  // Exportar nuevos modelos
+  Libro,
+  Inventario,
+  TiendaFisica,
+  Transaccion,
+  Busqueda,
+  Carrito,
+  CarritoItem,
+  Devolucion,
+  Recomendacion
 };

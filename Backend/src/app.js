@@ -4,9 +4,11 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 
 // Importar configuraciones
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+const debugMiddleware = require('./middleware/debugMiddleware'); // Añadido
 
 // Importar rutas
 // const productRoutes = require('./routes/productRoutes');
@@ -14,6 +16,7 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 const userRoutes = require('./routes/userRoutes');
 const passwordResetRoutes = require('./routes/passwordResetRoutes');
 const authRoutes = require('./routes/authRoutes');
+const libroRoutes = require('./routes/libroRoutes'); // Nueva importación
 // const orderRoutes = require('./routes/orderRoutes');
 // const cartRoutes = require('./routes/cartRoutes');
 // const reservationRoutes = require('./routes/reservationRoutes');
@@ -31,6 +34,12 @@ app.use(express.json()); // Parsear JSON
 app.use(express.urlencoded({ extended: false }));
 app.use(morgan('dev')); // Logging
 
+// Añadir middleware de depuración en ambiente de desarrollo
+if (process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') {
+  app.use(debugMiddleware);
+  console.log('Middleware de depuración activado');
+}
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
@@ -40,12 +49,34 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Directorio estático para archivos subidos
+const uploadsPath = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+console.log('Directorio de uploads configurado en:', uploadsPath);
+app.use('/uploads', express.static(uploadsPath));
+
+// Crear directorios necesarios si no existen
+const fs = require('fs');
+const librosPath = path.join(uploadsPath, 'libros');
+try {
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+    console.log('Directorio de uploads creado:', uploadsPath);
+  }
+  if (!fs.existsSync(librosPath)) {
+    fs.mkdirSync(librosPath, { recursive: true });
+    console.log('Directorio de imágenes de libros creado:', librosPath);
+  }
+} catch (error) {
+  console.error('Error creando directorios:', error);
+}
+
 // Rutas de la API
 // app.use('/api/v1/products', productRoutes);
 // app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/users', passwordResetRoutes);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/libros', libroRoutes); // Nueva ruta para libros
 // app.use('/api/v1/orders', orderRoutes);
 // app.use('/api/v1/cart', cartRoutes);
 // app.use('/api/v1/reservations', reservationRoutes);

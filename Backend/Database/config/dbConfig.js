@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 const connectOptions = {
   serverApi: { 
     version: '1', 
-    strict: true, 
+    strict: false, 
     deprecationErrors: true 
   },
   autoIndex: process.env.NODE_ENV !== 'production', // Desactivar autoIndex en producción
