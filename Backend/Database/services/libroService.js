@@ -223,7 +223,7 @@ const libroService = {
               // Aumentó el stock
               await inventario.registrarEntrada(
                 diferencia, 
-                'ajuste_inventario', 
+                'ajuste_auditoria',
                 null, 
                 'Actualización manual del stock'
               );
@@ -231,7 +231,7 @@ const libroService = {
               // Disminuyó el stock
               await inventario.registrarSalida(
                 Math.abs(diferencia), 
-                'ajuste_inventario', 
+                'ajuste_auditoria',
                 null, 
                 null, 
                 'Actualización manual del stock'
@@ -471,22 +471,33 @@ const libroService = {
       
       // Búsqueda por texto utilizando expresiones regulares
       if (termino && termino.trim() !== '') {
-        // Escapar caracteres especiales para la expresión regular
-        const terminoSeguro = termino.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        // Dividir el término en palabras individuales (de longitud > 2)
+        const palabras = termino.trim().toLowerCase().split(/\s+/).filter(p => p.length > 2);
         
-        // Crear expresión regular case-insensitive
-        const regex = new RegExp(terminoSeguro, 'i');
-        
-        // Buscar en múltiples campos
-        query.$or = [
-          { titulo: regex },
-          { autor_nombre_completo: regex },
-          { descripcion: regex },
-          { editorial: regex },
-          { 'palabras_clave': regex }
-        ];
-        
-        console.log('Query de búsqueda:', JSON.stringify(query));
+        // Si hay palabras para buscar
+        if (palabras.length > 0) {
+          // Crear condiciones para cada palabra
+          const condiciones = [];
+          
+          palabras.forEach(palabra => {
+            // Escapar caracteres especiales para la expresión regular
+            const palabraSegura = palabra.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            
+            // Crear condiciones para cada campo
+            condiciones.push(
+              { titulo: { $regex: palabraSegura, $options: 'i' } },
+              { autor_nombre_completo: { $regex: palabraSegura, $options: 'i' } },
+              { descripcion: { $regex: palabraSegura, $options: 'i' } },
+              { editorial: { $regex: palabraSegura, $options: 'i' } },
+              { palabras_clave: { $regex: palabraSegura, $options: 'i' } }
+            );
+          });
+          
+          // Combinar todas las condiciones en un $or
+          query.$or = condiciones;
+          
+          console.log('Query de búsqueda:', JSON.stringify(query));
+        }
       }
       
       // Aplicar filtros adicionales
@@ -506,12 +517,12 @@ const libroService = {
         if (filtros.precio_min) query.precio.$gte = parseFloat(filtros.precio_min);
         if (filtros.precio_max) query.precio.$lte = parseFloat(filtros.precio_max);
       }
-
+  
       // Solo disponibles
       if (filtros.solo_disponibles) {
         query.stock = { $gt: 0 };
       }
-
+  
       // Obtener todos los libros que coinciden con la consulta
       let libros = await Libro.find(query).limit(limite * 2); // Obtenemos más para luego ordenar
       
@@ -569,6 +580,10 @@ const libroService = {
               if (libroObj.descripcion && libroObj.descripcion.toLowerCase().includes(palabra)) {
                 puntuacion += 0.5;
               }
+              if (libroObj.palabras_clave && libroObj.palabras_clave.some(pc => 
+                pc.toLowerCase().includes(palabra))) {
+                puntuacion += 1.5;
+              }
             });
           }
           
@@ -600,9 +615,9 @@ const libroService = {
         // Si no hay término de búsqueda, limitar resultados
         libros = libros.slice(0, limite);
       }
-
+  
       console.log(`Libros finales para devolver: ${libros.length}`);
-
+  
       // Registrar la búsqueda en el historial
       const busquedaData = {
         termino: termino || '',
@@ -619,7 +634,7 @@ const libroService = {
       const nuevaBusqueda = new Busqueda(busquedaData);
       await nuevaBusqueda.save();
       console.log('Búsqueda registrada con ID:', nuevaBusqueda._id);
-
+  
       return {
         resultados: libros,
         id_busqueda: nuevaBusqueda._id
@@ -1452,11 +1467,14 @@ const libroService = {
           throw new Error(`Stock insuficiente. Disponible: ${inventario.stock_disponible}, Solicitado: ${cantidad}`);
         }
 
+        // Determinar si idReserva es un ObjectId válido
+        let reservaId = null; // Por defecto usamos null si no es un ObjectId válido
+        
         // Reservar stock en el inventario
         await inventario.reservarEjemplares(
           cantidad,
           idUsuario,
-          idReserva,
+          reservaId,
           `Reserva para compra ID: ${idReserva}`
         );
 
@@ -1527,10 +1545,13 @@ const libroService = {
           throw new Error(`No hay suficiente stock reservado. Reservado: ${inventario.stock_reservado}, Solicitado: ${cantidad}`);
         }
 
+        // Determinar si idReserva es un ObjectId válido
+        let reservaId = null; // Por defecto usamos null si no es un ObjectId válido
+  
         await inventario.liberarReserva(
           cantidad,
           idUsuario,
-          idReserva,
+          reservaId,
           `Liberación de reserva ID: ${idReserva}`
         );
 
@@ -1588,6 +1609,9 @@ const libroService = {
           throw new Error(`Libro no encontrado con ID: ${idLibro}`);
         }
 
+        // Determinar si los IDs son ObjectId válidos
+        let transaccionId = null; // Usar null en lugar de string no válido
+        
         // Confirmar venta en el inventario
         const inventario = await Inventario.findOne({ id_libro: libro._id })
           .session(session);
@@ -1601,7 +1625,7 @@ const libroService = {
           cantidad,
           'venta',
           idUsuario,
-          idTransaccion,
+          transaccionId,
           `Venta confirmada. Transacción: ${idTransaccion}, Reserva: ${idReserva}`
         );
 
