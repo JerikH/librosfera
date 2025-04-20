@@ -466,223 +466,90 @@ const libroService = {
     try {
       // Decodificar términos de búsqueda que puedan venir URL-encoded
       if (termino) {
-        termino = decodeURIComponent(termino);
+        try {
+          termino = decodeURIComponent(termino);
+        } catch (e) {
+          console.warn('Error decodificando término de búsqueda, usando valor original:', e.message);
+        }
       }
       
       console.log(`Búsqueda: "${termino || ''}", filtros:`, JSON.stringify(filtros, null, 2));
       
-      // Crear query base
-      const query = {};
-      
-      // Función para normalizar texto (quitar acentos y convertir a minúsculas)
+      // Función mejorada para normalizar texto
       const normalizarTexto = (texto) => {
         if (!texto) return '';
         return texto
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '')
-          .toLowerCase();
+          .toLowerCase()
+          .trim();
       };
       
-      // Búsqueda por texto utilizando expresiones regulares
+      // Crear query base
+      const query = { activo: true };
+      
+      // Búsqueda por texto utilizando expresiones regulares mejoradas
       if (termino && termino.trim() !== '') {
         const terminoNormalizado = termino.trim();
         const terminoSinAcentos = normalizarTexto(terminoNormalizado);
         
-        // Crear condiciones para búsqueda por texto completo
-        const textConditions = [
-          // Búsqueda exacta con acentos
-          { titulo: { $regex: terminoNormalizado, $options: 'i' } },
-          { autor_nombre_completo: { $regex: terminoNormalizado, $options: 'i' } },
-          { descripcion: { $regex: terminoNormalizado, $options: 'i' } },
-          { editorial: { $regex: terminoNormalizado, $options: 'i' } },
-          { genero: { $regex: terminoNormalizado, $options: 'i' } },
-          
-          // Búsqueda sin acentos para mayor flexibilidad
-          { titulo: { $regex: terminoSinAcentos, $options: 'i' } },
-          { autor_nombre_completo: { $regex: terminoSinAcentos, $options: 'i' } }
-        ];
-        
-        // Si hay palabras clave, buscar también en ellas
-        textConditions.push({
-          palabras_clave: { $regex: terminoNormalizado, $options: 'i' }
-        });
-        
         // Dividir en palabras para búsqueda más precisa
-        const palabras = terminoNormalizado.split(/\s+/).filter(p => p.trim());
+        const palabras = terminoNormalizado.split(/\s+/).filter(p => p.length > 1);
         const palabrasSinAcentos = palabras.map(normalizarTexto);
         
-        // Si hay múltiples palabras, crear condiciones adicionales
-        if (palabras.length > 1) {
+        // Crear condiciones para todos los campos relevantes
+        const textConditions = [];
+        
+        // Función para agregar condiciones de búsqueda para un campo
+        const agregarCondicionesCampo = (campo) => {
+          // Condiciones para el término completo
+          textConditions.push(
+            { [campo]: { $regex: terminoNormalizado, $options: 'i' } },
+            { [campo]: { $regex: terminoSinAcentos, $options: 'i' } }
+          );
+          
+          // Condiciones para palabras individuales
           palabras.forEach((palabra, index) => {
-            if (palabra.length >= 2) { // Considerar palabras de al menos 2 caracteres
-              const palabraSinAcentos = palabrasSinAcentos[index];
-              
+            if (palabra.length >= 2) {
               textConditions.push(
-                { titulo: { $regex: palabra, $options: 'i' } },
-                { autor_nombre_completo: { $regex: palabra, $options: 'i' } },
-                { genero: { $regex: palabra, $options: 'i' } },
-                
-                // Versiones sin acentos
-                { titulo: { $regex: palabraSinAcentos, $options: 'i' } },
-                { autor_nombre_completo: { $regex: palabraSinAcentos, $options: 'i' } }
+                { [campo]: { $regex: palabra, $options: 'i' } },
+                { [campo]: { $regex: palabrasSinAcentos[index], $options: 'i' } }
               );
             }
           });
-        }
+        };
         
-        // Combinar todas las condiciones en un $or
+        // Aplicar para todos los campos relevantes
+        ['titulo', 'autor_nombre_completo', 'genero', 'editorial', 'descripcion'].forEach(agregarCondicionesCampo);
+        
+        // Búsqueda especial en palabras clave (array)
+        textConditions.push(
+          { palabras_clave: { $regex: terminoNormalizado, $options: 'i' } },
+          { palabras_clave: { $regex: terminoSinAcentos, $options: 'i' } }
+        );
+        
+        // Agregar condiciones al query
         query.$or = textConditions;
-        
-        console.log('Query de búsqueda generada');
       }
       
       // Aplicar filtros adicionales
-      if (filtros.genero) {
-        // Normalizar y hacer flexible la búsqueda por género
-        const generoNormalizado = normalizarTexto(filtros.genero);
-        query.genero = { $regex: generoNormalizado, $options: 'i' };
-      }
+      this.aplicarFiltrosAvanzados(query, filtros, normalizarTexto);
       
-      if (filtros.editorial) query.editorial = { $regex: filtros.editorial, $options: 'i' };
-      if (filtros.idioma) query.idioma = filtros.idioma;
-      if (filtros.estado) query.estado = filtros.estado;
-      
-      // Solo mostrar activos por defecto
-      if (filtros.incluir_inactivos !== true) {
-        query.activo = true;
-      }
-      
-      // Filtros de precio
-      if (filtros.precio_min || filtros.precio_max) {
-        query.precio = {};
-        if (filtros.precio_min) query.precio.$gte = parseFloat(filtros.precio_min);
-        if (filtros.precio_max) query.precio.$lte = parseFloat(filtros.precio_max);
-      }
-  
-      // Solo disponibles
-      if (filtros.solo_disponibles) {
-        query.stock = { $gt: 0 };
-      }
-  
       // Obtener todos los libros que coinciden con la consulta
       let libros = await Libro.find(query).limit(limite * 2); // Obtenemos más para luego ordenar
       
       console.log(`Libros encontrados (sin ordenar): ${libros.length}`);
       
-      // Si tenemos un término de búsqueda, calculamos una puntuación de relevancia manual
+      // Si tenemos un término de búsqueda, calculamos una puntuación de relevancia
       if (termino && termino.trim() !== '') {
-        const terminoLower = termino.toLowerCase();
-        const terminoSinAcentos = normalizarTexto(termino);
-        const palabrasBusqueda = terminoLower.split(/\s+/).filter(p => p.length > 2);
-        
-        // Asignar puntuación a cada libro según relevancia
-        libros = libros.map(libro => {
-          let puntuacion = 0;
-          const libroObj = libro.toObject();
-          
-          // Coincidencia exacta en título (mayor prioridad)
-          if (libroObj.titulo && libroObj.titulo.toLowerCase().includes(terminoLower)) {
-            puntuacion += 10;
-            
-            // Bonus por coincidencia en título al inicio
-            if (libroObj.titulo.toLowerCase().startsWith(terminoLower)) {
-              puntuacion += 5;
-            }
-          }
-          
-          // Coincidencia sin acentos en título
-          const tituloSinAcentos = normalizarTexto(libroObj.titulo || '');
-          if (tituloSinAcentos.includes(terminoSinAcentos)) {
-            puntuacion += 8;
-          }
-          
-          // Coincidencia en autor
-          if (libroObj.autor_nombre_completo) {
-            const autorLower = libroObj.autor_nombre_completo.toLowerCase();
-            const autorSinAcentos = normalizarTexto(libroObj.autor_nombre_completo);
-            
-            if (autorLower.includes(terminoLower)) {
-              puntuacion += 8;
-            }
-            
-            if (autorSinAcentos.includes(terminoSinAcentos)) {
-              puntuacion += 6;
-            }
-          }
-          
-          // Coincidencia en palabras clave
-          if (libroObj.palabras_clave && libroObj.palabras_clave.length > 0) {
-            const coincidencias = libroObj.palabras_clave.filter(
-              palabra => normalizarTexto(palabra).includes(terminoSinAcentos)
-            ).length;
-            puntuacion += coincidencias * 3;
-          }
-          
-          // Coincidencia en descripción
-          if (libroObj.descripcion) {
-            const descripcionSinAcentos = normalizarTexto(libroObj.descripcion);
-            if (descripcionSinAcentos.includes(terminoSinAcentos)) {
-              puntuacion += 2;
-            }
-          }
-          
-          // Coincidencia por palabras individuales
-          if (palabrasBusqueda.length > 1) {
-            palabrasBusqueda.forEach(palabra => {
-              const palabraSinAcentos = normalizarTexto(palabra);
-              
-              if (tituloSinAcentos.includes(palabraSinAcentos)) {
-                puntuacion += 1;
-              }
-              
-              if (libroObj.autor_nombre_completo && 
-                  normalizarTexto(libroObj.autor_nombre_completo).includes(palabraSinAcentos)) {
-                puntuacion += 0.8;
-              }
-              
-              if (libroObj.descripcion && 
-                  normalizarTexto(libroObj.descripcion).includes(palabraSinAcentos)) {
-                puntuacion += 0.5;
-              }
-              
-              if (libroObj.palabras_clave && libroObj.palabras_clave.some(pc => 
-                normalizarTexto(pc).includes(palabraSinAcentos))) {
-                puntuacion += 1.5;
-              }
-            });
-          }
-          
-          // Agregar puntuación al libro
-          return {
-            ...libroObj,
-            _puntuacion: puntuacion
-          };
-        });
-        
-        // Ordenar por puntuación (mayor a menor)
-        libros.sort((a, b) => b._puntuacion - a._puntuacion);
-        
-        // Debugging
-        console.log('Libros puntuados:');
-        libros.slice(0, 5).forEach(l => {
-          console.log(`- ${l.titulo}: ${l._puntuacion} puntos`);
-        });
-        
+        libros = this.puntuarResultados(libros, termino, normalizarTexto);
         // Limitar resultados
         libros = libros.slice(0, limite);
-        
-        // Eliminar campo de puntuación antes de devolver
-        libros = libros.map(libro => {
-          const { _puntuacion, ...libroSinPuntuacion } = libro;
-          return libroSinPuntuacion;
-        });
       } else {
         // Si no hay término de búsqueda, limitar resultados
         libros = libros.slice(0, limite);
       }
-  
-      console.log(`Libros finales para devolver: ${libros.length}`);
-  
+      
       // Registrar la búsqueda en el historial
       const busquedaData = {
         termino: termino || '',
@@ -699,7 +566,7 @@ const libroService = {
       const nuevaBusqueda = new Busqueda(busquedaData);
       await nuevaBusqueda.save();
       console.log('Búsqueda registrada con ID:', nuevaBusqueda._id);
-  
+      
       return {
         resultados: libros,
         id_busqueda: nuevaBusqueda._id
@@ -708,6 +575,196 @@ const libroService = {
       console.error('Error en búsqueda de libros:', error);
       throw error;
     }
+  },
+  
+  // Método auxiliar para aplicar filtros avanzados
+  aplicarFiltrosAvanzados(query, filtros, normalizarTexto) {
+    if (filtros.genero) {
+      // Normalizar y hacer flexible la búsqueda por género
+      const generoNormalizado = normalizarTexto(filtros.genero);
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { genero: { $regex: filtros.genero, $options: 'i' } },
+          { genero: { $regex: generoNormalizado, $options: 'i' } }
+        ]
+      });
+    }
+    
+    if (filtros.editorial) {
+      const editorialNormalizada = normalizarTexto(filtros.editorial);
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { editorial: { $regex: filtros.editorial, $options: 'i' } },
+          { editorial: { $regex: editorialNormalizada, $options: 'i' } }
+        ]
+      });
+    }
+    
+    if (filtros.idioma) query.idioma = filtros.idioma;
+    if (filtros.estado) query.estado = filtros.estado;
+    
+    // Filtros de precio
+    if (filtros.precio_min || filtros.precio_max) {
+      query.precio = {};
+      if (filtros.precio_min) query.precio.$gte = parseFloat(filtros.precio_min);
+      if (filtros.precio_max) query.precio.$lte = parseFloat(filtros.precio_max);
+    }
+    
+    // Solo disponibles
+    if (filtros.solo_disponibles) {
+      query.stock = { $gt: 0 };
+    }
+    
+    // Incluir inactivos
+    if (filtros.incluir_inactivos !== true) {
+      query.activo = true;
+    }
+  },
+  
+  // Método auxiliar para puntuar resultados de búsqueda
+  puntuarResultados(libros, termino, normalizarTexto) {
+    const terminoLower = termino.toLowerCase();
+    const terminoSinAcentos = normalizarTexto(termino);
+    const palabrasBusqueda = terminoLower.split(/\s+/).filter(p => p.length > 2);
+    
+    // Asignar puntuación a cada libro según relevancia
+    const librosConPuntuacion = libros.map(libro => {
+      let puntuacion = 0;
+      const libroObj = libro.toObject();
+      
+      // Puntuar coincidencias en título (mayor prioridad)
+      if (libroObj.titulo) {
+        const tituloLower = libroObj.titulo.toLowerCase();
+        const tituloSinAcentos = normalizarTexto(libroObj.titulo);
+        
+        // Coincidencia exacta en título
+        if (tituloLower.includes(terminoLower)) {
+          puntuacion += 15;
+          // Bonus por coincidencia en título al inicio
+          if (tituloLower.startsWith(terminoLower)) {
+            puntuacion += 10;
+          }
+        }
+        
+        // Coincidencia sin acentos en título
+        if (tituloSinAcentos.includes(terminoSinAcentos)) {
+          puntuacion += 12;
+        }
+        
+        // Coincidencia de palabras individuales en título
+        palabrasBusqueda.forEach(palabra => {
+          const palabraSinAcentos = normalizarTexto(palabra);
+          if (tituloLower.includes(palabra)) {
+            puntuacion += 3;
+          }
+          if (tituloSinAcentos.includes(palabraSinAcentos)) {
+            puntuacion += 2;
+          }
+        });
+      }
+      
+      // Puntuar coincidencias en autor (segunda prioridad)
+      if (libroObj.autor_nombre_completo) {
+        const autorLower = libroObj.autor_nombre_completo.toLowerCase();
+        const autorSinAcentos = normalizarTexto(libroObj.autor_nombre_completo);
+        
+        if (autorLower.includes(terminoLower)) {
+          puntuacion += 10;
+        }
+        
+        if (autorSinAcentos.includes(terminoSinAcentos)) {
+          puntuacion += 8;
+        }
+        
+        // Coincidencia de palabras individuales en autor
+        palabrasBusqueda.forEach(palabra => {
+          const palabraSinAcentos = normalizarTexto(palabra);
+          if (autorLower.includes(palabra)) {
+            puntuacion += 2.5;
+          }
+          if (autorSinAcentos.includes(palabraSinAcentos)) {
+            puntuacion += 2;
+          }
+        });
+      }
+      
+      // Puntuar coincidencias en género (tercera prioridad)
+      if (libroObj.genero) {
+        const generoLower = libroObj.genero.toLowerCase();
+        const generoSinAcentos = normalizarTexto(libroObj.genero);
+        
+        if (generoLower.includes(terminoLower)) {
+          puntuacion += 8;
+        }
+        
+        if (generoSinAcentos.includes(terminoSinAcentos)) {
+          puntuacion += 6;
+        }
+      }
+      
+      // Puntuar coincidencias en palabras clave
+      if (libroObj.palabras_clave && libroObj.palabras_clave.length > 0) {
+        const coincidencias = libroObj.palabras_clave.filter(
+          palabra => {
+            const palabraLower = palabra.toLowerCase();
+            const palabraSinAcentos = normalizarTexto(palabra);
+            return palabraLower.includes(terminoLower) || 
+                   palabraSinAcentos.includes(terminoSinAcentos) ||
+                   palabrasBusqueda.some(p => palabraLower.includes(p) || palabraSinAcentos.includes(normalizarTexto(p)));
+          }
+        ).length;
+        
+        puntuacion += coincidencias * 4;
+      }
+      
+      // Puntuar coincidencias en descripción (menor prioridad)
+      if (libroObj.descripcion) {
+        const descripcionLower = libroObj.descripcion.toLowerCase();
+        const descripcionSinAcentos = normalizarTexto(libroObj.descripcion);
+        
+        if (descripcionLower.includes(terminoLower)) {
+          puntuacion += 3;
+        }
+        
+        if (descripcionSinAcentos.includes(terminoSinAcentos)) {
+          puntuacion += 2;
+        }
+        
+        // Coincidencia de palabras individuales en descripción
+        palabrasBusqueda.forEach(palabra => {
+          const palabraSinAcentos = normalizarTexto(palabra);
+          if (descripcionLower.includes(palabra)) {
+            puntuacion += 0.8;
+          }
+          if (descripcionSinAcentos.includes(palabraSinAcentos)) {
+            puntuacion += 0.5;
+          }
+        });
+      }
+      
+      // Agregar puntuación al libro
+      return {
+        ...libroObj,
+        _puntuacion: puntuacion
+      };
+    });
+    
+    // Ordenar por puntuación (mayor a menor)
+    librosConPuntuacion.sort((a, b) => b._puntuacion - a._puntuacion);
+    
+    // Debugging
+    console.log('Libros puntuados:');
+    librosConPuntuacion.slice(0, 5).forEach(l => {
+      console.log(`- ${l.titulo}: ${l._puntuacion} puntos`);
+    });
+    
+    // Eliminar campo de puntuación antes de devolver
+    return librosConPuntuacion.map(libro => {
+      const { _puntuacion, ...libroSinPuntuacion } = libro;
+      return libroSinPuntuacion;
+    });
   },
 
   /**
