@@ -454,8 +454,7 @@ const libroService = {
   },
 
   /**
-   * Realiza una búsqueda de libros y guarda la consulta
-   * No depende de índices de texto, usa regex y ponderación manual para resultados relevantes
+   * Realiza una búsqueda de libros utilizando Atlas Search y guarda la consulta
    * @param {String} termino - Término de búsqueda
    * @param {Object} filtros - Filtros adicionales
    * @param {Object} usuario - Usuario que realiza la búsqueda (opcional)
@@ -475,112 +474,119 @@ const libroService = {
       
       console.log(`Búsqueda: "${termino || ''}", filtros:`, JSON.stringify(filtros, null, 2));
       
-      // Función mejorada para normalizar texto (quita acentos y otros diacríticos)
-      const normalizarTexto = (texto) => {
-        if (!texto) return '';
-        return texto
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .toLowerCase()
-          .trim();
-      };
+      // Crear pipeline de búsqueda
+      const pipeline = [];
       
-      // Crear query base
-      const query = { activo: true };
-      
-      // Búsqueda por texto utilizando expresiones regulares mejoradas
+      // Etapa 1: Buscar con Atlas Search (si hay término de búsqueda)
       if (termino && termino.trim() !== '') {
-        const terminoLimpio = termino.trim();
-        const terminoNormalizado = normalizarTexto(terminoLimpio);
-        
-        // Mejorar la búsqueda de términos parciales
-        // Escape caracteres especiales de regex para evitar errores
-        const escaparRegex = (texto) => {
-          return texto.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        };
-        
-        const terminoRegex = escaparRegex(terminoLimpio);
-        const terminoNormalizadoRegex = escaparRegex(terminoNormalizado);
-        
-        // Dividir en palabras para búsqueda más precisa, pero ahora incluimos palabras de 1+ caracteres
-        const palabras = terminoLimpio.split(/\s+/).filter(p => p.length >= 1);
-        const palabrasNormalizadas = palabras.map(normalizarTexto);
-        
-        // Crear condiciones para todos los campos relevantes
-        const textConditions = [];
-        
-        // Función para agregar condiciones de búsqueda para un campo
-        const agregarCondicionesCampo = (campo) => {
-          // Condiciones para el término completo - coincidencia exacta y parcial
-          textConditions.push(
-            { [campo]: { $regex: terminoRegex, $options: 'i' } },
-            { [campo]: { $regex: terminoNormalizadoRegex, $options: 'i' } }
-          );
-          
-          // Coincidencia parcial - cualquier parte del texto puede coincidir
-          textConditions.push(
-            { [campo]: { $regex: `\\b${terminoRegex}`, $options: 'i' } },        // Inicio de palabra
-            { [campo]: { $regex: `${terminoRegex}\\b`, $options: 'i' } },        // Fin de palabra
-            { [campo]: { $regex: `\\b${terminoNormalizadoRegex}`, $options: 'i' } },  // Inicio de palabra normalizada
-            { [campo]: { $regex: `${terminoNormalizadoRegex}\\b`, $options: 'i' } }   // Fin de palabra normalizada
-          );
-          
-          // Añadir condiciones para búsqueda parcial más flexible
-          textConditions.push(
-            { [campo]: { $regex: `.*${terminoRegex}.*`, $options: 'i' } },
-            { [campo]: { $regex: `.*${terminoNormalizadoRegex}.*`, $options: 'i' } }
-          );
-          
-          // Condiciones para palabras individuales con mayor flexibilidad
-          palabras.forEach((palabra, index) => {
-            if (palabra.length >= 1) {  // Permitimos incluso palabras de un solo carácter
-              const palabraRegex = escaparRegex(palabra);
-              const palabraNormalizadaRegex = escaparRegex(palabrasNormalizadas[index]);
-              
-              textConditions.push(
-                { [campo]: { $regex: palabraRegex, $options: 'i' } },
-                { [campo]: { $regex: palabraNormalizadaRegex, $options: 'i' } },
-                // Búsqueda parcial para cada palabra
-                { [campo]: { $regex: `.*${palabraRegex}.*`, $options: 'i' } },
-                { [campo]: { $regex: `.*${palabraNormalizadaRegex}.*`, $options: 'i' } }
-              );
+        pipeline.push({
+          $search: {
+            index: 'libro_search_index', // Nombre del índice creado en Atlas
+            compound: {
+              should: [
+                // Búsqueda en título (mayor peso)
+                {
+                  text: {
+                    query: termino,
+                    path: "titulo",
+                    score: { boost: { value: 5 } },
+                    fuzzy: {
+                      maxEdits: 2,
+                      prefixLength: 1
+                    }
+                  }
+                },
+                // Búsqueda en autor
+                {
+                  text: {
+                    query: termino,
+                    path: "autor_nombre_completo",
+                    score: { boost: { value: 4 } },
+                    fuzzy: {
+                      maxEdits: 2,
+                      prefixLength: 1
+                    }
+                  }
+                },
+                // Búsqueda en género
+                {
+                  text: {
+                    query: termino,
+                    path: "genero",
+                    score: { boost: { value: 3 } },
+                    fuzzy: {
+                      maxEdits: 2,
+                      prefixLength: 1
+                    }
+                  }
+                },
+                // Búsqueda en editorial
+                {
+                  text: {
+                    query: termino,
+                    path: "editorial",
+                    score: { boost: { value: 3 } },
+                    fuzzy: {
+                      maxEdits: 2,
+                      prefixLength: 1
+                    }
+                  }
+                },
+                // Búsqueda en palabras clave
+                {
+                  text: {
+                    query: termino,
+                    path: "palabras_clave",
+                    score: { boost: { value: 2 } },
+                    fuzzy: {
+                      maxEdits: 2,
+                      prefixLength: 1
+                    }
+                  }
+                },
+                // Búsqueda en descripción
+                {
+                  text: {
+                    query: termino,
+                    path: "descripcion",
+                    score: { boost: { value: 1 } },
+                    fuzzy: {
+                      maxEdits: 2,
+                      prefixLength: 1
+                    }
+                  }
+                }
+              ],
+              minimumShouldMatch: 1
             }
-          });
-        };
-        
-        // Aplicar para todos los campos relevantes
-        ['titulo', 'autor_nombre_completo', 'genero', 'editorial', 'descripcion'].forEach(agregarCondicionesCampo);
-        
-        // Búsqueda especial en palabras clave (array)
-        textConditions.push(
-          { palabras_clave: { $regex: terminoRegex, $options: 'i' } },
-          { palabras_clave: { $regex: terminoNormalizadoRegex, $options: 'i' } },
-          // Búsqueda parcial en palabras clave
-          { palabras_clave: { $regex: `.*${terminoRegex}.*`, $options: 'i' } },
-          { palabras_clave: { $regex: `.*${terminoNormalizadoRegex}.*`, $options: 'i' } }
-        );
-        
-        // Agregar condiciones al query, eliminar condiciones duplicadas
-        query.$or = Array.from(new Set(textConditions.map(JSON.stringify)))
-                        .map(JSON.parse);
+          }
+        });
       }
       
-      // Aplicar filtros adicionales
-      this.aplicarFiltrosAvanzados(query, filtros, normalizarTexto);
+      // Etapa 2: Aplicar filtros adicionales con $match
+      const matchConditions = { activo: true };
       
-      // Obtener todos los libros que coinciden con la consulta
-      let libros = await Libro.find(query).limit(limite * 2); // Obtenemos más para luego ordenar
+      // Aplicar filtros específicos
+      this.aplicarFiltrosAtlasSearch(matchConditions, filtros);
       
-      console.log(`Libros encontrados (sin ordenar): ${libros.length}`);
+      // Agregar etapa $match al pipeline
+      pipeline.push({ $match: matchConditions });
       
-      // Si tenemos un término de búsqueda, calculamos una puntuación de relevancia
-      if (termino && termino.trim() !== '') {
-        libros = this.puntuarResultados(libros, termino, normalizarTexto);
-        // Limitar resultados
-        libros = libros.slice(0, limite);
+      // Etapa 3: Obtener documentos usando aggregate con el pipeline
+      let libros;
+      
+      if (pipeline.length > 0) {
+        // Si hay búsqueda de texto o filtros, usar pipeline completo
+        libros = await Libro.aggregate(pipeline).limit(limite);
+        
+        // Para búsquedas de texto, los resultados ya vienen ordenados por relevancia (score)
+        // Para búsquedas solo con filtros, podríamos añadir un $sort si es necesario
+        
+        console.log(`Libros encontrados: ${libros.length}`);
       } else {
-        // Si no hay término de búsqueda, limitar resultados
-        libros = libros.slice(0, limite);
+        // Si no hay búsqueda ni filtros, devolver libros por defecto (más recientes)
+        libros = await Libro.find({ activo: true }).sort({ fecha_registro: -1 }).limit(limite);
+        console.log(`No se especificaron criterios, mostrando ${libros.length} libros recientes`);
       }
       
       // Registrar la búsqueda en el historial
@@ -605,262 +611,291 @@ const libroService = {
         id_busqueda: nuevaBusqueda._id
       };
     } catch (error) {
-      console.error('Error en búsqueda de libros:', error);
+      console.error('Error en búsqueda de libros con Atlas Search:', error);
       throw error;
     }
   },
 
-  // Método auxiliar para aplicar filtros avanzados
-  aplicarFiltrosAvanzados(query, filtros, normalizarTexto) {
-    // Función para escapar caracteres especiales en expresiones regulares
-    const escaparRegex = (texto) => {
-      return texto ? texto.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') : '';
-    };
-
+  // Método auxiliar para aplicar filtros a la búsqueda de Atlas Search
+  aplicarFiltrosAtlasSearch(matchConditions, filtros) {
+    // Filtros de texto (ya no necesitamos normalización ni regex, Atlas Search se encarga)
     if (filtros.genero) {
-      // Normalizar y hacer flexible la búsqueda por género
-      const generoNormalizado = normalizarTexto(filtros.genero);
-      const generoRegex = escaparRegex(filtros.genero);
-      const generoNormalizadoRegex = escaparRegex(generoNormalizado);
-      
-      query.$and = query.$and || [];
-      query.$and.push({
-        $or: [
-          { genero: { $regex: generoRegex, $options: 'i' } },
-          { genero: { $regex: generoNormalizadoRegex, $options: 'i' } },
-          // Búsqueda parcial en género
-          { genero: { $regex: `.*${generoRegex}.*`, $options: 'i' } },
-          { genero: { $regex: `.*${generoNormalizadoRegex}.*`, $options: 'i' } }
-        ]
-      });
+      matchConditions.genero = filtros.genero;
     }
     
     if (filtros.editorial) {
-      const editorialNormalizada = normalizarTexto(filtros.editorial);
-      const editorialRegex = escaparRegex(filtros.editorial);
-      const editorialNormalizadaRegex = escaparRegex(editorialNormalizada);
-      
-      query.$and = query.$and || [];
-      query.$and.push({
-        $or: [
-          { editorial: { $regex: editorialRegex, $options: 'i' } },
-          { editorial: { $regex: editorialNormalizadaRegex, $options: 'i' } },
-          // Búsqueda parcial en editorial
-          { editorial: { $regex: `.*${editorialRegex}.*`, $options: 'i' } },
-          { editorial: { $regex: `.*${editorialNormalizadaRegex}.*`, $options: 'i' } }
-        ]
-      });
+      matchConditions.editorial = filtros.editorial;
     }
     
-    if (filtros.idioma) query.idioma = filtros.idioma;
-    if (filtros.estado) query.estado = filtros.estado;
+    if (filtros.idioma) {
+      matchConditions.idioma = filtros.idioma;
+    }
+    
+    if (filtros.estado) {
+      matchConditions.estado = filtros.estado;
+    }
     
     // Filtros de precio
     if (filtros.precio_min || filtros.precio_max) {
-      query.precio = {};
-      if (filtros.precio_min) query.precio.$gte = parseFloat(filtros.precio_min);
-      if (filtros.precio_max) query.precio.$lte = parseFloat(filtros.precio_max);
+      matchConditions.precio = {};
+      if (filtros.precio_min) matchConditions.precio.$gte = parseFloat(filtros.precio_min);
+      if (filtros.precio_max) matchConditions.precio.$lte = parseFloat(filtros.precio_max);
     }
     
     // Solo disponibles
     if (filtros.solo_disponibles) {
-      query.stock = { $gt: 0 };
+      matchConditions.stock = { $gt: 0 };
     }
     
     // Incluir inactivos
     if (filtros.incluir_inactivos !== true) {
-      query.activo = true;
+      matchConditions.activo = true;
     }
   },
 
-  // Método auxiliar para puntuar resultados de búsqueda
-  puntuarResultados(libros, termino, normalizarTexto) {
-    const terminoLower = termino.toLowerCase();
-    const terminoSinAcentos = normalizarTexto(termino);
-    
-    // Dividir la búsqueda en palabras, pero ahora con más flexibilidad
-    const palabrasBusqueda = terminoLower.split(/\s+/).filter(p => p.length >= 1);
-    const palabrasSinAcentos = palabrasBusqueda.map(normalizarTexto);
-    
-    // Función para verificar coincidencia con/sin acentos
-    const coincide = (texto, patron, patronSinAcentos) => {
-      if (!texto) return false;
-      const textoLower = texto.toLowerCase();
-      const textoSinAcentos = normalizarTexto(texto);
+  // Método para búsquedas con autocompletado
+  async buscarAutocomplete(prefijo, campo = "titulo", limite = 10) {
+    try {
+      if (!prefijo || prefijo.trim() === '') {
+        return [];
+      }
+
+      // Validar que el campo tenga soporte para autocompletado
+      const camposPermitidos = ['titulo', 'autor_nombre_completo', 'genero', 'editorial'];
+      if (!camposPermitidos.includes(campo)) {
+        campo = 'titulo'; // Valor por defecto si no es válido
+      }
+
+      // Pipeline para autocompletado usando Atlas Search
+      const pipeline = [
+        {
+          $search: {
+            index: "libro_search_index",
+            // Usar el subcampo autocomplete del campo solicitado
+            autocomplete: {
+              query: prefijo,
+              path: `${campo}.autocomplete`,
+              fuzzy: {
+                maxEdits: 1,
+                prefixLength: 1
+              }
+            }
+          }
+        },
+        // Obtener solo los campos necesarios y score
+        {
+          $project: {
+            _id: 1,
+            titulo: 1,
+            autor_nombre_completo: 1,
+            [campo]: 1,
+            // Usar doble score para evitar el error de $meta
+            score: { $const: 1.0 } // Score constante como alternativa
+          }
+        },
+        // Limitar cantidad de resultados
+        {
+          $limit: limite
+        }
+      ];
+
+      const resultados = await Libro.aggregate(pipeline);
+      return resultados;
+    } catch (error) {
+      console.error(`Error en autocompletado para ${campo}:`, error);
       
-      return textoLower.includes(patron) || textoSinAcentos.includes(patronSinAcentos);
+      // Plan B: Usar búsqueda de texto normal si falla autocomplete
+      try {
+        console.log(`Intentando fallback para autocompletar ${campo} con búsqueda de texto normal`);
+        return await this.busquedaTextoSimple(prefijo, campo, limite);
+      } catch (fallbackError) {
+        console.error('Error en fallback de autocompletado:', fallbackError);
+        throw error; // Propagar el error original
+      }
+    }
+  },
+
+  // Método fallback para autocompletado usando regex
+  async busquedaTextoSimple(prefijo, campo = "titulo", limite = 10) {
+    // Escapar caracteres especiales para regex
+    const terminoEscapado = prefijo.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    
+    // Crear condición de búsqueda
+    const query = { 
+      activo: true,
+      [campo]: { $regex: `^${terminoEscapado}`, $options: 'i' }
     };
     
-    // Asignar puntuación a cada libro según relevancia
-    const librosConPuntuacion = libros.map(libro => {
-      let puntuacion = 0;
-      const libroObj = libro.toObject();
-      
-      // Puntuar coincidencias en título (mayor prioridad)
-      if (libroObj.titulo) {
-        const tituloLower = libroObj.titulo.toLowerCase();
-        const tituloSinAcentos = normalizarTexto(libroObj.titulo);
-        
-        // Coincidencia exacta en título
-        if (coincide(libroObj.titulo, terminoLower, terminoSinAcentos)) {
-          puntuacion += 15;
-          // Bonus por coincidencia en título al inicio
-          if (tituloLower.startsWith(terminoLower) || tituloSinAcentos.startsWith(terminoSinAcentos)) {
-            puntuacion += 10;
-          }
-        }
-        
-        // Coincidencia parcial en título (pero no exacta)
-        else if (tituloLower.includes(terminoLower) || tituloSinAcentos.includes(terminoSinAcentos)) {
-          puntuacion += 8;
-        }
-        
-        // Coincidencia de palabras individuales en título con mayor flexibilidad
-        palabrasBusqueda.forEach((palabra, idx) => {
-          const palabraSinAcentos = palabrasSinAcentos[idx];
-          
-          // Coincidencia exacta de palabra
-          if (coincide(libroObj.titulo, palabra, palabraSinAcentos)) {
-            puntuacion += 3;
-            
-            // Bonus si la palabra está al inicio del título
-            if (tituloLower.startsWith(palabra) || tituloSinAcentos.startsWith(palabraSinAcentos)) {
-              puntuacion += 2;
+    // Campos a seleccionar
+    const projection = { 
+      _id: 1, 
+      titulo: 1, 
+      autor_nombre_completo: 1,
+      [campo]: 1
+    };
+    
+    // Ejecutar consulta
+    return await Libro.find(query, projection).limit(limite);
+  },
+
+  // Método para búsqueda difusa (fuzzy) por múltiples campos
+  async busquedaDifusa(termino, campos = ["titulo", "autor_nombre_completo"], limite = 20) {
+    try {
+      if (!termino || termino.trim() === '') {
+        return [];
+      }
+
+      // Verificar si los campos solicitados son válidos
+      const camposValidos = ["titulo", "autor_nombre_completo", "genero", "editorial", "descripcion", "palabras_clave"];
+      const camposFiltrados = Array.isArray(campos) 
+        ? campos.filter(c => camposValidos.includes(c))
+        : typeof campos === 'string'
+          ? campos.split(',').map(c => c.trim()).filter(c => camposValidos.includes(c))
+          : ["titulo", "autor_nombre_completo"];
+
+      // Si no quedaron campos válidos, usar los predeterminados
+      if (camposFiltrados.length === 0) {
+        camposFiltrados.push("titulo", "autor_nombre_completo");
+      }
+
+      // Pipeline para búsqueda difusa usando Atlas Search
+      const pipeline = [
+        {
+          $search: {
+            index: "libro_search_index",
+            compound: {
+              should: camposFiltrados.map(campo => ({
+                text: {
+                  query: termino,
+                  path: campo,
+                  fuzzy: {
+                    maxEdits: 2,
+                    prefixLength: 1
+                  }
+                }
+              })),
+              minimumShouldMatch: 1
             }
           }
-          
-          // Coincidencia parcial de palabra
-          else if (tituloLower.includes(palabra) || tituloSinAcentos.includes(palabraSinAcentos)) {
-            puntuacion += 1.5;
+        },
+        {
+          $match: { activo: true }
+        },
+        // En lugar de usar $meta searchScore, usar $addFields con valor constante si es necesario
+        {
+          $addFields: {
+            relevance: 1.0 // Score constante como alternativa
           }
-        });
-      }
+        },
+        {
+          $limit: limite
+        }
+      ];
+
+      const resultados = await Libro.aggregate(pipeline);
+      return resultados;
+    } catch (error) {
+      console.error('Error en búsqueda difusa:', error);
       
-      // Puntuar coincidencias en autor (segunda prioridad)
-      if (libroObj.autor_nombre_completo) {
-        const autorLower = libroObj.autor_nombre_completo.toLowerCase();
-        const autorSinAcentos = normalizarTexto(libroObj.autor_nombre_completo);
-        
-        // Coincidencia exacta en autor
-        if (coincide(libroObj.autor_nombre_completo, terminoLower, terminoSinAcentos)) {
-          puntuacion += 10;
-        }
-        
-        // Coincidencia parcial en autor
-        else if (autorLower.includes(terminoLower) || autorSinAcentos.includes(terminoSinAcentos)) {
-          puntuacion += 7;
-        }
-        
-        // Coincidencia de palabras individuales en autor
-        palabrasBusqueda.forEach((palabra, idx) => {
-          const palabraSinAcentos = palabrasSinAcentos[idx];
-          
-          // Coincidencia exacta de palabra
-          if (coincide(libroObj.autor_nombre_completo, palabra, palabraSinAcentos)) {
-            puntuacion += 2.5;
-          }
-          
-          // Coincidencia parcial de palabra
-          else if (autorLower.includes(palabra) || autorSinAcentos.includes(palabraSinAcentos)) {
-            puntuacion += 1.5;
-          }
-        });
+      // Plan B: Usar búsqueda básica con regex si falla la búsqueda difusa
+      try {
+        console.log('Intentando fallback para búsqueda difusa con regex básico');
+        return await this.busquedaRegexBasica(termino, campos, limite);
+      } catch (fallbackError) {
+        console.error('Error en fallback de búsqueda difusa:', fallbackError);
+        throw error; // Propagar el error original
       }
-      
-      // Puntuar coincidencias en género (tercera prioridad)
-      if (libroObj.genero) {
-        const generoLower = libroObj.genero.toLowerCase();
-        const generoSinAcentos = normalizarTexto(libroObj.genero);
-        
-        if (coincide(libroObj.genero, terminoLower, terminoSinAcentos)) {
-          puntuacion += 8;
-        }
-        
-        // Coincidencia parcial en género
-        else if (generoLower.includes(terminoLower) || generoSinAcentos.includes(terminoSinAcentos)) {
-          puntuacion += 5;
-        }
+    }
+  },
+
+  // Método fallback para búsqueda difusa usando regex
+  async busquedaRegexBasica(termino, campos = ["titulo", "autor_nombre_completo"], limite = 20) {
+    // Normalizar término (quitar acentos)
+    const normalizarTexto = (texto) => {
+      if (!texto) return '';
+      return texto
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+    };
+    
+    const terminoNormalizado = normalizarTexto(termino);
+    
+    // Escapar caracteres especiales para regex
+    const escaparRegex = (texto) => {
+      return texto.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    };
+    
+    const terminoRegex = escaparRegex(terminoNormalizado);
+    
+    // Asegurar que campos sea un array
+    const camposArray = Array.isArray(campos) 
+      ? campos 
+      : typeof campos === 'string'
+        ? campos.split(',').map(c => c.trim())
+        : ["titulo", "autor_nombre_completo"];
+    
+    // Crear condiciones para cada campo
+    const condiciones = camposArray.map(campo => ({
+      [campo]: { $regex: terminoRegex, $options: 'i' }
+    }));
+    
+    // Construir query
+    const query = { 
+      activo: true,
+      $or: condiciones
+    };
+    
+    // Ejecutar consulta
+    return await Libro.find(query).limit(limite);
+  },
+
+  // Método para búsqueda por sinónimos (útil para términos relacionados)
+  async busquedaConSinonimos(termino, sinonimos = [], limite = 20) {
+    try {
+      // Si no hay término o sinónimos, retornar array vacío
+      if ((!termino || termino.trim() === '') && (!sinonimos || sinonimos.length === 0)) {
+        return [];
       }
-      
-      // Puntuar coincidencias en palabras clave con mayor flexibilidad
-      if (libroObj.palabras_clave && libroObj.palabras_clave.length > 0) {
-        const coincidencias = libroObj.palabras_clave.filter(
-          palabra => {
-            const palabraLower = palabra.toLowerCase();
-            const palabraSinAcentos = normalizarTexto(palabra);
-            
-            // Coincidencia exacta
-            if (coincide(palabra, terminoLower, terminoSinAcentos)) {
-              return true;
+
+      // Construir array de términos incluyendo el original y sus sinónimos
+      const terminos = [termino, ...sinonimos].filter(t => t && t.trim() !== '');
+
+      const pipeline = [
+        {
+          $search: {
+            index: "libro_search_index",
+            compound: {
+              should: terminos.map(t => ({
+                text: {
+                  query: t,
+                  path: ["titulo", "autor_nombre_completo", "genero", "descripcion", "palabras_clave"],
+                  fuzzy: {
+                    maxEdits: 1
+                  }
+                }
+              })),
+              minimumShouldMatch: 1
             }
-            
-            // Coincidencia parcial
-            if (palabraLower.includes(terminoLower) || palabraSinAcentos.includes(terminoSinAcentos)) {
-              return true;
-            }
-            
-            // Coincidencia con palabras individuales
-            return palabrasBusqueda.some((p, idx) => 
-              palabraLower.includes(p) || palabraSinAcentos.includes(palabrasSinAcentos[idx])
-            );
           }
-        ).length;
-        
-        puntuacion += coincidencias * 4;
-      }
-      
-      // Puntuar coincidencias en descripción (menor prioridad)
-      if (libroObj.descripcion) {
-        const descripcionLower = libroObj.descripcion.toLowerCase();
-        const descripcionSinAcentos = normalizarTexto(libroObj.descripcion);
-        
-        // Coincidencia exacta en descripción
-        if (coincide(libroObj.descripcion, terminoLower, terminoSinAcentos)) {
-          puntuacion += 3;
+        },
+        {
+          $match: { activo: true }
+        },
+        {
+          $sort: { score: { $meta: "searchScore" } }
+        },
+        {
+          $limit: limite
         }
-        
-        // Coincidencia parcial en descripción
-        else if (descripcionLower.includes(terminoLower) || descripcionSinAcentos.includes(terminoSinAcentos)) {
-          puntuacion += 2;
-        }
-        
-        // Coincidencia de palabras individuales en descripción
-        palabrasBusqueda.forEach((palabra, idx) => {
-          const palabraSinAcentos = palabrasSinAcentos[idx];
-          
-          // Coincidencia exacta de palabra
-          if (coincide(libroObj.descripcion, palabra, palabraSinAcentos)) {
-            puntuacion += 0.8;
-          }
-          
-          // Coincidencia parcial de palabra
-          else if (descripcionLower.includes(palabra) || descripcionSinAcentos.includes(palabraSinAcentos)) {
-            puntuacion += 0.5;
-          }
-        });
-      }
-      
-      // Agregar puntuación al libro
-      return {
-        ...libroObj,
-        _puntuacion: puntuacion
-      };
-    });
-    
-    // Ordenar por puntuación (mayor a menor)
-    librosConPuntuacion.sort((a, b) => b._puntuacion - a._puntuacion);
-    
-    // Debugging
-    console.log('Libros puntuados:');
-    librosConPuntuacion.slice(0, 5).forEach(l => {
-      console.log(`- ${l.titulo}: ${l._puntuacion} puntos`);
-    });
-    
-    // Eliminar campo de puntuación antes de devolver
-    return librosConPuntuacion.map(libro => {
-      const { _puntuacion, ...libroSinPuntuacion } = libro;
-      return libroSinPuntuacion;
-    });
+      ];
+
+      return await Libro.aggregate(pipeline);
+    } catch (error) {
+      console.error('Error en búsqueda con sinónimos:', error);
+      throw error;
+    }
   },
 
   /**
