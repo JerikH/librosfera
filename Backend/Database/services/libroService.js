@@ -1115,7 +1115,7 @@ const libroService = {
           if (inventario) {
             await inventario.registrarSalida(
               1, // Un ejemplar
-              'baja', 
+              'baja',
               null, // ID usuario
               null, // ID transacción
               `Eliminación manual de ejemplar: ${codigo}`
@@ -1355,16 +1355,43 @@ const libroService = {
       } else {
         libro = await Libro.findOne({ id_libro: idLibro });
       }
-
+  
       if (!libro) {
         throw new Error(`Libro no encontrado con ID: ${idLibro}`);
       }
-
-      // Actualizar orden de imágenes
-      await libro.actualizarOrdenImagenes(ordenesNuevos);
+  
+      // Guardar el valor de ordenesNuevos para debugging
+      console.log('Órdenes nuevos recibidos:', JSON.stringify(ordenesNuevos));
+      
+      // Actualizar orden de imágenes - MEJORAR LA LÓGICA
+      ordenesNuevos.forEach(item => {
+        // Buscar por ID MongoDB o por índice si el ID no existe
+        const imagen = libro.imagenes.id(item.id_imagen);
+        if (imagen) {
+          imagen.orden = item.orden_nuevo;
+        } else {
+          // Si no encuentra por ID, intentar buscar la imagen por índice o URL
+          // Esto es un fallback por si los IDs están mal formados
+          const imagenIndex = libro.imagenes.findIndex(img => 
+            (img._id && img._id.toString() === item.id_imagen) || 
+            img.url.includes(item.id_imagen)
+          );
+          
+          if (imagenIndex !== -1) {
+            libro.imagenes[imagenIndex].orden = item.orden_nuevo;
+            libro.markModified(`imagenes.${imagenIndex}.orden`);
+          }
+        }
+      });
+      
+      // Ordenar imágenes por orden
+      libro.imagenes.sort((a, b) => a.orden - b.orden);
+      
+      libro.markModified('imagenes');
+      await libro.save();
       
       console.log('Orden de imágenes actualizado correctamente');
-      return libro.toObject();
+      return libro;
     } catch (error) {
       console.error('Error actualizando orden de imágenes:', error);
       throw error;
@@ -1396,14 +1423,44 @@ const libroService = {
       // Encontrar la imagen
       const imagen = libro.imagenes.id(idImagen);
       if (!imagen) {
-        throw new Error(`Imagen no encontrada con ID: ${idImagen}`);
+        // Si no encuentra la imagen por ID MongoDB, intentamos buscarla manualmente
+        const imagenIndex = libro.imagenes.findIndex(img => 
+          img._id.toString() === idImagen || 
+          (img._id && img._id.toString() === idImagen)
+        );
+        
+        if (imagenIndex === -1) {
+          throw new Error(`Imagen no encontrada con ID: ${idImagen}`);
+        }
+        
+        // Guardar nombre de archivo para eliminar después
+        const nombreArchivo = libro.imagenes[imagenIndex].nombre_archivo;
+        
+        // Eliminar la imagen por índice
+        libro.imagenes.splice(imagenIndex, 1);
+        libro.markModified('imagenes');
+        await libro.save();
+        
+        // Eliminar archivo físico si existe
+        try {
+          const directorioImagenes = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads/libros');
+          const rutaArchivo = path.join(directorioImagenes, nombreArchivo);
+          await fs.unlink(rutaArchivo);
+          console.log('Archivo físico eliminado');
+        } catch (err) {
+          console.warn(`No se pudo eliminar el archivo físico: ${err.message}`);
+          // Continuar incluso si no se puede eliminar el archivo físico
+        }
+        
+        return libro;
       }
-
-      // Guardar nombre de archivo para eliminar después
+  
+      // Si encontró la imagen con id()
       const nombreArchivo = imagen.nombre_archivo;
       
       // Eliminar la imagen del libro
-      await libro.eliminarImagen(idImagen);
+      libro.imagenes.pull(idImagen);
+      await libro.save();
       
       // Eliminar archivo físico
       try {
@@ -1416,8 +1473,7 @@ const libroService = {
         // Continuar incluso si no se puede eliminar el archivo físico
       }
       
-      console.log('Imagen eliminada correctamente');
-      return libro.toObject();
+      return libro;
     } catch (error) {
       console.error('Error eliminando imagen:', error);
       throw error;

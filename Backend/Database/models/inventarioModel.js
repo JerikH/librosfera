@@ -82,7 +82,7 @@ const inventarioSchema = new Schema({
     },
     motivo: {
       type: String,
-      enum: ['compra', 'venta', 'devolucion', 'perdida', 'daño', 'inventario_inicial', 'ajuste_auditoria', 'reserva', 'expiracion_reserva']
+      enum: ['compra', 'venta', 'devolucion', 'perdida', 'daño', 'inventario_inicial', 'ajuste_auditoria', 'reserva', 'expiracion_reserva', 'baja']
     },
     id_transaccion: {
       type: Schema.Types.ObjectId,
