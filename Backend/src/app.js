@@ -8,6 +8,7 @@ const path = require('path');
 
 // Importar configuraciones
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+const debugMiddleware = require('./middleware/debugMiddleware'); // Añadido
 
 // Importar rutas
 // const productRoutes = require('./routes/productRoutes');
@@ -33,6 +34,12 @@ app.use(express.json()); // Parsear JSON
 app.use(express.urlencoded({ extended: false }));
 app.use(morgan('dev')); // Logging
 
+// Añadir middleware de depuración en ambiente de desarrollo
+if (process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') {
+  app.use(debugMiddleware);
+  console.log('Middleware de depuración activado');
+}
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
@@ -44,7 +51,24 @@ app.use(limiter);
 
 // Directorio estático para archivos subidos
 const uploadsPath = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+console.log('Directorio de uploads configurado en:', uploadsPath);
 app.use('/uploads', express.static(uploadsPath));
+
+// Crear directorios necesarios si no existen
+const fs = require('fs');
+const librosPath = path.join(uploadsPath, 'libros');
+try {
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+    console.log('Directorio de uploads creado:', uploadsPath);
+  }
+  if (!fs.existsSync(librosPath)) {
+    fs.mkdirSync(librosPath, { recursive: true });
+    console.log('Directorio de imágenes de libros creado:', librosPath);
+  }
+} catch (error) {
+  console.error('Error creando directorios:', error);
+}
 
 // Rutas de la API
 // app.use('/api/v1/products', productRoutes);

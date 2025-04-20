@@ -1,6 +1,5 @@
 #!/bin/bash
 # Secuencia de comandos CURL para probar el sistema de gestión de libros
-# Guarde este archivo como test-libros.sh y ejecútelo con bash test-libros.sh
 
 # Ajuste estos parámetros a su entorno
 BASE_URL="http://localhost:5000"
@@ -156,7 +155,10 @@ CREAR_RESPUESTA=$(curl -s -X POST "$BASE_URL/api/v1/libros" \
   }')
 
 print_response "$CREAR_RESPUESTA" "CREAR LIBRO"
-LIBRO_ID=$(echo $CREAR_RESPUESTA | grep -o '"_id":"[^"]*"' | cut -d'"' -f4)
+
+# Extraer ID del libro - CORREGIDO: Tomamos el ID principal del objeto data
+LIBRO_ID=$(echo "$CREAR_RESPUESTA" | jq -r '.data._id')
+
 echo -e "${GREEN}ID del libro creado: $LIBRO_ID${NC}"
 
 # Obtener libro por ID
@@ -226,7 +228,7 @@ DESCUENTO_RESPUESTA=$(curl -s -X POST "$BASE_URL/api/v1/libros/$LIBRO_ID/descuen
     "tipo": "porcentaje",
     "valor": 10,
     "fecha_inicio": "2023-05-20T00:00:00.000Z",
-    "fecha_fin": "2023-12-31T23:59:59.999Z",
+    "fecha_fin": "2033-12-31T23:59:59.999Z",
     "codigo_promocion": "NUEVO10"
   }')
 print_response "$DESCUENTO_RESPUESTA" "AGREGAR DESCUENTO"

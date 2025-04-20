@@ -23,6 +23,8 @@ const libroService = {
       session.startTransaction();
 
       try {
+        console.log('Creando nuevo libro:', JSON.stringify(libroData, null, 2));
+        
         // Comprobar campos obligatorios
         const {
           titulo,
@@ -77,6 +79,8 @@ const libroService = {
         // Crear instancia del modelo con los datos
         const nuevoLibro = new Libro(libroData);
         await nuevoLibro.save({ session });
+        
+        console.log('Libro creado con ID:', nuevoLibro._id);
 
         // Crear registro de inventario para el libro
         const nuevoInventario = new Inventario({
@@ -85,6 +89,7 @@ const libroService = {
           stock_disponible: libroData.stock || 0
         });
         await nuevoInventario.save({ session });
+        console.log('Inventario creado con ID:', nuevoInventario._id);
 
         // Confirmar la transacción
         await session.commitTransaction();
@@ -110,18 +115,21 @@ const libroService = {
    */
   async obtenerLibroPorId(libroId) {
     try {
+      console.log('Servicio: Buscando libro con ID:', libroId);
       let libro;
 
       // Verificar si es un ObjectId válido de MongoDB
       if (mongoose.Types.ObjectId.isValid(libroId)) {
         libro = await Libro.findById(libroId);
+        console.log('Búsqueda por _id:', libro ? 'Encontrado' : 'No encontrado');
       } else {
         // Si no es un ObjectId, buscar por id_libro
         libro = await Libro.findOne({ id_libro: libroId });
+        console.log('Búsqueda por id_libro:', libro ? 'Encontrado' : 'No encontrado');
       }
 
       if (!libro) {
-        throw new Error('Libro no encontrado');
+        throw new Error(`Libro no encontrado con ID: ${libroId}`);
       }
 
       return libro.toObject();
@@ -140,6 +148,8 @@ const libroService = {
    */
   async actualizarLibro(libroId, datosActualizados, version) {
     try {
+      console.log(`Actualizando libro ${libroId} con datos:`, JSON.stringify(datosActualizados, null, 2));
+      
       // Iniciar una sesión de transacción
       const session = await mongoose.startSession();
       session.startTransaction();
@@ -241,7 +251,8 @@ const libroService = {
         // Confirmar la transacción
         await session.commitTransaction();
         session.endSession();
-
+        
+        console.log('Libro actualizado exitosamente:', libroActualizado._id);
         return libroActualizado.toObject();
       } catch (error) {
         // Si algo falla, abortar la transacción
@@ -262,6 +273,8 @@ const libroService = {
    */
   async desactivarLibro(libroId) {
     try {
+      console.log('Desactivando libro con ID:', libroId);
+      
       // Verificar si el libro existe
       const libroExistente = await this.obtenerLibroPorId(libroId);
 
@@ -298,7 +311,8 @@ const libroService = {
       if (!resultado) {
         throw new Error('Error al desactivar el libro');
       }
-
+      
+      console.log('Libro desactivado correctamente:', resultado._id);
       return true;
     } catch (error) {
       console.error('Error desactivando libro:', error);
@@ -313,6 +327,8 @@ const libroService = {
    */
   async eliminarLibroPermanente(libroId) {
     try {
+      console.log('Eliminando permanentemente libro con ID:', libroId);
+      
       // Iniciar una sesión de transacción
       const session = await mongoose.startSession();
       session.startTransaction();
@@ -347,15 +363,29 @@ const libroService = {
 
         // Eliminar imágenes físicas asociadas al libro
         if (libroExistente.imagenes && libroExistente.imagenes.length > 0) {
-          // Eliminar archivos de imágenes si es necesario
-          // Este proceso se debe manejar según la implementación de almacenamiento
-          // de imágenes de la aplicación
+          const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
+          const librosDir = path.join(uploadDir, 'libros');
+          
+          // Procesar cada imagen para eliminarla
+          const deletePromises = libroExistente.imagenes.map(imagen => {
+            if (imagen.nombre_archivo) {
+              const rutaArchivo = path.join(librosDir, imagen.nombre_archivo);
+              return fs.unlink(rutaArchivo).catch(err => {
+                console.warn(`No se pudo eliminar la imagen ${imagen.nombre_archivo}: ${err.message}`);
+              });
+            }
+            return Promise.resolve();
+          });
+          
+          // Esperar a que se eliminen todas las imágenes
+          await Promise.all(deletePromises);
         }
 
         // Confirmar la transacción
         await session.commitTransaction();
         session.endSession();
-
+        
+        console.log('Libro eliminado permanentemente:', libroExistente._id);
         return true;
       } catch (error) {
         // Si algo falla, abortar la transacción
@@ -380,6 +410,9 @@ const libroService = {
    */
   async listarLibros(filtros = {}, pagina = 1, limite = 10, ordenarPor = 'fecha_registro', direccion = 'desc') {
     try {
+      console.log(`Listando libros - Página ${pagina}, Límite ${limite}, Orden ${ordenarPor} ${direccion}`);
+      console.log('Filtros:', JSON.stringify(filtros, null, 2));
+      
       // Calcular índice para paginación
       const skip = (pagina - 1) * limite;
 
@@ -402,6 +435,8 @@ const libroService = {
       // Calcular el total de páginas
       const totalPaginas = Math.ceil(total / limite) || 1;
 
+      console.log(`Libros encontrados: ${libros.length}, Total: ${total}`);
+      
       // Devolver resultados con metadatos de paginación
       return {
         datos: libros.map(l => l.toObject()),
@@ -419,23 +454,25 @@ const libroService = {
   },
 
   /**
- * Realiza una búsqueda de libros y guarda la consulta
- * No depende de índices de texto, usa regex y ponderación manual para resultados relevantes
- * @param {String} termino - Término de búsqueda
- * @param {Object} filtros - Filtros adicionales
- * @param {Object} usuario - Usuario que realiza la búsqueda (opcional)
- * @param {Number} limite - Cantidad de resultados
- * @returns {Promise<Object>} Resultados de la búsqueda y registro
- */
+   * Realiza una búsqueda de libros y guarda la consulta
+   * No depende de índices de texto, usa regex y ponderación manual para resultados relevantes
+   * @param {String} termino - Término de búsqueda
+   * @param {Object} filtros - Filtros adicionales
+   * @param {Object} usuario - Usuario que realiza la búsqueda (opcional)
+   * @param {Number} limite - Cantidad de resultados
+   * @returns {Promise<Object>} Resultados de la búsqueda y registro
+   */
   async buscarYRegistrar(termino, filtros = {}, usuario = null, limite = 20) {
     try {
+      console.log(`Búsqueda: "${termino || ''}", filtros:`, JSON.stringify(filtros, null, 2));
+      
       // Crear query base
       const query = {};
       
       // Búsqueda por texto utilizando expresiones regulares
       if (termino && termino.trim() !== '') {
         // Escapar caracteres especiales para la expresión regular
-        const terminoSeguro = termino.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const terminoSeguro = termino.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         
         // Crear expresión regular case-insensitive
         const regex = new RegExp(terminoSeguro, 'i');
@@ -448,6 +485,8 @@ const libroService = {
           { editorial: regex },
           { 'palabras_clave': regex }
         ];
+        
+        console.log('Query de búsqueda:', JSON.stringify(query));
       }
       
       // Aplicar filtros adicionales
@@ -475,6 +514,8 @@ const libroService = {
 
       // Obtener todos los libros que coinciden con la consulta
       let libros = await Libro.find(query).limit(limite * 2); // Obtenemos más para luego ordenar
+      
+      console.log(`Libros encontrados (sin ordenar): ${libros.length}`);
       
       // Si tenemos un término de búsqueda, calculamos una puntuación de relevancia manual
       if (termino && termino.trim() !== '') {
@@ -541,6 +582,12 @@ const libroService = {
         // Ordenar por puntuación (mayor a menor)
         libros.sort((a, b) => b._puntuacion - a._puntuacion);
         
+        // Debugging
+        console.log('Libros puntuados:');
+        libros.slice(0, 5).forEach(l => {
+          console.log(`- ${l.titulo}: ${l._puntuacion} puntos`);
+        });
+        
         // Limitar resultados
         libros = libros.slice(0, limite);
         
@@ -553,6 +600,8 @@ const libroService = {
         // Si no hay término de búsqueda, limitar resultados
         libros = libros.slice(0, limite);
       }
+
+      console.log(`Libros finales para devolver: ${libros.length}`);
 
       // Registrar la búsqueda en el historial
       const busquedaData = {
@@ -569,6 +618,7 @@ const libroService = {
       // Guardar registro de búsqueda
       const nuevaBusqueda = new Busqueda(busquedaData);
       await nuevaBusqueda.save();
+      console.log('Búsqueda registrada con ID:', nuevaBusqueda._id);
 
       return {
         resultados: libros,
@@ -588,13 +638,16 @@ const libroService = {
    */
   async registrarInteraccionBusqueda(idBusqueda, idLibro) {
     try {
+      console.log(`Registrando interacción: Búsqueda ${idBusqueda}, Libro ${idLibro}`);
+      
       const busqueda = await Busqueda.findById(idBusqueda);
       
       if (!busqueda) {
-        throw new Error('Búsqueda no encontrada');
+        throw new Error(`Búsqueda no encontrada con ID: ${idBusqueda}`);
       }
       
       await busqueda.agregarLibroVisto(idLibro);
+      console.log('Interacción registrada correctamente');
       
       return busqueda;
     } catch (error) {
@@ -611,6 +664,8 @@ const libroService = {
    */
   async obtenerRecomendaciones(idUsuario, limite = 5) {
     try {
+      console.log(`Obteniendo recomendaciones para usuario ${idUsuario}`);
+      
       // Obtener búsquedas recientes del usuario
       const busquedasRecientes = await Busqueda.busquedasRecientesUsuario(idUsuario, 10);
       
@@ -631,13 +686,31 @@ const libroService = {
         .map(entry => entry[0])
         .slice(0, 3); // Tomar los 3 términos más frecuentes
       
+      console.log('Términos frecuentes de búsqueda:', terminosOrdenados);
+      
       if (terminosOrdenados.length > 0) {
         // Construir query para encontrar libros relacionados
         const query = {
           activo: true,
-          stock: { $gt: 0 },
-          $text: { $search: terminosOrdenados.join(' ') }
+          stock: { $gt: 0 }
         };
+        
+        // Crear una condición OR para buscar por términos frecuentes
+        const regexConditions = terminosOrdenados.map(termino => {
+          const regex = new RegExp(termino, 'i');
+          return { 
+            $or: [
+              { titulo: regex },
+              { autor_nombre_completo: regex },
+              { descripcion: regex },
+              { 'palabras_clave': regex }
+            ] 
+          };
+        });
+        
+        if (regexConditions.length > 0) {
+          query.$or = regexConditions;
+        }
         
         // Excluir libros ya vistos
         const librosVistos = [];
@@ -651,16 +724,19 @@ const libroService = {
           query._id = { $nin: librosVistos };
         }
         
+        console.log('Query para recomendaciones:', JSON.stringify(query, null, 2));
+        
         // Buscar libros relacionados con los términos frecuentes
-        return await Libro.find(
-          query,
-          { score: { $meta: "textScore" } }
-        )
-        .sort({ score: { $meta: "textScore" } })
-        .limit(limite);
+        const recomendaciones = await Libro.find(query)
+          .sort({ 'calificaciones.promedio': -1 })
+          .limit(limite);
+        
+        console.log(`Recomendaciones encontradas: ${recomendaciones.length}`);
+        return recomendaciones;
       }
       
       // Si no hay suficientes datos de búsqueda, recomendar los más populares
+      console.log('No hay términos frecuentes, devolviendo libros destacados');
       return await Libro.obtenerLibrosDestacados(limite);
     } catch (error) {
       console.error('Error obteniendo recomendaciones:', error);
@@ -676,9 +752,12 @@ const libroService = {
    */
   async obtenerLibrosConDescuento(limite = 20) {
     try {
+      console.log(`Obteniendo hasta ${limite} libros con descuento`);
+      
       const libros = await Libro.obtenerLibrosConDescuento()
         .limit(limite);
       
+      console.log(`Libros con descuento encontrados: ${libros.length}`);
       return libros.map(l => l.toObject());
     } catch (error) {
       console.error('Error obteniendo libros con descuento:', error);
@@ -693,7 +772,11 @@ const libroService = {
    */
   async obtenerLibrosDestacados(limite = 10) {
     try {
+      console.log(`Obteniendo hasta ${limite} libros destacados`);
+      
       const libros = await Libro.obtenerLibrosDestacados(limite);
+      
+      console.log(`Libros destacados encontrados: ${libros.length}`);
       return libros.map(l => l.toObject());
     } catch (error) {
       console.error('Error obteniendo libros destacados:', error);
@@ -709,7 +792,15 @@ const libroService = {
    */
   async actualizarCalificacion(idLibro, calificacion) {
     try {
+      console.log(`Calificando libro ${idLibro} con ${calificacion} estrellas`);
+      
       const libroActualizado = await Libro.agregarCalificacion(idLibro, calificacion);
+      
+      if (!libroActualizado) {
+        throw new Error(`No se pudo actualizar la calificación del libro ${idLibro}`);
+      }
+      
+      console.log('Calificación actualizada correctamente');
       return libroActualizado.toObject();
     } catch (error) {
       console.error('Error actualizando calificación:', error);
@@ -725,7 +816,11 @@ const libroService = {
    */
   async buscarPorTexto(texto, limite = 20) {
     try {
+      console.log(`Buscando libros con texto "${texto}"`);
+      
       const libros = await Libro.buscarPorTexto(texto, limite);
+      
+      console.log(`Libros encontrados: ${libros.length}`);
       return libros.map(l => l.toObject());
     } catch (error) {
       console.error('Error buscando libros por texto:', error);
@@ -740,6 +835,8 @@ const libroService = {
    */
   async marcarComoHistoricoAgotado(idLibro) {
     try {
+      console.log(`Marcando libro ${idLibro} como histórico agotado`);
+      
       const session = await mongoose.startSession();
       session.startTransaction();
 
@@ -749,7 +846,7 @@ const libroService = {
           .session(session);
         
         if (!libroActualizado) {
-          throw new Error('Libro no encontrado');
+          throw new Error(`Libro no encontrado con ID: ${idLibro}`);
         }
 
         // Actualizar inventario
@@ -759,11 +856,15 @@ const libroService = {
         if (inventario) {
           inventario.estado = 'historico_agotado';
           await inventario.save({ session });
+          console.log('Inventario actualizado a histórico agotado');
+        } else {
+          console.log('No se encontró inventario para este libro');
         }
 
         await session.commitTransaction();
         session.endSession();
         
+        console.log('Libro marcado como histórico agotado correctamente');
         return libroActualizado.toObject();
       } catch (error) {
         await session.abortTransaction();
@@ -784,6 +885,8 @@ const libroService = {
    */
   async agregarEjemplar(idLibro, ejemplarData) {
     try {
+      console.log(`Agregando ejemplar al libro ${idLibro}:`, JSON.stringify(ejemplarData, null, 2));
+      
       const session = await mongoose.startSession();
       session.startTransaction();
 
@@ -797,7 +900,7 @@ const libroService = {
         }
 
         if (!libro) {
-          throw new Error('Libro no encontrado');
+          throw new Error(`Libro no encontrado con ID: ${idLibro}`);
         }
 
         // Verificar si el código ya existe
@@ -812,6 +915,7 @@ const libroService = {
           ejemplarData.estado_fisico || 'excelente',
           ejemplarData.ubicacion || ''
         );
+        console.log('Ejemplar agregado al libro');
 
         // Actualizar inventario
         const inventario = await Inventario.findOne({ id_libro: libro._id })
@@ -824,6 +928,7 @@ const libroService = {
             null, // ID usuario
             `Registro manual de ejemplar: ${ejemplarData.codigo}`
           );
+          console.log('Inventario actualizado');
         } else {
           // Crear inventario si no existe
           const nuevoInventario = new Inventario({
@@ -832,11 +937,13 @@ const libroService = {
             stock_disponible: 1
           });
           await nuevoInventario.save({ session });
+          console.log('Creado nuevo inventario para el libro');
         }
 
         await session.commitTransaction();
         session.endSession();
         
+        console.log('Ejemplar agregado correctamente');
         return libro.toObject();
       } catch (error) {
         await session.abortTransaction();
@@ -858,66 +965,85 @@ const libroService = {
    */
   async actualizarEjemplar(idLibro, codigo, datosActualizados) {
     try {
-      // Buscar el libro
-      let libro;
-      if (mongoose.Types.ObjectId.isValid(idLibro)) {
-        libro = await Libro.findById(idLibro);
-      } else {
-        libro = await Libro.findOne({ id_libro: idLibro });
-      }
-
-      if (!libro) {
-        throw new Error('Libro no encontrado');
-      }
-
-      // Encontrar el ejemplar
-      const ejemplarIndex = libro.ejemplares.findIndex(e => e.codigo === codigo);
-      if (ejemplarIndex === -1) {
-        throw new Error(`Ejemplar con código ${codigo} no encontrado`);
-      }
-
-      // Actualizar los campos del ejemplar
-      if (datosActualizados.estado_fisico) {
-        libro.ejemplares[ejemplarIndex].estado_fisico = datosActualizados.estado_fisico;
-      }
+      console.log(`Actualizando ejemplar ${codigo} del libro ${idLibro}:`, 
+                  JSON.stringify(datosActualizados, null, 2));
       
-      if (datosActualizados.ubicacion !== undefined) {
-        libro.ejemplares[ejemplarIndex].ubicacion = datosActualizados.ubicacion;
-      }
+      // Iniciar sesión de transacción
+      const session = await mongoose.startSession();
+      session.startTransaction();
       
-      if (datosActualizados.disponible !== undefined) {
-        const estadoAnterior = libro.ejemplares[ejemplarIndex].disponible;
-        libro.ejemplares[ejemplarIndex].disponible = datosActualizados.disponible;
+      try {
+        // Buscar el libro
+        let libro;
+        if (mongoose.Types.ObjectId.isValid(idLibro)) {
+          libro = await Libro.findById(idLibro).session(session);
+        } else {
+          libro = await Libro.findOne({ id_libro: idLibro }).session(session);
+        }
+
+        if (!libro) {
+          throw new Error(`Libro no encontrado con ID: ${idLibro}`);
+        }
+
+        // Encontrar el ejemplar
+        const ejemplarIndex = libro.ejemplares.findIndex(e => e.codigo === codigo);
+        if (ejemplarIndex === -1) {
+          throw new Error(`Ejemplar con código ${codigo} no encontrado`);
+        }
+
+        // Actualizar los campos del ejemplar
+        if (datosActualizados.estado_fisico) {
+          libro.ejemplares[ejemplarIndex].estado_fisico = datosActualizados.estado_fisico;
+        }
         
-        // Si cambió disponibilidad, actualizar inventario
-        if (estadoAnterior !== datosActualizados.disponible) {
-          const inventario = await Inventario.findOne({ id_libro: libro._id });
-          if (inventario) {
-            if (datosActualizados.disponible) {
-              // Liberar reserva
-              await inventario.liberarReserva(
-                1, // Un ejemplar
-                null, // ID usuario
-                null, // ID reserva
-                `Actualización manual de disponibilidad: ${codigo}`
-              );
-            } else {
-              // Reservar ejemplar
-              await inventario.reservarEjemplares(
-                1, // Un ejemplar
-                null, // ID usuario
-                null, // ID reserva
-                `Actualización manual de disponibilidad: ${codigo}`
-              );
+        if (datosActualizados.ubicacion !== undefined) {
+          libro.ejemplares[ejemplarIndex].ubicacion = datosActualizados.ubicacion;
+        }
+        
+        if (datosActualizados.disponible !== undefined) {
+          const estadoAnterior = libro.ejemplares[ejemplarIndex].disponible;
+          libro.ejemplares[ejemplarIndex].disponible = datosActualizados.disponible;
+          
+          // Si cambió disponibilidad, actualizar inventario
+          if (estadoAnterior !== datosActualizados.disponible) {
+            const inventario = await Inventario.findOne({ id_libro: libro._id }).session(session);
+            if (inventario) {
+              if (datosActualizados.disponible) {
+                // Liberar reserva
+                await inventario.liberarReserva(
+                  1, // Un ejemplar
+                  null, // ID usuario
+                  null, // ID reserva
+                  `Actualización manual de disponibilidad: ${codigo}`
+                );
+                console.log('Ejemplar marcado como disponible en inventario');
+              } else {
+                // Reservar ejemplar
+                await inventario.reservarEjemplares(
+                  1, // Un ejemplar
+                  null, // ID usuario
+                  null, // ID reserva
+                  `Actualización manual de disponibilidad: ${codigo}`
+                );
+                console.log('Ejemplar marcado como no disponible en inventario');
+              }
             }
           }
         }
-      }
 
-      libro.markModified('ejemplares');
-      await libro.save();
-      
-      return libro.toObject();
+        libro.markModified('ejemplares');
+        await libro.save({ session });
+        
+        await session.commitTransaction();
+        session.endSession();
+        
+        console.log('Ejemplar actualizado correctamente');
+        return libro.toObject();
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+      }
     } catch (error) {
       console.error('Error actualizando ejemplar:', error);
       throw error;
@@ -932,6 +1058,8 @@ const libroService = {
    */
   async eliminarEjemplar(idLibro, codigo) {
     try {
+      console.log(`Eliminando ejemplar ${codigo} del libro ${idLibro}`);
+      
       const session = await mongoose.startSession();
       session.startTransaction();
 
@@ -945,7 +1073,7 @@ const libroService = {
         }
 
         if (!libro) {
-          throw new Error('Libro no encontrado');
+          throw new Error(`Libro no encontrado con ID: ${idLibro}`);
         }
 
         // Encontrar el ejemplar
@@ -962,6 +1090,7 @@ const libroService = {
         libro.stock = libro.ejemplares.length;
         libro.markModified('ejemplares');
         await libro.save({ session });
+        console.log('Ejemplar eliminado de libro');
 
         // Actualizar inventario
         if (estabaDisponible) {
@@ -976,12 +1105,14 @@ const libroService = {
               null, // ID transacción
               `Eliminación manual de ejemplar: ${codigo}`
             );
+            console.log('Inventario actualizado');
           }
         }
 
         await session.commitTransaction();
         session.endSession();
         
+        console.log('Ejemplar eliminado correctamente');
         return libro.toObject();
       } catch (error) {
         await session.abortTransaction();
@@ -1002,6 +1133,8 @@ const libroService = {
    */
   async agregarDescuento(idLibro, descuentoData) {
     try {
+      console.log(`Agregando descuento al libro ${idLibro}:`, JSON.stringify(descuentoData, null, 2));
+      
       // Buscar el libro
       let libro;
       if (mongoose.Types.ObjectId.isValid(idLibro)) {
@@ -1011,7 +1144,7 @@ const libroService = {
       }
 
       if (!libro) {
-        throw new Error('Libro no encontrado');
+        throw new Error(`Libro no encontrado con ID: ${idLibro}`);
       }
 
       // Validar datos del descuento
@@ -1032,6 +1165,7 @@ const libroService = {
         descuentoData.codigo_promocion || ''
       );
       
+      console.log('Descuento agregado correctamente');
       return libro.toObject();
     } catch (error) {
       console.error('Error agregando descuento:', error);
@@ -1046,12 +1180,15 @@ const libroService = {
    */
   async desactivarDescuentos(idLibro) {
     try {
+      console.log(`Desactivando descuentos del libro ${idLibro}`);
+      
       const libroActualizado = await Libro.desactivarDescuentos(idLibro);
       
       if (!libroActualizado) {
-        throw new Error('Libro no encontrado');
+        throw new Error(`Libro no encontrado con ID: ${idLibro}`);
       }
       
+      console.log('Descuentos desactivados correctamente');
       return libroActualizado.toObject();
     } catch (error) {
       console.error('Error desactivando descuentos:', error);
@@ -1066,7 +1203,12 @@ const libroService = {
    */
   async verificarCodigoEjemplar(codigo) {
     try {
-      return await Libro.verificarCodigoEjemplar(codigo);
+      console.log(`Verificando si existe el código de ejemplar: ${codigo}`);
+      
+      const existe = await Libro.verificarCodigoEjemplar(codigo);
+      
+      console.log(`Código ${codigo} existe: ${existe ? 'Sí' : 'No'}`);
+      return existe;
     } catch (error) {
       console.error('Error verificando código de ejemplar:', error);
       throw error;
@@ -1082,6 +1224,16 @@ const libroService = {
    */
   async agregarImagenLibro(idLibro, archivo, metadatos) {
     try {
+      console.log('Agregando imagen al libro:', idLibro);
+      console.log('Archivo recibido:', archivo ? {
+        filename: archivo.filename,
+        originalname: archivo.originalname,
+        mimetype: archivo.mimetype,
+        size: archivo.size,
+        path: archivo.path,
+        url: archivo.url
+      } : 'No hay archivo');
+      
       // Buscar el libro
       let libro;
       if (mongoose.Types.ObjectId.isValid(idLibro)) {
@@ -1091,47 +1243,79 @@ const libroService = {
       }
 
       if (!libro) {
-        throw new Error('Libro no encontrado');
+        throw new Error(`Libro no encontrado con ID: ${idLibro}`);
       }
 
-      // Generar nombre único para el archivo
-      const extension = path.extname(archivo.originalname).toLowerCase();
-      const nombreArchivo = `${libro._id}_${Date.now()}${extension}`;
-      
-      // Directorio de imágenes
-      const directorioImagenes = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads/libros');
-      
-      // Asegurarse de que el directorio exista
-      await fs.mkdir(directorioImagenes, { recursive: true });
-      
-      // Ruta completa del archivo
-      const rutaArchivo = path.join(directorioImagenes, nombreArchivo);
-      
-      // Guardar el archivo en el sistema de archivos
-      await fs.writeFile(rutaArchivo, archivo.buffer);
-      
-      // URL para acceder a la imagen (ajustar según la configuración del servidor)
+      console.log('Libro encontrado:', libro._id.toString());
+
+      // Verificar que la imagen existe
+      if (!archivo || (!archivo.filename && !archivo.path)) {
+        throw new Error('No se recibió un archivo de imagen válido');
+      }
+
+      // URL para acceder a la imagen
       const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-      const urlImagen = `${baseUrl}/uploads/libros/${nombreArchivo}`;
+      const urlImagen = archivo.url || `${baseUrl}/uploads/libros/${archivo.filename}`;
+      
+      console.log('URL de la imagen:', urlImagen);
       
       // Preparar datos de la imagen
       const imagenData = {
         url: urlImagen,
-        nombre_archivo: nombreArchivo,
+        nombre_archivo: archivo.filename,
         tipo: metadatos.tipo || 'detalle',
-        orden: metadatos.orden !== undefined ? metadatos.orden : 999, // Por defecto al final
-        alt_text: metadatos.alt_text || libro.titulo
+        orden: metadatos.orden !== undefined ? parseInt(metadatos.orden) : 999, // Por defecto al final
+        alt_text: metadatos.alt_text || libro.titulo,
+        fecha_subida: new Date(),
+        activa: true
       };
       
-      // Agregar la imagen al libro
-      await libro.agregarImagen(imagenData);
+      console.log('Datos de imagen a guardar:', imagenData);
       
-      // Si es la primera imagen y no hay portada, hacerla portada
-      if (libro.imagenes.length === 1 && !libro.imagenes_legacy.portada) {
-        libro.imagenes_legacy.portada = urlImagen;
-        await libro.save();
+      // Agregar la imagen al libro
+      if (!libro.imagenes) {
+        libro.imagenes = [];
       }
       
+      // Si es portada con orden 0, verificar si ya existe y actualizar
+      if (imagenData.tipo === 'portada' && imagenData.orden === 0) {
+        const portadaIndex = libro.imagenes.findIndex(
+          img => img.tipo === 'portada' && img.orden === 0
+        );
+        
+        if (portadaIndex >= 0) {
+          // Actualizar portada existente
+          libro.imagenes[portadaIndex] = {
+            ...libro.imagenes[portadaIndex].toObject(),
+            ...imagenData
+          };
+        } else {
+          // Agregar nueva portada
+          libro.imagenes.push(imagenData);
+        }
+      } else {
+        // Agregar imagen normal
+        libro.imagenes.push(imagenData);
+      }
+      
+      // Ordenar imágenes por orden
+      libro.imagenes.sort((a, b) => a.orden - b.orden);
+      
+      libro.markModified('imagenes');
+      
+      // Si es la primera imagen y no hay portada en legacy, hacerla portada
+      if (libro.imagenes.length === 1 && (!libro.imagenes_legacy || !libro.imagenes_legacy.portada)) {
+        if (!libro.imagenes_legacy) {
+          libro.imagenes_legacy = { adicionales: [] };
+        }
+        libro.imagenes_legacy.portada = urlImagen;
+        libro.markModified('imagenes_legacy');
+      }
+      
+      // Guardar el libro
+      await libro.save();
+      
+      console.log('Imagen agregada correctamente');
       return libro.toObject();
     } catch (error) {
       console.error('Error agregando imagen al libro:', error);
@@ -1147,6 +1331,8 @@ const libroService = {
    */
   async actualizarOrdenImagenes(idLibro, ordenesNuevos) {
     try {
+      console.log(`Actualizando orden de imágenes del libro ${idLibro}:`, ordenesNuevos);
+      
       // Buscar el libro
       let libro;
       if (mongoose.Types.ObjectId.isValid(idLibro)) {
@@ -1156,12 +1342,13 @@ const libroService = {
       }
 
       if (!libro) {
-        throw new Error('Libro no encontrado');
+        throw new Error(`Libro no encontrado con ID: ${idLibro}`);
       }
 
       // Actualizar orden de imágenes
       await libro.actualizarOrdenImagenes(ordenesNuevos);
       
+      console.log('Orden de imágenes actualizado correctamente');
       return libro.toObject();
     } catch (error) {
       console.error('Error actualizando orden de imágenes:', error);
@@ -1177,6 +1364,8 @@ const libroService = {
    */
   async eliminarImagenLibro(idLibro, idImagen) {
     try {
+      console.log(`Eliminando imagen ${idImagen} del libro ${idLibro}`);
+      
       // Buscar el libro
       let libro;
       if (mongoose.Types.ObjectId.isValid(idLibro)) {
@@ -1186,13 +1375,13 @@ const libroService = {
       }
 
       if (!libro) {
-        throw new Error('Libro no encontrado');
+        throw new Error(`Libro no encontrado con ID: ${idLibro}`);
       }
 
       // Encontrar la imagen
       const imagen = libro.imagenes.id(idImagen);
       if (!imagen) {
-        throw new Error('Imagen no encontrada');
+        throw new Error(`Imagen no encontrada con ID: ${idImagen}`);
       }
 
       // Guardar nombre de archivo para eliminar después
@@ -1206,11 +1395,13 @@ const libroService = {
         const directorioImagenes = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads/libros');
         const rutaArchivo = path.join(directorioImagenes, nombreArchivo);
         await fs.unlink(rutaArchivo);
+        console.log('Archivo físico eliminado');
       } catch (err) {
         console.warn(`No se pudo eliminar el archivo físico: ${err.message}`);
         // Continuar incluso si no se puede eliminar el archivo físico
       }
       
+      console.log('Imagen eliminada correctamente');
       return libro.toObject();
     } catch (error) {
       console.error('Error eliminando imagen:', error);
@@ -1228,6 +1419,8 @@ const libroService = {
    */
   async reservarStock(idLibro, cantidad, idUsuario, idReserva) {
     try {
+      console.log(`Reservando ${cantidad} unidades del libro ${idLibro}`);
+      
       // Iniciar sesión de transacción para asegurar atomicidad
       const session = await mongoose.startSession();
       session.startTransaction();
@@ -1242,7 +1435,7 @@ const libroService = {
         }
 
         if (!libro) {
-          throw new Error('Libro no encontrado');
+          throw new Error(`Libro no encontrado con ID: ${idLibro}`);
         }
 
         // Verificar si hay suficiente stock disponible
@@ -1253,6 +1446,8 @@ const libroService = {
           throw new Error('Inventario no encontrado para este libro');
         }
 
+        console.log(`Stock disponible: ${inventario.stock_disponible}, Solicitado: ${cantidad}`);
+        
         if (inventario.stock_disponible < cantidad) {
           throw new Error(`Stock insuficiente. Disponible: ${inventario.stock_disponible}, Solicitado: ${cantidad}`);
         }
@@ -1268,6 +1463,7 @@ const libroService = {
         await session.commitTransaction();
         session.endSession();
         
+        console.log(`Reservados ${cantidad} ejemplares correctamente`);
         return {
           exito: true,
           mensaje: `${cantidad} ejemplar(es) reservado(s) exitosamente`,
@@ -1278,6 +1474,7 @@ const libroService = {
           }
         };
       } catch (error) {
+        console.error('Error reservando stock:', error);
         await session.abortTransaction();
         session.endSession();
         throw error;
@@ -1298,6 +1495,8 @@ const libroService = {
    */
   async liberarStockReservado(idLibro, cantidad, idUsuario, idReserva) {
     try {
+      console.log(`Liberando ${cantidad} unidades reservadas del libro ${idLibro}`);
+      
       // Iniciar sesión de transacción
       const session = await mongoose.startSession();
       session.startTransaction();
@@ -1312,7 +1511,7 @@ const libroService = {
         }
 
         if (!libro) {
-          throw new Error('Libro no encontrado');
+          throw new Error(`Libro no encontrado con ID: ${idLibro}`);
         }
 
         // Liberar stock en el inventario
@@ -1338,6 +1537,7 @@ const libroService = {
         await session.commitTransaction();
         session.endSession();
         
+        console.log(`Liberados ${cantidad} ejemplares correctamente`);
         return {
           exito: true,
           mensaje: `${cantidad} ejemplar(es) liberado(s) exitosamente`,
@@ -1369,6 +1569,8 @@ const libroService = {
    */
   async confirmarCompraLibro(idLibro, cantidad, idUsuario, idTransaccion, idReserva) {
     try {
+      console.log(`Confirmando compra de ${cantidad} unidades del libro ${idLibro}`);
+      
       // Iniciar sesión de transacción
       const session = await mongoose.startSession();
       session.startTransaction();
@@ -1383,7 +1585,7 @@ const libroService = {
         }
 
         if (!libro) {
-          throw new Error('Libro no encontrado');
+          throw new Error(`Libro no encontrado con ID: ${idLibro}`);
         }
 
         // Confirmar venta en el inventario
@@ -1406,6 +1608,7 @@ const libroService = {
         await session.commitTransaction();
         session.endSession();
         
+        console.log(`Compra de ${cantidad} ejemplares confirmada`);
         return {
           exito: true,
           mensaje: `Compra de ${cantidad} ejemplar(es) registrada exitosamente`,
