@@ -458,6 +458,7 @@ libroSchema.methods.eliminarImagen = function(imagenId) {
 // MÉTODOS ESTÁTICOS
 // Buscar libros por criterios múltiples
 // Buscar libros por criterios múltiples
+// Mejora del método estático buscarPorCriterios en libroModel
 libroSchema.statics.buscarPorCriterios = function(criterios) {
   const query = { activo: true }; // Por defecto solo mostrar activos
   
@@ -471,43 +472,101 @@ libroSchema.statics.buscarPorCriterios = function(criterios) {
       .trim(); // Eliminar espacios
   };
   
-  // Función para crear condición de búsqueda insensible a acentos
-  const crearCondicionInsensibleAcentos = (campo, valor) => {
-    const valorNormalizado = normalizarTexto(valor);
-    return {
-      $or: [
-        { [campo]: { $regex: valor, $options: 'i' } },
-        { [campo]: { $regex: valorNormalizado, $options: 'i' } },
-        // Búsqueda de palabras individuales para mayor flexibilidad
-        ...valor.split(/\s+/).filter(p => p.length > 2).map(palabra => ({
-          [campo]: { $regex: palabra, $options: 'i' }
-        })),
-        ...valorNormalizado.split(/\s+/).filter(p => p.length > 2).map(palabra => ({
-          [campo]: { $regex: palabra, $options: 'i' }
-        }))
-      ]
-    };
+  // Función para escapar caracteres especiales en expresiones regulares
+  const escaparRegex = (texto) => {
+    return texto ? texto.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') : '';
+  };
+  
+  // Función mejorada para crear condición de búsqueda insensible a acentos y con coincidencias parciales
+  const crearCondicionBusquedaFlexible = (campo, valor) => {
+    if (!valor || valor.trim() === '') return null;
+    
+    const valorLimpio = valor.trim();
+    const valorNormalizado = normalizarTexto(valorLimpio);
+    const valorRegex = escaparRegex(valorLimpio);
+    const valorNormalizadoRegex = escaparRegex(valorNormalizado);
+    
+    // Array para condiciones OR
+    const condicionesOR = [];
+    
+    // Coincidencia exacta (con/sin acentos)
+    condicionesOR.push(
+      { [campo]: { $regex: `^${valorRegex}$`, $options: 'i' } },
+      { [campo]: { $regex: `^${valorNormalizadoRegex}$`, $options: 'i' } }
+    );
+    
+    // Coincidencia de palabra completa (con/sin acentos)
+    condicionesOR.push(
+      { [campo]: { $regex: `\\b${valorRegex}\\b`, $options: 'i' } },
+      { [campo]: { $regex: `\\b${valorNormalizadoRegex}\\b`, $options: 'i' } }
+    );
+    
+    // Coincidencia al inicio de palabra (con/sin acentos)
+    condicionesOR.push(
+      { [campo]: { $regex: `\\b${valorRegex}`, $options: 'i' } },
+      { [campo]: { $regex: `\\b${valorNormalizadoRegex}`, $options: 'i' } }
+    );
+    
+    // Coincidencia en cualquier parte (con/sin acentos)
+    condicionesOR.push(
+      { [campo]: { $regex: valorRegex, $options: 'i' } },
+      { [campo]: { $regex: valorNormalizadoRegex, $options: 'i' } }
+    );
+    
+    // Coincidencia parcial más flexible
+    condicionesOR.push(
+      { [campo]: { $regex: `.*${valorRegex}.*`, $options: 'i' } },
+      { [campo]: { $regex: `.*${valorNormalizadoRegex}.*`, $options: 'i' } }
+    );
+    
+    // Búsqueda por palabras individuales
+    const palabras = valorLimpio.split(/\s+/).filter(p => p.length >= 1);
+    palabras.forEach(palabra => {
+      const palabraNormalizada = normalizarTexto(palabra);
+      const palabraRegex = escaparRegex(palabra);
+      const palabraNormalizadaRegex = escaparRegex(palabraNormalizada);
+      
+      condicionesOR.push(
+        { [campo]: { $regex: palabraRegex, $options: 'i' } },
+        { [campo]: { $regex: palabraNormalizadaRegex, $options: 'i' } },
+        // Coincidencia parcial más flexible para cada palabra
+        { [campo]: { $regex: `.*${palabraRegex}.*`, $options: 'i' } },
+        { [campo]: { $regex: `.*${palabraNormalizadaRegex}.*`, $options: 'i' } }
+      );
+    });
+    
+    // Eliminar duplicados (pueden generarse con las condiciones)
+    const condicionesUnicas = Array.from(new Set(condicionesOR.map(JSON.stringify)))
+                               .map(JSON.parse);
+    
+    return { $or: condicionesUnicas };
   };
   
   // Mapeo de criterios de búsqueda desde la UI a la estructura de MongoDB
   let condicionesAND = [];
   
+  // Aplicar búsqueda flexible a campos principales
   if (criterios.titulo) {
-    condicionesAND.push(crearCondicionInsensibleAcentos('titulo', criterios.titulo));
+    const condicionTitulo = crearCondicionBusquedaFlexible('titulo', criterios.titulo);
+    if (condicionTitulo) condicionesAND.push(condicionTitulo);
   }
   
   if (criterios.autor) {
-    condicionesAND.push(crearCondicionInsensibleAcentos('autor_nombre_completo', criterios.autor));
+    const condicionAutor = crearCondicionBusquedaFlexible('autor_nombre_completo', criterios.autor);
+    if (condicionAutor) condicionesAND.push(condicionAutor);
   }
   
   if (criterios.genero) {
-    condicionesAND.push(crearCondicionInsensibleAcentos('genero', criterios.genero));
+    const condicionGenero = crearCondicionBusquedaFlexible('genero', criterios.genero);
+    if (condicionGenero) condicionesAND.push(condicionGenero);
   }
   
   if (criterios.editorial) {
-    condicionesAND.push(crearCondicionInsensibleAcentos('editorial', criterios.editorial));
+    const condicionEditorial = crearCondicionBusquedaFlexible('editorial', criterios.editorial);
+    if (condicionEditorial) condicionesAND.push(condicionEditorial);
   }
   
+  // Campos que requieren coincidencia exacta
   if (criterios.ISBN) query.ISBN = criterios.ISBN;
   if (criterios.idioma) query.idioma = criterios.idioma;
   if (criterios.estado) query.estado = criterios.estado;
@@ -530,25 +589,21 @@ libroSchema.statics.buscarPorCriterios = function(criterios) {
     query.stock = { $gt: 0 };
   }
   
-  // Búsqueda de texto
+  // Búsqueda general de texto (q)
   if (criterios.q) {
-    // Crear condiciones de búsqueda más robustas para el término general
-    condicionesAND.push({
-      $or: [
-        // Búsqueda en título
-        ...crearCondicionInsensibleAcentos('titulo', criterios.q).$or,
-        // Búsqueda en autor
-        ...crearCondicionInsensibleAcentos('autor_nombre_completo', criterios.q).$or,
-        // Búsqueda en género
-        ...crearCondicionInsensibleAcentos('genero', criterios.q).$or,
-        // Búsqueda en descripción
-        ...crearCondicionInsensibleAcentos('descripcion', criterios.q).$or,
-        // Búsqueda en palabras clave
-        ...crearCondicionInsensibleAcentos('palabras_clave', criterios.q).$or,
-        // Búsqueda en editorial
-        ...crearCondicionInsensibleAcentos('editorial', criterios.q).$or
-      ]
+    const campos = ['titulo', 'autor_nombre_completo', 'genero', 'editorial', 'descripcion', 'palabras_clave'];
+    const condicionesQ = { $or: [] };
+    
+    campos.forEach(campo => {
+      const condicion = crearCondicionBusquedaFlexible(campo, criterios.q);
+      if (condicion && condicion.$or) {
+        condicionesQ.$or = [...condicionesQ.$or, ...condicion.$or];
+      }
     });
+    
+    if (condicionesQ.$or.length > 0) {
+      condicionesAND.push(condicionesQ);
+    }
   }
   
   // Combinar todas las condiciones con el query base
