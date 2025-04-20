@@ -464,44 +464,85 @@ const libroService = {
    */
   async buscarYRegistrar(termino, filtros = {}, usuario = null, limite = 20) {
     try {
+      // Decodificar términos de búsqueda que puedan venir URL-encoded
+      if (termino) {
+        termino = decodeURIComponent(termino);
+      }
+      
       console.log(`Búsqueda: "${termino || ''}", filtros:`, JSON.stringify(filtros, null, 2));
       
       // Crear query base
       const query = {};
       
+      // Función para normalizar texto (quitar acentos y convertir a minúsculas)
+      const normalizarTexto = (texto) => {
+        if (!texto) return '';
+        return texto
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+      };
+      
       // Búsqueda por texto utilizando expresiones regulares
       if (termino && termino.trim() !== '') {
-        // Dividir el término en palabras individuales (de longitud > 2)
-        const palabras = termino.trim().toLowerCase().split(/\s+/).filter(p => p.length > 2);
+        const terminoNormalizado = termino.trim();
+        const terminoSinAcentos = normalizarTexto(terminoNormalizado);
         
-        // Si hay palabras para buscar
-        if (palabras.length > 0) {
-          // Crear condiciones para cada palabra
-          const condiciones = [];
+        // Crear condiciones para búsqueda por texto completo
+        const textConditions = [
+          // Búsqueda exacta con acentos
+          { titulo: { $regex: terminoNormalizado, $options: 'i' } },
+          { autor_nombre_completo: { $regex: terminoNormalizado, $options: 'i' } },
+          { descripcion: { $regex: terminoNormalizado, $options: 'i' } },
+          { editorial: { $regex: terminoNormalizado, $options: 'i' } },
+          { genero: { $regex: terminoNormalizado, $options: 'i' } },
           
-          palabras.forEach(palabra => {
-            // Escapar caracteres especiales para la expresión regular
-            const palabraSegura = palabra.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            
-            // Crear condiciones para cada campo
-            condiciones.push(
-              { titulo: { $regex: palabraSegura, $options: 'i' } },
-              { autor_nombre_completo: { $regex: palabraSegura, $options: 'i' } },
-              { descripcion: { $regex: palabraSegura, $options: 'i' } },
-              { editorial: { $regex: palabraSegura, $options: 'i' } },
-              { palabras_clave: { $regex: palabraSegura, $options: 'i' } }
-            );
+          // Búsqueda sin acentos para mayor flexibilidad
+          { titulo: { $regex: terminoSinAcentos, $options: 'i' } },
+          { autor_nombre_completo: { $regex: terminoSinAcentos, $options: 'i' } }
+        ];
+        
+        // Si hay palabras clave, buscar también en ellas
+        textConditions.push({
+          palabras_clave: { $regex: terminoNormalizado, $options: 'i' }
+        });
+        
+        // Dividir en palabras para búsqueda más precisa
+        const palabras = terminoNormalizado.split(/\s+/).filter(p => p.trim());
+        const palabrasSinAcentos = palabras.map(normalizarTexto);
+        
+        // Si hay múltiples palabras, crear condiciones adicionales
+        if (palabras.length > 1) {
+          palabras.forEach((palabra, index) => {
+            if (palabra.length >= 2) { // Considerar palabras de al menos 2 caracteres
+              const palabraSinAcentos = palabrasSinAcentos[index];
+              
+              textConditions.push(
+                { titulo: { $regex: palabra, $options: 'i' } },
+                { autor_nombre_completo: { $regex: palabra, $options: 'i' } },
+                { genero: { $regex: palabra, $options: 'i' } },
+                
+                // Versiones sin acentos
+                { titulo: { $regex: palabraSinAcentos, $options: 'i' } },
+                { autor_nombre_completo: { $regex: palabraSinAcentos, $options: 'i' } }
+              );
+            }
           });
-          
-          // Combinar todas las condiciones en un $or
-          query.$or = condiciones;
-          
-          console.log('Query de búsqueda:', JSON.stringify(query));
         }
+        
+        // Combinar todas las condiciones en un $or
+        query.$or = textConditions;
+        
+        console.log('Query de búsqueda generada');
       }
       
       // Aplicar filtros adicionales
-      if (filtros.genero) query.genero = filtros.genero;
+      if (filtros.genero) {
+        // Normalizar y hacer flexible la búsqueda por género
+        const generoNormalizado = normalizarTexto(filtros.genero);
+        query.genero = { $regex: generoNormalizado, $options: 'i' };
+      }
+      
       if (filtros.editorial) query.editorial = { $regex: filtros.editorial, $options: 'i' };
       if (filtros.idioma) query.idioma = filtros.idioma;
       if (filtros.estado) query.estado = filtros.estado;
@@ -531,6 +572,7 @@ const libroService = {
       // Si tenemos un término de búsqueda, calculamos una puntuación de relevancia manual
       if (termino && termino.trim() !== '') {
         const terminoLower = termino.toLowerCase();
+        const terminoSinAcentos = normalizarTexto(termino);
         const palabrasBusqueda = terminoLower.split(/\s+/).filter(p => p.length > 2);
         
         // Asignar puntuación a cada libro según relevancia
@@ -548,40 +590,63 @@ const libroService = {
             }
           }
           
-          // Coincidencia en autor
-          if (libroObj.autor_nombre_completo && 
-              libroObj.autor_nombre_completo.toLowerCase().includes(terminoLower)) {
+          // Coincidencia sin acentos en título
+          const tituloSinAcentos = normalizarTexto(libroObj.titulo || '');
+          if (tituloSinAcentos.includes(terminoSinAcentos)) {
             puntuacion += 8;
+          }
+          
+          // Coincidencia en autor
+          if (libroObj.autor_nombre_completo) {
+            const autorLower = libroObj.autor_nombre_completo.toLowerCase();
+            const autorSinAcentos = normalizarTexto(libroObj.autor_nombre_completo);
+            
+            if (autorLower.includes(terminoLower)) {
+              puntuacion += 8;
+            }
+            
+            if (autorSinAcentos.includes(terminoSinAcentos)) {
+              puntuacion += 6;
+            }
           }
           
           // Coincidencia en palabras clave
           if (libroObj.palabras_clave && libroObj.palabras_clave.length > 0) {
             const coincidencias = libroObj.palabras_clave.filter(
-              palabra => palabra.toLowerCase().includes(terminoLower)
+              palabra => normalizarTexto(palabra).includes(terminoSinAcentos)
             ).length;
             puntuacion += coincidencias * 3;
           }
           
           // Coincidencia en descripción
-          if (libroObj.descripcion && libroObj.descripcion.toLowerCase().includes(terminoLower)) {
-            puntuacion += 2;
+          if (libroObj.descripcion) {
+            const descripcionSinAcentos = normalizarTexto(libroObj.descripcion);
+            if (descripcionSinAcentos.includes(terminoSinAcentos)) {
+              puntuacion += 2;
+            }
           }
           
           // Coincidencia por palabras individuales
           if (palabrasBusqueda.length > 1) {
             palabrasBusqueda.forEach(palabra => {
-              if (libroObj.titulo && libroObj.titulo.toLowerCase().includes(palabra)) {
+              const palabraSinAcentos = normalizarTexto(palabra);
+              
+              if (tituloSinAcentos.includes(palabraSinAcentos)) {
                 puntuacion += 1;
               }
+              
               if (libroObj.autor_nombre_completo && 
-                  libroObj.autor_nombre_completo.toLowerCase().includes(palabra)) {
+                  normalizarTexto(libroObj.autor_nombre_completo).includes(palabraSinAcentos)) {
                 puntuacion += 0.8;
               }
-              if (libroObj.descripcion && libroObj.descripcion.toLowerCase().includes(palabra)) {
+              
+              if (libroObj.descripcion && 
+                  normalizarTexto(libroObj.descripcion).includes(palabraSinAcentos)) {
                 puntuacion += 0.5;
               }
+              
               if (libroObj.palabras_clave && libroObj.palabras_clave.some(pc => 
-                pc.toLowerCase().includes(palabra))) {
+                normalizarTexto(pc).includes(palabraSinAcentos))) {
                 puntuacion += 1.5;
               }
             });
@@ -687,11 +752,12 @@ const libroService = {
       // Extraer términos más frecuentes
       const terminosFrecuentes = {};
       busquedasRecientes.forEach(busqueda => {
-        if (busqueda.termino) {
-          if (!terminosFrecuentes[busqueda.termino]) {
-            terminosFrecuentes[busqueda.termino] = 0;
+        if (busqueda.termino && busqueda.termino.trim() !== '') {
+          const termino = busqueda.termino.toLowerCase().trim();
+          if (!terminosFrecuentes[termino]) {
+            terminosFrecuentes[termino] = 0;
           }
-          terminosFrecuentes[busqueda.termino]++;
+          terminosFrecuentes[termino]++;
         }
       });
       
@@ -703,60 +769,103 @@ const libroService = {
       
       console.log('Términos frecuentes de búsqueda:', terminosOrdenados);
       
+      // Obtener libros ya vistos por el usuario (para excluirlos)
+      const librosVistos = [];
+      busquedasRecientes.forEach(busqueda => {
+        if (busqueda.interaccion && busqueda.interaccion.libros_vistos) {
+          librosVistos.push(...busqueda.interaccion.libros_vistos);
+        }
+      });
+      
+      // ESTRATEGIA 1: Recomendaciones basadas en calificaciones
+      console.log('Buscando recomendaciones por calificaciones...');
+      const recomendacionesPorCalificacion = await Libro.find({ 
+        activo: true,
+        stock: { $gt: 0 },
+        'calificaciones.cantidad': { $gt: 0 },
+        'calificaciones.promedio': { $gte: 4.0 }
+      })
+      .sort({ 'calificaciones.promedio': -1 })
+      .limit(limite);
+      
+      if (recomendacionesPorCalificacion.length > 0) {
+        console.log(`Encontradas ${recomendacionesPorCalificacion.length} recomendaciones por calificación`);
+        return recomendacionesPorCalificacion;
+      }
+      
+      // ESTRATEGIA 2: Recomendaciones basadas en términos de búsqueda
       if (terminosOrdenados.length > 0) {
-        // Construir query para encontrar libros relacionados
+        console.log('Buscando recomendaciones por términos frecuentes...');
+        // Construir query para búsqueda por términos
         const query = {
           activo: true,
           stock: { $gt: 0 }
         };
         
-        // Crear una condición OR para buscar por términos frecuentes
-        const regexConditions = terminosOrdenados.map(termino => {
-          const regex = new RegExp(termino, 'i');
-          return { 
-            $or: [
-              { titulo: regex },
-              { autor_nombre_completo: regex },
-              { descripcion: regex },
-              { 'palabras_clave': regex }
-            ] 
-          };
-        });
-        
-        if (regexConditions.length > 0) {
-          query.$or = regexConditions;
-        }
-        
-        // Excluir libros ya vistos
-        const librosVistos = [];
-        busquedasRecientes.forEach(busqueda => {
-          if (busqueda.interaccion && busqueda.interaccion.libros_vistos) {
-            librosVistos.push(...busqueda.interaccion.libros_vistos);
-          }
-        });
-        
+        // Excluir libros ya vistos si hay alguno
         if (librosVistos.length > 0) {
           query._id = { $nin: librosVistos };
         }
         
-        console.log('Query para recomendaciones:', JSON.stringify(query, null, 2));
+        // Crear condiciones para búsqueda por términos
+        const orConditions = [];
+        terminosOrdenados.forEach(termino => {
+          orConditions.push(
+            { titulo: { $regex: termino, $options: 'i' } },
+            { autor_nombre_completo: { $regex: termino, $options: 'i' } },
+            { genero: { $regex: termino, $options: 'i' } },
+            { descripcion: { $regex: termino, $options: 'i' } }
+          );
+        });
         
-        // Buscar libros relacionados con los términos frecuentes
+        if (orConditions.length > 0) {
+          query.$or = orConditions;
+        }
+        
+        // Buscar libros relacionados con términos frecuentes
         const recomendaciones = await Libro.find(query)
-          .sort({ 'calificaciones.promedio': -1 })
+          .sort({ fecha_registro: -1 })
           .limit(limite);
         
-        console.log(`Recomendaciones encontradas: ${recomendaciones.length}`);
-        return recomendaciones;
+        if (recomendaciones.length > 0) {
+          console.log(`Encontradas ${recomendaciones.length} recomendaciones por términos`);
+          return recomendaciones;
+        }
       }
       
-      // Si no hay suficientes datos de búsqueda, recomendar los más populares
-      console.log('No hay términos frecuentes, devolviendo libros destacados');
-      return await Libro.obtenerLibrosDestacados(limite);
+      // ESTRATEGIA 3: Recomendaciones por libros con descuento
+      console.log('Buscando recomendaciones por descuento...');
+      const librosConDescuento = await Libro.obtenerLibrosConDescuento()
+        .limit(limite);
+      
+      if (librosConDescuento.length > 0) {
+        console.log(`Encontradas ${librosConDescuento.length} recomendaciones con descuento`);
+        return librosConDescuento;
+      }
+      
+      // ESTRATEGIA 4: Como último recurso, mostrar libros recientes
+      console.log('Mostrando libros recientes como recomendación...');
+      return await Libro.find({ 
+        activo: true, 
+        stock: { $gt: 0 } 
+      })
+      .sort({ fecha_registro: -1 })
+      .limit(limite);
+      
     } catch (error) {
       console.error('Error obteniendo recomendaciones:', error);
-      // Si hay error, devolver libros populares como fallback
-      return await Libro.obtenerLibrosDestacados(limite);
+      // Si hay error, devolver libros recientes como fallback
+      try {
+        return await Libro.find({ 
+          activo: true, 
+          stock: { $gt: 0 } 
+        })
+        .sort({ fecha_registro: -1 })
+        .limit(limite);
+      } catch (err) {
+        console.error('Error en fallback de recomendaciones:', err);
+        return []; // Devolver array vacío en caso de error completo
+      }
     }
   },
 
@@ -1415,58 +1524,85 @@ const libroService = {
       } else {
         libro = await Libro.findOne({ id_libro: idLibro });
       }
-
+  
       if (!libro) {
         throw new Error(`Libro no encontrado con ID: ${idLibro}`);
       }
-
-      // Encontrar la imagen
-      const imagen = libro.imagenes.id(idImagen);
-      if (!imagen) {
-        // Si no encuentra la imagen por ID MongoDB, intentamos buscarla manualmente
-        const imagenIndex = libro.imagenes.findIndex(img => 
-          img._id.toString() === idImagen || 
-          (img._id && img._id.toString() === idImagen)
-        );
-        
-        if (imagenIndex === -1) {
-          throw new Error(`Imagen no encontrada con ID: ${idImagen}`);
-        }
-        
-        // Guardar nombre de archivo para eliminar después
-        const nombreArchivo = libro.imagenes[imagenIndex].nombre_archivo;
-        
-        // Eliminar la imagen por índice
-        libro.imagenes.splice(imagenIndex, 1);
-        libro.markModified('imagenes');
-        await libro.save();
-        
-        // Eliminar archivo físico si existe
-        try {
-          const directorioImagenes = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads/libros');
-          const rutaArchivo = path.join(directorioImagenes, nombreArchivo);
-          await fs.unlink(rutaArchivo);
-          console.log('Archivo físico eliminado');
-        } catch (err) {
-          console.warn(`No se pudo eliminar el archivo físico: ${err.message}`);
-          // Continuar incluso si no se puede eliminar el archivo físico
-        }
-        
-        return libro;
+  
+      // Si el libro no tiene imágenes
+      if (!libro.imagenes || libro.imagenes.length === 0) {
+        throw new Error(`El libro no tiene imágenes para eliminar`);
       }
   
-      // Si encontró la imagen con id()
-      const nombreArchivo = imagen.nombre_archivo;
+      // Intentamos distintas estrategias para encontrar la imagen
+      let imagenAEliminar = null;
+      let imagenIndex = -1;
       
-      // Eliminar la imagen del libro
-      libro.imagenes.pull(idImagen);
+      // 1. Buscar imagen por ID exacto (si es un ObjectID válido)
+      if (mongoose.Types.ObjectId.isValid(idImagen)) {
+        // Intentamos encontrar directamente por id
+        imagenIndex = libro.imagenes.findIndex(img => 
+          img._id && img._id.toString() === idImagen
+        );
+        
+        if (imagenIndex >= 0) {
+          imagenAEliminar = libro.imagenes[imagenIndex];
+        }
+      }
+      
+      // 2. Si no encontramos por ID, intentar por posición o atributos
+      if (imagenIndex === -1) {
+        // Si idImagen es un número, buscar por índice
+        const posicion = parseInt(idImagen);
+        if (!isNaN(posicion) && posicion >= 0 && posicion < libro.imagenes.length) {
+          imagenIndex = posicion;
+          imagenAEliminar = libro.imagenes[imagenIndex];
+        } else {
+          // 3. Buscar por tipo o nombre de archivo
+          imagenIndex = libro.imagenes.findIndex(img => 
+            (img.tipo === 'portada' && idImagen.includes('portada')) ||
+            (img.tipo === 'contraportada' && idImagen.includes('contraportada')) ||
+            (img.nombre_archivo && img.nombre_archivo.includes(idImagen))
+          );
+          
+          if (imagenIndex >= 0) {
+            imagenAEliminar = libro.imagenes[imagenIndex];
+          }
+        }
+      }
+      
+      // 4. Último recurso: simplemente eliminar la primera imagen
+      if (imagenIndex === -1 && libro.imagenes.length > 0) {
+        imagenIndex = 0;
+        imagenAEliminar = libro.imagenes[0];
+        console.log("No se encontró la imagen específica, eliminando la primera imagen disponible.");
+      }
+      
+      // Si aún así no se encuentra la imagen
+      if (imagenIndex === -1) {
+        console.log("Imágenes disponibles:", libro.imagenes.map(img => ({
+          _id: img._id?.toString(),
+          tipo: img.tipo,
+          orden: img.orden,
+          nombre_archivo: img.nombre_archivo
+        })));
+        throw new Error(`Imagen no encontrada con ID: ${idImagen}`);
+      }
+      
+      // Guardar nombre de archivo para eliminar después
+      const nombreArchivo = libro.imagenes[imagenIndex].nombre_archivo;
+      
+      // Eliminar la imagen utilizando splice (más seguro que .remove())
+      libro.imagenes.splice(imagenIndex, 1);
+      libro.markModified('imagenes');
+      
       await libro.save();
       
       // Eliminar archivo físico
       try {
         const directorioImagenes = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads/libros');
         const rutaArchivo = path.join(directorioImagenes, nombreArchivo);
-        await fs.unlink(rutaArchivo);
+        await fs.unlink(rutaArchivo).catch(e => console.warn(`Aviso: ${e.message}`));
         console.log('Archivo físico eliminado');
       } catch (err) {
         console.warn(`No se pudo eliminar el archivo físico: ${err.message}`);
