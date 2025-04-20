@@ -461,76 +461,51 @@ libroSchema.methods.eliminarImagen = function(imagenId) {
 libroSchema.statics.buscarPorCriterios = function(criterios) {
   const query = { activo: true }; // Por defecto solo mostrar activos
   
-  // Función auxiliar para normalizar texto (quitar acentos)
+  // Función auxiliar mejorada para normalizar texto (quitar acentos)
   const normalizarTexto = (texto) => {
     if (!texto) return '';
     return texto
       .normalize('NFD') // Normalización Unicode
       .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
-      .toLowerCase(); // Convertir a minúsculas
+      .toLowerCase() // Convertir a minúsculas
+      .trim(); // Eliminar espacios
+  };
+  
+  // Función para crear condición de búsqueda insensible a acentos
+  const crearCondicionInsensibleAcentos = (campo, valor) => {
+    const valorNormalizado = normalizarTexto(valor);
+    return {
+      $or: [
+        { [campo]: { $regex: valor, $options: 'i' } },
+        { [campo]: { $regex: valorNormalizado, $options: 'i' } },
+        // Búsqueda de palabras individuales para mayor flexibilidad
+        ...valor.split(/\s+/).filter(p => p.length > 2).map(palabra => ({
+          [campo]: { $regex: palabra, $options: 'i' }
+        })),
+        ...valorNormalizado.split(/\s+/).filter(p => p.length > 2).map(palabra => ({
+          [campo]: { $regex: palabra, $options: 'i' }
+        }))
+      ]
+    };
   };
   
   // Mapeo de criterios de búsqueda desde la UI a la estructura de MongoDB
+  let condicionesAND = [];
+  
   if (criterios.titulo) {
-    const tituloNormalizado = normalizarTexto(criterios.titulo);
-    query.$or = [
-      { titulo: { $regex: criterios.titulo, $options: 'i' } },
-      { titulo: { $regex: tituloNormalizado, $options: 'i' } }
-    ];
+    condicionesAND.push(crearCondicionInsensibleAcentos('titulo', criterios.titulo));
   }
   
   if (criterios.autor) {
-    const autorNormalizado = normalizarTexto(criterios.autor);
-    const autorCondition = {
-      $or: [
-        { autor_nombre_completo: { $regex: criterios.autor, $options: 'i' } },
-        { autor_nombre_completo: { $regex: autorNormalizado, $options: 'i' } }
-      ]
-    };
-    
-    // Agregar a la query existente
-    if (query.$or) {
-      query.$and = [
-        { $or: query.$or },
-        autorCondition
-      ];
-      delete query.$or;
-    } else {
-      query.$or = autorCondition.$or;
-    }
+    condicionesAND.push(crearCondicionInsensibleAcentos('autor_nombre_completo', criterios.autor));
   }
   
-  // Para el género, hacemos una búsqueda insensible a acentos
   if (criterios.genero) {
-    const generoNormalizado = normalizarTexto(criterios.genero);
-    
-    const generoCondition = {
-      $or: [
-        { genero: { $regex: criterios.genero, $options: 'i' } },
-        { genero: { $regex: generoNormalizado, $options: 'i' } }
-      ]
-    };
-    
-    // Combinar con condiciones existentes
-    if (query.$and) {
-      query.$and.push(generoCondition);
-    } else if (query.$or) {
-      query.$and = [
-        { $or: query.$or },
-        generoCondition
-      ];
-      delete query.$or;
-    } else {
-      query.$or = generoCondition.$or;
-    }
+    condicionesAND.push(crearCondicionInsensibleAcentos('genero', criterios.genero));
   }
   
   if (criterios.editorial) {
-    const editorialNormalizada = normalizarTexto(criterios.editorial);
-    query.editorial = { 
-      $regex: criterios.editorial, 
-      $options: 'i' 
-    };
+    condicionesAND.push(crearCondicionInsensibleAcentos('editorial', criterios.editorial));
   }
   
   if (criterios.ISBN) query.ISBN = criterios.ISBN;
@@ -557,31 +532,28 @@ libroSchema.statics.buscarPorCriterios = function(criterios) {
   
   // Búsqueda de texto
   if (criterios.q) {
-    const qNormalizado = normalizarTexto(criterios.q);
-    
-    // Crear búsqueda más robusta
-    const textConditions = [
-      { titulo: { $regex: criterios.q, $options: 'i' } },
-      { titulo: { $regex: qNormalizado, $options: 'i' } },
-      { autor_nombre_completo: { $regex: criterios.q, $options: 'i' } },
-      { autor_nombre_completo: { $regex: qNormalizado, $options: 'i' } },
-      { genero: { $regex: criterios.q, $options: 'i' } },
-      { genero: { $regex: qNormalizado, $options: 'i' } },
-      { descripcion: { $regex: criterios.q, $options: 'i' } },
-      { palabras_clave: { $regex: criterios.q, $options: 'i' } }
-    ];
-    
-    if (query.$and) {
-      query.$and.push({ $or: textConditions });
-    } else if (query.$or) {
-      query.$and = [
-        { $or: query.$or },
-        { $or: textConditions }
-      ];
-      delete query.$or;
-    } else {
-      query.$or = textConditions;
-    }
+    // Crear condiciones de búsqueda más robustas para el término general
+    condicionesAND.push({
+      $or: [
+        // Búsqueda en título
+        ...crearCondicionInsensibleAcentos('titulo', criterios.q).$or,
+        // Búsqueda en autor
+        ...crearCondicionInsensibleAcentos('autor_nombre_completo', criterios.q).$or,
+        // Búsqueda en género
+        ...crearCondicionInsensibleAcentos('genero', criterios.q).$or,
+        // Búsqueda en descripción
+        ...crearCondicionInsensibleAcentos('descripcion', criterios.q).$or,
+        // Búsqueda en palabras clave
+        ...crearCondicionInsensibleAcentos('palabras_clave', criterios.q).$or,
+        // Búsqueda en editorial
+        ...crearCondicionInsensibleAcentos('editorial', criterios.q).$or
+      ]
+    });
+  }
+  
+  // Combinar todas las condiciones con el query base
+  if (condicionesAND.length > 0) {
+    query.$and = condicionesAND;
   }
   
   // Permitir incluir inactivos solo a administradores

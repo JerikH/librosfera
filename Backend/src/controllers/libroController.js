@@ -342,8 +342,33 @@ const eliminarLibroPermanente = catchAsync(async (req, res, next) => {
  */
 const buscarLibros = catchAsync(async (req, res, next) => {
   try {
-    const { q, limit, genero, editorial, idioma, estado, precio_min, precio_max, solo_disponibles } = req.query;
+    let { q, limit, genero, editorial, idioma, estado, precio_min, precio_max, solo_disponibles } = req.query;
     const limite = parseInt(limit) || 20;
+    
+    // Decodificar explícitamente parámetros que pueden contener caracteres especiales
+    if (q) {
+      try {
+        q = decodeURIComponent(q);
+      } catch (e) {
+        console.warn('Error decodificando término q:', e.message);
+      }
+    }
+    
+    if (genero) {
+      try {
+        genero = decodeURIComponent(genero);
+      } catch (e) {
+        console.warn('Error decodificando genero:', e.message);
+      }
+    }
+    
+    if (editorial) {
+      try {
+        editorial = decodeURIComponent(editorial);
+      } catch (e) {
+        console.warn('Error decodificando editorial:', e.message);
+      }
+    }
     
     // Construir objeto de filtros
     const filtros = {
