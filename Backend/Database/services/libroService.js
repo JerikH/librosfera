@@ -475,7 +475,7 @@ const libroService = {
       
       console.log(`Búsqueda: "${termino || ''}", filtros:`, JSON.stringify(filtros, null, 2));
       
-      // Función mejorada para normalizar texto
+      // Función mejorada para normalizar texto (quita acentos y otros diacríticos)
       const normalizarTexto = (texto) => {
         if (!texto) return '';
         return texto
@@ -490,30 +490,59 @@ const libroService = {
       
       // Búsqueda por texto utilizando expresiones regulares mejoradas
       if (termino && termino.trim() !== '') {
-        const terminoNormalizado = termino.trim();
-        const terminoSinAcentos = normalizarTexto(terminoNormalizado);
+        const terminoLimpio = termino.trim();
+        const terminoNormalizado = normalizarTexto(terminoLimpio);
         
-        // Dividir en palabras para búsqueda más precisa
-        const palabras = terminoNormalizado.split(/\s+/).filter(p => p.length > 1);
-        const palabrasSinAcentos = palabras.map(normalizarTexto);
+        // Mejorar la búsqueda de términos parciales
+        // Escape caracteres especiales de regex para evitar errores
+        const escaparRegex = (texto) => {
+          return texto.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        };
+        
+        const terminoRegex = escaparRegex(terminoLimpio);
+        const terminoNormalizadoRegex = escaparRegex(terminoNormalizado);
+        
+        // Dividir en palabras para búsqueda más precisa, pero ahora incluimos palabras de 1+ caracteres
+        const palabras = terminoLimpio.split(/\s+/).filter(p => p.length >= 1);
+        const palabrasNormalizadas = palabras.map(normalizarTexto);
         
         // Crear condiciones para todos los campos relevantes
         const textConditions = [];
         
         // Función para agregar condiciones de búsqueda para un campo
         const agregarCondicionesCampo = (campo) => {
-          // Condiciones para el término completo
+          // Condiciones para el término completo - coincidencia exacta y parcial
           textConditions.push(
-            { [campo]: { $regex: terminoNormalizado, $options: 'i' } },
-            { [campo]: { $regex: terminoSinAcentos, $options: 'i' } }
+            { [campo]: { $regex: terminoRegex, $options: 'i' } },
+            { [campo]: { $regex: terminoNormalizadoRegex, $options: 'i' } }
           );
           
-          // Condiciones para palabras individuales
+          // Coincidencia parcial - cualquier parte del texto puede coincidir
+          textConditions.push(
+            { [campo]: { $regex: `\\b${terminoRegex}`, $options: 'i' } },        // Inicio de palabra
+            { [campo]: { $regex: `${terminoRegex}\\b`, $options: 'i' } },        // Fin de palabra
+            { [campo]: { $regex: `\\b${terminoNormalizadoRegex}`, $options: 'i' } },  // Inicio de palabra normalizada
+            { [campo]: { $regex: `${terminoNormalizadoRegex}\\b`, $options: 'i' } }   // Fin de palabra normalizada
+          );
+          
+          // Añadir condiciones para búsqueda parcial más flexible
+          textConditions.push(
+            { [campo]: { $regex: `.*${terminoRegex}.*`, $options: 'i' } },
+            { [campo]: { $regex: `.*${terminoNormalizadoRegex}.*`, $options: 'i' } }
+          );
+          
+          // Condiciones para palabras individuales con mayor flexibilidad
           palabras.forEach((palabra, index) => {
-            if (palabra.length >= 2) {
+            if (palabra.length >= 1) {  // Permitimos incluso palabras de un solo carácter
+              const palabraRegex = escaparRegex(palabra);
+              const palabraNormalizadaRegex = escaparRegex(palabrasNormalizadas[index]);
+              
               textConditions.push(
-                { [campo]: { $regex: palabra, $options: 'i' } },
-                { [campo]: { $regex: palabrasSinAcentos[index], $options: 'i' } }
+                { [campo]: { $regex: palabraRegex, $options: 'i' } },
+                { [campo]: { $regex: palabraNormalizadaRegex, $options: 'i' } },
+                // Búsqueda parcial para cada palabra
+                { [campo]: { $regex: `.*${palabraRegex}.*`, $options: 'i' } },
+                { [campo]: { $regex: `.*${palabraNormalizadaRegex}.*`, $options: 'i' } }
               );
             }
           });
@@ -524,12 +553,16 @@ const libroService = {
         
         // Búsqueda especial en palabras clave (array)
         textConditions.push(
-          { palabras_clave: { $regex: terminoNormalizado, $options: 'i' } },
-          { palabras_clave: { $regex: terminoSinAcentos, $options: 'i' } }
+          { palabras_clave: { $regex: terminoRegex, $options: 'i' } },
+          { palabras_clave: { $regex: terminoNormalizadoRegex, $options: 'i' } },
+          // Búsqueda parcial en palabras clave
+          { palabras_clave: { $regex: `.*${terminoRegex}.*`, $options: 'i' } },
+          { palabras_clave: { $regex: `.*${terminoNormalizadoRegex}.*`, $options: 'i' } }
         );
         
-        // Agregar condiciones al query
-        query.$or = textConditions;
+        // Agregar condiciones al query, eliminar condiciones duplicadas
+        query.$or = Array.from(new Set(textConditions.map(JSON.stringify)))
+                        .map(JSON.parse);
       }
       
       // Aplicar filtros adicionales
@@ -576,28 +609,45 @@ const libroService = {
       throw error;
     }
   },
-  
+
   // Método auxiliar para aplicar filtros avanzados
   aplicarFiltrosAvanzados(query, filtros, normalizarTexto) {
+    // Función para escapar caracteres especiales en expresiones regulares
+    const escaparRegex = (texto) => {
+      return texto ? texto.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') : '';
+    };
+
     if (filtros.genero) {
       // Normalizar y hacer flexible la búsqueda por género
       const generoNormalizado = normalizarTexto(filtros.genero);
+      const generoRegex = escaparRegex(filtros.genero);
+      const generoNormalizadoRegex = escaparRegex(generoNormalizado);
+      
       query.$and = query.$and || [];
       query.$and.push({
         $or: [
-          { genero: { $regex: filtros.genero, $options: 'i' } },
-          { genero: { $regex: generoNormalizado, $options: 'i' } }
+          { genero: { $regex: generoRegex, $options: 'i' } },
+          { genero: { $regex: generoNormalizadoRegex, $options: 'i' } },
+          // Búsqueda parcial en género
+          { genero: { $regex: `.*${generoRegex}.*`, $options: 'i' } },
+          { genero: { $regex: `.*${generoNormalizadoRegex}.*`, $options: 'i' } }
         ]
       });
     }
     
     if (filtros.editorial) {
       const editorialNormalizada = normalizarTexto(filtros.editorial);
+      const editorialRegex = escaparRegex(filtros.editorial);
+      const editorialNormalizadaRegex = escaparRegex(editorialNormalizada);
+      
       query.$and = query.$and || [];
       query.$and.push({
         $or: [
-          { editorial: { $regex: filtros.editorial, $options: 'i' } },
-          { editorial: { $regex: editorialNormalizada, $options: 'i' } }
+          { editorial: { $regex: editorialRegex, $options: 'i' } },
+          { editorial: { $regex: editorialNormalizadaRegex, $options: 'i' } },
+          // Búsqueda parcial en editorial
+          { editorial: { $regex: `.*${editorialRegex}.*`, $options: 'i' } },
+          { editorial: { $regex: `.*${editorialNormalizadaRegex}.*`, $options: 'i' } }
         ]
       });
     }
@@ -622,12 +672,24 @@ const libroService = {
       query.activo = true;
     }
   },
-  
+
   // Método auxiliar para puntuar resultados de búsqueda
   puntuarResultados(libros, termino, normalizarTexto) {
     const terminoLower = termino.toLowerCase();
     const terminoSinAcentos = normalizarTexto(termino);
-    const palabrasBusqueda = terminoLower.split(/\s+/).filter(p => p.length > 2);
+    
+    // Dividir la búsqueda en palabras, pero ahora con más flexibilidad
+    const palabrasBusqueda = terminoLower.split(/\s+/).filter(p => p.length >= 1);
+    const palabrasSinAcentos = palabrasBusqueda.map(normalizarTexto);
+    
+    // Función para verificar coincidencia con/sin acentos
+    const coincide = (texto, patron, patronSinAcentos) => {
+      if (!texto) return false;
+      const textoLower = texto.toLowerCase();
+      const textoSinAcentos = normalizarTexto(texto);
+      
+      return textoLower.includes(patron) || textoSinAcentos.includes(patronSinAcentos);
+    };
     
     // Asignar puntuación a cada libro según relevancia
     const librosConPuntuacion = libros.map(libro => {
@@ -640,27 +702,36 @@ const libroService = {
         const tituloSinAcentos = normalizarTexto(libroObj.titulo);
         
         // Coincidencia exacta en título
-        if (tituloLower.includes(terminoLower)) {
+        if (coincide(libroObj.titulo, terminoLower, terminoSinAcentos)) {
           puntuacion += 15;
           // Bonus por coincidencia en título al inicio
-          if (tituloLower.startsWith(terminoLower)) {
+          if (tituloLower.startsWith(terminoLower) || tituloSinAcentos.startsWith(terminoSinAcentos)) {
             puntuacion += 10;
           }
         }
         
-        // Coincidencia sin acentos en título
-        if (tituloSinAcentos.includes(terminoSinAcentos)) {
-          puntuacion += 12;
+        // Coincidencia parcial en título (pero no exacta)
+        else if (tituloLower.includes(terminoLower) || tituloSinAcentos.includes(terminoSinAcentos)) {
+          puntuacion += 8;
         }
         
-        // Coincidencia de palabras individuales en título
-        palabrasBusqueda.forEach(palabra => {
-          const palabraSinAcentos = normalizarTexto(palabra);
-          if (tituloLower.includes(palabra)) {
+        // Coincidencia de palabras individuales en título con mayor flexibilidad
+        palabrasBusqueda.forEach((palabra, idx) => {
+          const palabraSinAcentos = palabrasSinAcentos[idx];
+          
+          // Coincidencia exacta de palabra
+          if (coincide(libroObj.titulo, palabra, palabraSinAcentos)) {
             puntuacion += 3;
+            
+            // Bonus si la palabra está al inicio del título
+            if (tituloLower.startsWith(palabra) || tituloSinAcentos.startsWith(palabraSinAcentos)) {
+              puntuacion += 2;
+            }
           }
-          if (tituloSinAcentos.includes(palabraSinAcentos)) {
-            puntuacion += 2;
+          
+          // Coincidencia parcial de palabra
+          else if (tituloLower.includes(palabra) || tituloSinAcentos.includes(palabraSinAcentos)) {
+            puntuacion += 1.5;
           }
         });
       }
@@ -670,22 +741,28 @@ const libroService = {
         const autorLower = libroObj.autor_nombre_completo.toLowerCase();
         const autorSinAcentos = normalizarTexto(libroObj.autor_nombre_completo);
         
-        if (autorLower.includes(terminoLower)) {
+        // Coincidencia exacta en autor
+        if (coincide(libroObj.autor_nombre_completo, terminoLower, terminoSinAcentos)) {
           puntuacion += 10;
         }
         
-        if (autorSinAcentos.includes(terminoSinAcentos)) {
-          puntuacion += 8;
+        // Coincidencia parcial en autor
+        else if (autorLower.includes(terminoLower) || autorSinAcentos.includes(terminoSinAcentos)) {
+          puntuacion += 7;
         }
         
         // Coincidencia de palabras individuales en autor
-        palabrasBusqueda.forEach(palabra => {
-          const palabraSinAcentos = normalizarTexto(palabra);
-          if (autorLower.includes(palabra)) {
+        palabrasBusqueda.forEach((palabra, idx) => {
+          const palabraSinAcentos = palabrasSinAcentos[idx];
+          
+          // Coincidencia exacta de palabra
+          if (coincide(libroObj.autor_nombre_completo, palabra, palabraSinAcentos)) {
             puntuacion += 2.5;
           }
-          if (autorSinAcentos.includes(palabraSinAcentos)) {
-            puntuacion += 2;
+          
+          // Coincidencia parcial de palabra
+          else if (autorLower.includes(palabra) || autorSinAcentos.includes(palabraSinAcentos)) {
+            puntuacion += 1.5;
           }
         });
       }
@@ -695,24 +772,37 @@ const libroService = {
         const generoLower = libroObj.genero.toLowerCase();
         const generoSinAcentos = normalizarTexto(libroObj.genero);
         
-        if (generoLower.includes(terminoLower)) {
+        if (coincide(libroObj.genero, terminoLower, terminoSinAcentos)) {
           puntuacion += 8;
         }
         
-        if (generoSinAcentos.includes(terminoSinAcentos)) {
-          puntuacion += 6;
+        // Coincidencia parcial en género
+        else if (generoLower.includes(terminoLower) || generoSinAcentos.includes(terminoSinAcentos)) {
+          puntuacion += 5;
         }
       }
       
-      // Puntuar coincidencias en palabras clave
+      // Puntuar coincidencias en palabras clave con mayor flexibilidad
       if (libroObj.palabras_clave && libroObj.palabras_clave.length > 0) {
         const coincidencias = libroObj.palabras_clave.filter(
           palabra => {
             const palabraLower = palabra.toLowerCase();
             const palabraSinAcentos = normalizarTexto(palabra);
-            return palabraLower.includes(terminoLower) || 
-                   palabraSinAcentos.includes(terminoSinAcentos) ||
-                   palabrasBusqueda.some(p => palabraLower.includes(p) || palabraSinAcentos.includes(normalizarTexto(p)));
+            
+            // Coincidencia exacta
+            if (coincide(palabra, terminoLower, terminoSinAcentos)) {
+              return true;
+            }
+            
+            // Coincidencia parcial
+            if (palabraLower.includes(terminoLower) || palabraSinAcentos.includes(terminoSinAcentos)) {
+              return true;
+            }
+            
+            // Coincidencia con palabras individuales
+            return palabrasBusqueda.some((p, idx) => 
+              palabraLower.includes(p) || palabraSinAcentos.includes(palabrasSinAcentos[idx])
+            );
           }
         ).length;
         
@@ -724,21 +814,27 @@ const libroService = {
         const descripcionLower = libroObj.descripcion.toLowerCase();
         const descripcionSinAcentos = normalizarTexto(libroObj.descripcion);
         
-        if (descripcionLower.includes(terminoLower)) {
+        // Coincidencia exacta en descripción
+        if (coincide(libroObj.descripcion, terminoLower, terminoSinAcentos)) {
           puntuacion += 3;
         }
         
-        if (descripcionSinAcentos.includes(terminoSinAcentos)) {
+        // Coincidencia parcial en descripción
+        else if (descripcionLower.includes(terminoLower) || descripcionSinAcentos.includes(terminoSinAcentos)) {
           puntuacion += 2;
         }
         
         // Coincidencia de palabras individuales en descripción
-        palabrasBusqueda.forEach(palabra => {
-          const palabraSinAcentos = normalizarTexto(palabra);
-          if (descripcionLower.includes(palabra)) {
+        palabrasBusqueda.forEach((palabra, idx) => {
+          const palabraSinAcentos = palabrasSinAcentos[idx];
+          
+          // Coincidencia exacta de palabra
+          if (coincide(libroObj.descripcion, palabra, palabraSinAcentos)) {
             puntuacion += 0.8;
           }
-          if (descripcionSinAcentos.includes(palabraSinAcentos)) {
+          
+          // Coincidencia parcial de palabra
+          else if (descripcionLower.includes(palabra) || descripcionSinAcentos.includes(palabraSinAcentos)) {
             puntuacion += 0.5;
           }
         });
