@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
-const { metodoPagoSchema } = require('./schemas/metodoPago.Schema'); 
+const { metodoPagoSchema } = require('./schemas/metodoPagoSchema'); 
 const addressSchema = require('./schemas/addressSchema');
 
 const transaccionSchema = new Schema({

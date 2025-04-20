@@ -41,7 +41,7 @@ const authorSchema = new Schema({
     wikipedia: String,
     goodreads: String
   }
-});
+}, { _id: true }); // Aseguramos que tenga _id para poder referenciar autores específicos
 
 // Método virtual para obtener nombre completo
 authorSchema.virtual('nombre_completo').get(function() {
