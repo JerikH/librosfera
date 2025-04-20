@@ -457,14 +457,82 @@ libroSchema.methods.eliminarImagen = function(imagenId) {
 
 // MÉTODOS ESTÁTICOS
 // Buscar libros por criterios múltiples
+// Buscar libros por criterios múltiples
 libroSchema.statics.buscarPorCriterios = function(criterios) {
   const query = { activo: true }; // Por defecto solo mostrar activos
   
+  // Función auxiliar para normalizar texto (quitar acentos)
+  const normalizarTexto = (texto) => {
+    if (!texto) return '';
+    return texto
+      .normalize('NFD') // Normalización Unicode
+      .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+      .toLowerCase(); // Convertir a minúsculas
+  };
+  
   // Mapeo de criterios de búsqueda desde la UI a la estructura de MongoDB
-  if (criterios.titulo) query.titulo = { $regex: criterios.titulo, $options: 'i' };
-  if (criterios.autor) query.autor_nombre_completo = { $regex: criterios.autor, $options: 'i' };
-  if (criterios.genero) query.genero = criterios.genero;
-  if (criterios.editorial) query.editorial = { $regex: criterios.editorial, $options: 'i' };
+  if (criterios.titulo) {
+    const tituloNormalizado = normalizarTexto(criterios.titulo);
+    query.$or = [
+      { titulo: { $regex: criterios.titulo, $options: 'i' } },
+      { titulo: { $regex: tituloNormalizado, $options: 'i' } }
+    ];
+  }
+  
+  if (criterios.autor) {
+    const autorNormalizado = normalizarTexto(criterios.autor);
+    const autorCondition = {
+      $or: [
+        { autor_nombre_completo: { $regex: criterios.autor, $options: 'i' } },
+        { autor_nombre_completo: { $regex: autorNormalizado, $options: 'i' } }
+      ]
+    };
+    
+    // Agregar a la query existente
+    if (query.$or) {
+      query.$and = [
+        { $or: query.$or },
+        autorCondition
+      ];
+      delete query.$or;
+    } else {
+      query.$or = autorCondition.$or;
+    }
+  }
+  
+  // Para el género, hacemos una búsqueda insensible a acentos
+  if (criterios.genero) {
+    const generoNormalizado = normalizarTexto(criterios.genero);
+    
+    const generoCondition = {
+      $or: [
+        { genero: { $regex: criterios.genero, $options: 'i' } },
+        { genero: { $regex: generoNormalizado, $options: 'i' } }
+      ]
+    };
+    
+    // Combinar con condiciones existentes
+    if (query.$and) {
+      query.$and.push(generoCondition);
+    } else if (query.$or) {
+      query.$and = [
+        { $or: query.$or },
+        generoCondition
+      ];
+      delete query.$or;
+    } else {
+      query.$or = generoCondition.$or;
+    }
+  }
+  
+  if (criterios.editorial) {
+    const editorialNormalizada = normalizarTexto(criterios.editorial);
+    query.editorial = { 
+      $regex: criterios.editorial, 
+      $options: 'i' 
+    };
+  }
+  
   if (criterios.ISBN) query.ISBN = criterios.ISBN;
   if (criterios.idioma) query.idioma = criterios.idioma;
   if (criterios.estado) query.estado = criterios.estado;
@@ -489,7 +557,31 @@ libroSchema.statics.buscarPorCriterios = function(criterios) {
   
   // Búsqueda de texto
   if (criterios.q) {
-    query.$text = { $search: criterios.q };
+    const qNormalizado = normalizarTexto(criterios.q);
+    
+    // Crear búsqueda más robusta
+    const textConditions = [
+      { titulo: { $regex: criterios.q, $options: 'i' } },
+      { titulo: { $regex: qNormalizado, $options: 'i' } },
+      { autor_nombre_completo: { $regex: criterios.q, $options: 'i' } },
+      { autor_nombre_completo: { $regex: qNormalizado, $options: 'i' } },
+      { genero: { $regex: criterios.q, $options: 'i' } },
+      { genero: { $regex: qNormalizado, $options: 'i' } },
+      { descripcion: { $regex: criterios.q, $options: 'i' } },
+      { palabras_clave: { $regex: criterios.q, $options: 'i' } }
+    ];
+    
+    if (query.$and) {
+      query.$and.push({ $or: textConditions });
+    } else if (query.$or) {
+      query.$and = [
+        { $or: query.$or },
+        { $or: textConditions }
+      ];
+      delete query.$or;
+    } else {
+      query.$or = textConditions;
+    }
   }
   
   // Permitir incluir inactivos solo a administradores
@@ -497,6 +589,7 @@ libroSchema.statics.buscarPorCriterios = function(criterios) {
     delete query.activo;
   }
   
+  console.log("Query final de búsqueda por criterios:", JSON.stringify(query));
   return this.find(query);
 };
 
@@ -553,10 +646,11 @@ libroSchema.statics.obtenerLibrosConDescuento = function() {
 };
 
 // Obtener libros destacados (mejores calificaciones)
-libroSchema.statics.obtenerLibrosDestacados = function(limite = 10) {
+libroSchema.statics.obtenerLibrosDestacados = function(limite = 10, minCalificacion = 4.0) {
   return this.find({ 
     activo: true,
-    'calificaciones.cantidad': { $gte: 3 }, // Al menos 3 calificaciones
+    'calificaciones.cantidad': { $gte: 1 }, // Ahora solo se requiere al menos 1 calificación
+    'calificaciones.promedio': { $gte: minCalificacion },
     stock: { $gt: 0 } // Con stock disponible
   })
   .sort({ 'calificaciones.promedio': -1 })
