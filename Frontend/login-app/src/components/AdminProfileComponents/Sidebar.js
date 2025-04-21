@@ -10,10 +10,10 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading }) => {
 
   // Elementos de navegación para el administrador
   const navItems = [
-    { id: 'inicio', name: 'Inicio', icon: 'home' },
-    { id: 'administrar-libro', name: 'Administrar Libros', icon: 'book' },
-    { id: 'gestionar-mensajes', name: 'Gestionar Mensajes', icon: 'mail' },
-    { id: 'mi-perfil', name: 'Mi Perfil', icon: 'person' }
+    { id: 'inicio', name: 'Inicio', icon: 'inicio' },
+    { id: 'administrar-libro', name: 'Administrar Libros', icon: 'libro' },
+    { id: 'gestionar-mensajes', name: 'Gestionar Mensajes', icon: 'mensaje' },
+    { id: 'mi-perfil', name: 'Mi Perfil', icon: 'perfil' }
   ];
 
   return (
@@ -57,7 +57,13 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading }) => {
                     : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                 }`}
               >
-                <span className="material-icons-outlined mr-3">{item.icon}</span>
+                {/* Reemplazamos los iconos con símbolos en español */}
+                <span className="material-icons-outlined mr-3">
+                  {item.icon === 'inicio' && 'home'}
+                  {item.icon === 'libro' && 'book'}
+                  {item.icon === 'mensaje' && 'mail'}
+                  {item.icon === 'perfil' && 'person'}
+                </span>
                 <span>{item.name}</span>
                 {activeTab === item.id && item.id === 'administrar-libro' && (
                   <span className="ml-auto mr-2 w-2 h-2 bg-blue-500 rounded-full"></span>
