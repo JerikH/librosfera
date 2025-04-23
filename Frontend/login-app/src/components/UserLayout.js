@@ -11,7 +11,8 @@ const UserLayout = ({ children }) => {
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchTerm.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchTerm)}`);
+      // Redireccionar a la página de resultados de búsqueda con el término como parámetro
+      navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
     }
   };
 

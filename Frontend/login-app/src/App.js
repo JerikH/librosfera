@@ -7,7 +7,8 @@ import PasswordResetPage from './components/ResetPassword';
 import WelcomePage from './components/Welcome';
 import UserProfile from './components/UserProfile';
 import AdminProfile from './components/AdminProfile';
-import HomePage from './components/HomePage'; // Importar el nuevo componente HomePage
+import HomePage from './components/HomePage';
+import SearchResults from './components/SearchResults'; // Importar el componente de resultados de búsqueda
 
 const App = () => {
   return (
@@ -26,8 +27,9 @@ const App = () => {
         {/* Ruta para la página de bienvenida (legacy) */}
         <Route path="/Welcome" element={<WelcomePage />} />
         
-        {/* Nueva ruta para la página principal (después de iniciar sesión) */}
+        {/* Página principal y búsqueda */}
         <Route path="/Home" element={<HomePage />} />
+        <Route path="/search" element={<SearchResults />} />
         
         {/* Rutas de perfil de usuario y administrador */}
         <Route path="/Profile" element={<UserProfile />} />
