@@ -1,74 +1,120 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import BookEditor from './BookEditor';
+
+// Componente de imagen de libro con manejo de errores
+const BookImage = ({ imageUrl, title }) => {
+  const [hasError, setHasError] = useState(false);
+
+  const handleError = () => {
+    setHasError(true);
+  };
+
+  // Si ya sabemos que la imagen tiene error, no intentamos cargarla
+  if (hasError) {
+    return (
+      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+      </svg>
+    );
+  }
+
+  return (
+    <img 
+      src={imageUrl} 
+      alt={title}
+      className="max-w-full max-h-full object-contain"
+      onError={handleError}
+    />
+  );
+};
 
 const ManageBooks = () => {
   const [books, setBooks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBook, setSelectedBook] = useState(null);
+  const [Bookid, setSelectedBookid] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add', 'edit', 'delete'
   const [showEditor, setShowEditor] = useState(false);
   const [editorMode, setEditorMode] = useState('add'); // 'add', 'edit'
+  const [pagination, setPagination] = useState({
+    total: 0,
+    pagina: 1,
+    limite: 10,
+    totalPaginas: 0
+  });
+
+  // Obtener los libros de la API y formatearlos para mantener la estructura original
+  const fetchBooks = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.get('http://localhost:5000/api/v1/libros');
+      
+      if (response.data && response.data.status === 'success') {
+        // Formatear los datos para mantener la estructura original
+        const formattedBooks = response.data.data.map(book => {
+          // Determinar la URL de la imagen
+          let imageUrl = null;
+          
+          // Verificar si hay imágenes en el formato nuevo
+          if (book.imagenes && book.imagenes.length > 0) {
+            // Buscar la imagen de tipo "portada"
+            const portada = book.imagenes.find(img => img.tipo === 'portada');
+            if (portada) {
+              imageUrl = portada.url;
+            } else {
+              // Si no hay tipo "portada", usar la primera imagen
+              imageUrl = book.imagenes[0].url;
+            }
+          } 
+          // Si no hay imágenes en el formato nuevo, verificar el formato legacy
+          else if (book.imagenes_legacy && book.imagenes_legacy.portada) {
+            imageUrl = book.imagenes_legacy.portada;
+          }
+          
+          // Determinar el descuento si existe
+          let discount = 0;
+          if (book.precio_info && book.precio_info.descuentos && book.precio_info.descuentos.length > 0) {
+            // Tomar el primer descuento disponible
+            discount = book.precio_info.descuentos[0].porcentaje || 0;
+          } else {
+            // Generar un descuento aleatorio como en la versión original
+            discount = Math.floor(Math.random() * 60);
+          }
+          
+          return {
+            id: book._id,
+            title: book.titulo || 'Sin título',
+            author: book.autor_nombre_completo || 'Autor desconocido',
+            genre: book.genero || 'Sin categoría',
+            price: book.precio || 0,
+            stock: book.stock || 0,
+            discount: discount,
+            image: imageUrl,
+            // Guardamos los datos originales para edición
+            originalData: book
+          };
+        });
+        
+        setBooks(formattedBooks);
+        
+        // Guardar información de paginación si existe
+        if (response.data.paginacion) {
+          setPagination(response.data.paginacion);
+        }
+      } else {
+        console.error('Error en la respuesta de la API:', response.data);
+      }
+    } catch (error) {
+      console.error('Error al cargar libros:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Simular carga de libros
-    const fetchBooks = async () => {
-      try {
-        // Aquí iría una llamada API real para obtener libros
-        // Simulamos una respuesta después de un segundo
-        setTimeout(() => {
-          const dummyBooks = [
-            { 
-              id: 1, 
-              title: "Alice's Adventures in Wonderland", 
-              author: "Lewis Carroll", 
-              genre: "Drama, Terror", 
-              price: 14200.00, 
-              stock: 2, 
-              discount: 60,
-              image: '/book-alice.jpg' 
-            },
-            { 
-              id: 2, 
-              title: "Pride and Prejudice", 
-              author: "Jane Austen", 
-              genre: "Suspenso", 
-              price: 14200.00, 
-              stock: 1, 
-              discount: 50,
-              image: '/book-pride.jpg' 
-            },
-            { 
-              id: 3, 
-              title: "To Kill a Mockingbird", 
-              author: "Harper Lee", 
-              genre: "Comedia", 
-              price: 14200.00, 
-              stock: 10, 
-              discount: 10,
-              image: '/book-mockingbird.jpg' 
-            },
-            { 
-              id: 4, 
-              title: "The Adventures of Huckleberry Finn", 
-              author: "Mark Twain", 
-              genre: "Aventura, Suspenso", 
-              price: 14200.00, 
-              stock: 3, 
-              discount: 0,
-              image: '/book-huck.jpg' 
-            },
-          ];
-          setBooks(dummyBooks);
-          setIsLoading(false);
-        }, 1000);
-      } catch (error) {
-        console.error('Error al cargar libros:', error);
-        setIsLoading(false);
-      }
-    };
-
     fetchBooks();
   }, []);
 
@@ -90,6 +136,7 @@ const ManageBooks = () => {
   const openEditor = (mode, book = null) => {
     setEditorMode(mode);
     setSelectedBook(book);
+    setSelectedBookid(book._id);
     setShowEditor(true);
   };
 
@@ -97,48 +144,44 @@ const ManageBooks = () => {
   const closeEditor = () => {
     setShowEditor(false);
     setSelectedBook(null);
+    // Refrescar la lista de libros después de cerrar el editor
+    fetchBooks();
   };
 
-  // Guardar cambios del libro
+  // Guardar cambios del libro (esta función será pasada al componente BookEditor)
   const saveBook = (bookData) => {
-    // Aquí se implementaría la lógica para guardar en el backend
-    if (editorMode === 'edit' && selectedBook) {
-      // Actualizar libro existente
-      const updatedBooks = books.map(book => 
-        book.id === selectedBook.id ? { 
-          ...book, 
-          title: bookData.titulo,
-          author: bookData.autor,
-          genre: bookData.genero,
-          price: bookData.precio,
-          // Actualizar otros campos según sea necesario
-        } : book
-      );
-      setBooks(updatedBooks);
-    } else {
-      // Agregar nuevo libro
-      const newBook = {
-        id: books.length + 1,
-        title: bookData.titulo,
-        author: bookData.autor,
-        genre: bookData.genero,
-        price: bookData.precio,
-        stock: 0,
-        discount: 0,
-        image: '/placeholder-book.jpg'
-      };
-      setBooks([...books, newBook]);
-    }
+    // La lógica de guardar se maneja en el BookEditor
+    // Simplemente cerramos el editor y refrescamos la lista
     closeEditor();
   };
 
   // Eliminar libro
-  const deleteBook = (bookId) => {
-    // Aquí iría la lógica para eliminar el libro (API call)
-    console.log('Deleting book:', bookId);
-    const updatedBooks = books.filter(book => book.id !== bookId);
-    setBooks(updatedBooks);
-    setIsModalOpen(false);
+  const deleteBook = async (bookId) => {
+    try {
+      // Obtener el token de autenticación
+      const dataCookie = document.cookie.match(new RegExp('(^| )data=([^;]+)'));
+      if (!dataCookie) {
+        alert('No se encontró la sesión. Por favor inicie sesión nuevamente.');
+        return;
+      }
+      
+      const parsedData = JSON.parse(decodeURIComponent(dataCookie[2]));
+      const token = parsedData.authToken;
+      
+      // Llamada a la API para eliminar el libro
+      await axios.delete(`http://localhost:5000/api/v1/libros/${bookId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Actualizar la lista de libros
+      fetchBooks();
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Error al eliminar el libro:', error);
+      alert('Error al eliminar el libro. Por favor intente nuevamente.');
+    }
   };
 
   // Componente Modal para confirmar eliminación
@@ -186,33 +229,39 @@ const ManageBooks = () => {
     return 'bg-red-400';
   };
 
-  // Función para mostrar el ícono de libro
+  // Función para mostrar el ícono de libro predeterminado
   const getBookIcon = (id) => {
     const icons = [
       <div key={1} className="text-indigo-500">
-        <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24">
+        <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
           <path d="M4 19.5v-15A2.5 2.5 0 016.5 2H20v20H6.5A2.5 2.5 0 014 19.5zM16 12h-7m0-4h7m-7 8h7"></path>
         </svg>
       </div>,
       <div key={2} className="text-gray-500">
-        <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
         </svg>
       </div>,
       <div key={3} className="text-gray-700">
-        <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
         </svg>
       </div>,
       <div key={4} className="text-cyan-500">
-        <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
         </svg>
       </div>
     ];
     
-    // Devolver un ícono basado en el ID (para que sea consistente)
-    return icons[(id - 1) % icons.length];
+    // Calculamos un hash a partir del ID para obtener un ícono consistente
+    const idString = id.toString();
+    let hash = 0;
+    for (let i = 0; i < idString.length; i++) {
+      hash += idString.charCodeAt(i);
+    }
+    
+    return icons[hash % icons.length];
   };
 
   return (
@@ -220,8 +269,25 @@ const ManageBooks = () => {
       {/* Si el editor está abierto, mostrar el editor de libros */}
       {showEditor ? (
         <BookEditor 
-          book={selectedBook}
+          book={selectedBook ? {
+            title: selectedBook.title,
+            author: selectedBook.author,
+            editorial: selectedBook.originalData?.editorial,
+            year: selectedBook.originalData?.anio_publicacion,
+            genre: selectedBook.genre,
+            pages: selectedBook.originalData?.numero_paginas,
+            issn: selectedBook.originalData?.issn,
+            language: selectedBook.originalData?.idioma,
+            publicationDate: selectedBook.originalData?.fecha_publicacion,
+            condition: selectedBook.originalData?.estado,
+            price: selectedBook.price,
+            image: selectedBook.image,
+            description: selectedBook.originalData?.descripcion,
+            stock: selectedBook.stock,
+            id: selectedBook.id
+          } : null}
           mode={editorMode}
+          id={selectedBook.id}
           onSave={saveBook}
           onCancel={closeEditor}
         />
@@ -269,9 +335,9 @@ const ManageBooks = () => {
               </div>
               <div className="text-center">Unidades Disponibles</div>
               <div className="text-center">Precio</div>
-              <div className="text-center">Genero</div>
+              <div className="text-center">Género</div>
               <div className="text-center">Descuento</div>
-              <div className="text-center">Acciones</div> {/* Ahora centrado */}
+              <div className="text-center">Acciones</div>
             </div>
 
             {isLoading ? (
@@ -288,16 +354,23 @@ const ManageBooks = () => {
                 {filteredBooks.map((book) => (
                   <div key={book.id} className="grid grid-cols-6 p-4 items-center border-b hover:bg-gray-50">
                     <div className="col-span-1 flex items-center">
-                      {getBookIcon(book.id)}
-                      <div className="ml-3">
-                        <p className="font-medium">{book.title}</p>
+                      <div className="w-10 h-10 flex-shrink-0 mr-3 overflow-hidden rounded border border-gray-200 flex items-center justify-center bg-white">
+                        {book.image ? (
+                          <BookImage imageUrl={book.image} title={book.title} />
+                        ) : (
+                          getBookIcon(book.id)
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{book.title}</p>
+                        <p className="text-xs text-gray-500">{book.author}</p>
                       </div>
                     </div>
                     <div className="text-center">
                       {book.stock}
                     </div>
                     <div className="text-center">
-                      $ {book.price.toLocaleString('es-AR')}
+                      $ {book.price.toLocaleString('es-CO')}
                     </div>
                     <div className="text-center">
                       {book.genre}
@@ -312,7 +385,7 @@ const ManageBooks = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex justify-center"> {/* Centrado horizontalmente */}
+                    <div className="flex justify-center">
                       <button 
                         onClick={() => openEditor('edit', book)}
                         className="text-blue-600 hover:text-blue-900 mr-3"
@@ -331,6 +404,30 @@ const ManageBooks = () => {
               </div>
             )}
           </div>
+          
+          {/* Paginación (opcional) */}
+          {pagination.totalPaginas > 1 && (
+            <div className="flex justify-center mt-4">
+              <div className="flex space-x-2">
+                {Array.from({ length: pagination.totalPaginas }).map((_, index) => (
+                  <button
+                    key={index}
+                    className={`px-3 py-1 rounded ${
+                      pagination.pagina === index + 1
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-200'
+                    }`}
+                    onClick={() => {
+                      // Aquí se implementaría la paginación
+                      console.log(`Cambiar a página ${index + 1}`);
+                    }}
+                  >
+                    {index + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           
           {/* Modal de confirmación de eliminación */}
           {isModalOpen && modalMode === 'delete' && <DeleteConfirmationModal />}
