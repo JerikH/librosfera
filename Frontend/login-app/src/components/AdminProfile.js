@@ -3,11 +3,12 @@ import Sidebar from './AdminProfileComponents/Sidebar';
 import Dashboard from './AdminProfileComponents/Dashboard';
 import ManageBooks from './AdminProfileComponents/ManageBooks';
 import ManageMessages from './AdminProfileComponents/ManageMessages';
-// Importar el componente de perfil del usuario
+import ManageUsers from './AdminProfileComponents/ManageUsers';
 import ProfilePage from './UserProfilePageComponents/ProfilePage';
+import EditProfile from './EditProfile';
 import { useNavigate } from 'react-router-dom';
 
-// Helper function to check if a user is admin (only administrador, not root)
+// Helper function to check if a user is admin
 const isAdmin = (userData) => {
   return userData && userData.tipo_usuario === 'administrador';
 };
@@ -19,9 +20,10 @@ const getCookie = (name) => {
 };
 
 const AdminProfile = () => {
-  const [activeTab, setActiveTab] = useState('administrar-libro'); // Iniciar con la pestaña de Administrar Libros
+  const [activeTab, setActiveTab] = useState('inicio');
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const navigate = useNavigate();
   
   // Check authentication on mount and redirect immediately if needed
@@ -67,10 +69,36 @@ const AdminProfile = () => {
     checkAuth();
   }, [navigate]);
   
+  // Handler para editar perfil
+  const handleEditProfile = () => {
+    setIsEditingProfile(true);
+  };
+  
+  // Handler para regresar de la edición de perfil
+  const handleGoBack = () => {
+    setIsEditingProfile(false);
+    // Refrescar datos del usuario (en un caso real, aquí harías una nueva solicitud)
+    const refreshData = async () => {
+      try {
+        // Get data directly from cookie
+        const dataCookie = getCookie("data");
+        if (dataCookie) {
+          const parsedData = JSON.parse(dataCookie);
+          if (parsedData && parsedData.Data) {
+            setUserData(parsedData.Data);
+          }
+        }
+      } catch (error) {
+        console.error("Error refreshing user data:", error);
+      }
+    };
+    refreshData();
+  };
+  
   // Render loading state if no userData yet
   if (isLoading || !userData) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-gray-100">
+      <div className="h-screen w-full flex items-center justify-center bg-[#f9fafb]">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-700">Cargando panel de administración...</p>
@@ -79,22 +107,49 @@ const AdminProfile = () => {
     );
   }
   
+  // Si estamos editando el perfil, mostrar el editor
+  if (isEditingProfile) {
+    return (
+      <div className="flex h-screen bg-[#f9fafb]">
+        {/* Left sidebar */}
+        <Sidebar 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab} 
+          userData={userData}
+          isLoading={isLoading}
+          onEditProfile={handleEditProfile}
+        />
+        
+        {/* Main content area */}
+        <div className="flex-1 flex h-full overflow-y-auto p-6">
+          <EditProfile 
+            userData={userData}
+            userType="admin"
+            onGoBack={handleGoBack}
+          />
+        </div>
+      </div>
+    );
+  }
+  
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-[#f9fafb]">
       {/* Left sidebar */}
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         userData={userData}
         isLoading={isLoading}
+        onEditProfile={handleEditProfile}
       />
       
       {/* Main content area */}
-      <div className="flex-1 flex h-full overflow-hidden">
+      <div className="flex-1 flex h-full">
         {activeTab === 'inicio' && <Dashboard userData={userData} />}
         {activeTab === 'administrar-libro' && <ManageBooks />}
+        {activeTab === 'gestionar-usuarios' && <ManageUsers />}
         {activeTab === 'gestionar-mensajes' && <ManageMessages />}
-        {activeTab === 'mi-perfil' && <ProfilePage userData={userData} />}
+        {activeTab === 'mi-perfil' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
       </div>
     </div>
   );
