@@ -832,6 +832,173 @@ const deleteUserById = catchAsync(async (req, res, next) => {
   });
 });
 
+/**
+ * @desc    Subir foto de perfil
+ * @route   POST /api/v1/users/profile/foto
+ * @access  Private
+ */
+const uploadProfilePhoto = catchAsync(async (req, res, next) => {
+  try {
+    // Verificar que el usuario esté autenticado
+    if (!req.user) {
+      return next(new AppError('Debe iniciar sesión para subir una foto', 401));
+    }
+
+    // Verificar que se ha subido un archivo
+    if (!req.file) {
+      return next(new AppError('No se ha subido ningún archivo', 400));
+    }
+
+    console.log('Archivo recibido en controlador:', req.file);
+
+    // Verificar que el archivo es una imagen
+    if (!req.file.mimetype.startsWith('image')) {
+      return next(new AppError('El archivo debe ser una imagen', 400));
+    }
+
+    // Verificar tamaño máximo (2MB)
+    if (req.file.size > 2 * 1024 * 1024) {
+      return next(new AppError('La imagen no puede ser mayor a 2MB', 400));
+    }
+
+    // Actualizar foto de perfil del usuario
+    const usuarioActualizado = await userService.actualizarFotoPerfil(
+      req.user._id,
+      req.file
+    );
+
+    // Eliminar password por seguridad
+    if (usuarioActualizado && usuarioActualizado.password) {
+      delete usuarioActualizado.password;
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Foto de perfil actualizada correctamente',
+      data: usuarioActualizado
+    });
+  } catch (error) {
+    console.error('Error subiendo foto de perfil:', error);
+    return next(new AppError(`Error al subir foto: ${error.message}`, 400));
+  }
+});
+
+/**
+ * @desc    Eliminar foto de perfil (establecer a default)
+ * @route   DELETE /api/v1/users/profile/foto
+ * @access  Private
+ */
+const deleteProfilePhoto = catchAsync(async (req, res, next) => {
+  try {
+    // Verificar que el usuario esté autenticado
+    if (!req.user) {
+      return next(new AppError('Debe iniciar sesión para eliminar su foto', 401));
+    }
+
+    // Eliminar foto de perfil (restaurar a default)
+    const usuarioActualizado = await userService.eliminarFotoPerfil(req.user._id);
+
+    // Eliminar password por seguridad
+    if (usuarioActualizado && usuarioActualizado.password) {
+      delete usuarioActualizado.password;
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Foto de perfil eliminada correctamente',
+      data: usuarioActualizado
+    });
+  } catch (error) {
+    console.error('Error eliminando foto de perfil:', error);
+    return next(new AppError(`Error al eliminar foto: ${error.message}`, 400));
+  }
+});
+
+/**
+ * @desc    Subir foto de perfil para otro usuario (admin)
+ * @route   POST /api/v1/users/:id/foto
+ * @access  Private/Admin
+ */
+const uploadUserPhoto = catchAsync(async (req, res, next) => {
+  try {
+    // Verificar permisos de administrador
+    if (!req.user || (req.user.tipo_usuario !== 'administrador' && req.user.tipo_usuario !== 'root')) {
+      return next(new AppError('No tiene permisos para actualizar fotos de otros usuarios', 403));
+    }
+
+    // Verificar que se ha subido un archivo
+    if (!req.file) {
+      return next(new AppError('No se ha subido ningún archivo', 400));
+    }
+
+    console.log('Archivo recibido en controlador:', req.file);
+    console.log('ID de usuario a actualizar:', req.params.id);
+
+    // Verificar que el archivo es una imagen
+    if (!req.file.mimetype.startsWith('image')) {
+      return next(new AppError('El archivo debe ser una imagen', 400));
+    }
+
+    // Verificar tamaño máximo (2MB)
+    if (req.file.size > 2 * 1024 * 1024) {
+      return next(new AppError('La imagen no puede ser mayor a 2MB', 400));
+    }
+
+    // Actualizar foto de perfil del usuario especificado
+    const usuarioActualizado = await userService.actualizarFotoPerfil(
+      req.params.id,
+      req.file
+    );
+
+    // Eliminar password por seguridad
+    if (usuarioActualizado && usuarioActualizado.password) {
+      delete usuarioActualizado.password;
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Foto de perfil actualizada correctamente',
+      data: usuarioActualizado
+    });
+  } catch (error) {
+    console.error('Error subiendo foto de perfil:', error);
+    return next(new AppError(`Error al subir foto: ${error.message}`, 400));
+  }
+});
+
+/**
+ * @desc    Eliminar foto de perfil de otro usuario (admin)
+ * @route   DELETE /api/v1/users/:id/foto
+ * @access  Private/Admin
+ */
+const deleteUserPhoto = catchAsync(async (req, res, next) => {
+  try {
+    // Verificar permisos de administrador
+    if (!req.user || (req.user.tipo_usuario !== 'administrador' && req.user.tipo_usuario !== 'root')) {
+      return next(new AppError('No tiene permisos para eliminar fotos de otros usuarios', 403));
+    }
+
+    console.log('Eliminando foto de usuario:', req.params.id);
+
+    // Eliminar foto de perfil del usuario especificado
+    const usuarioActualizado = await userService.eliminarFotoPerfil(req.params.id);
+
+    // Eliminar password por seguridad
+    if (usuarioActualizado && usuarioActualizado.password) {
+      delete usuarioActualizado.password;
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Foto de perfil eliminada correctamente',
+      data: usuarioActualizado
+    });
+  } catch (error) {
+    console.error('Error eliminando foto de perfil:', error);
+    return next(new AppError(`Error al eliminar foto: ${error.message}`, 400));
+  }
+});
+
 module.exports = {
   registerUser,
   loginUser,
@@ -843,4 +1010,8 @@ module.exports = {
   updateUser,
   deleteUserById,
   createAdmin,
+  uploadProfilePhoto,
+  deleteProfilePhoto,
+  uploadUserPhoto,
+  deleteUserPhoto,
 };
