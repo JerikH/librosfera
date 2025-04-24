@@ -290,9 +290,9 @@ libroSchema.pre('save', function(next) {
   }
   
   // Actualizar el campo precio simple con el precio calculado
-  if (this.precio_info) {
-    this.precio = this.precio_info.calcularPrecioFinal();
-  }
+  // if (this.precio_info) {
+  //   this.precio = this.precio_info.calcularPrecioFinal();
+  // }
   
   next();
 });
