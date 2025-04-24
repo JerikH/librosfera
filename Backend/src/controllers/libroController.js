@@ -933,10 +933,52 @@ const subirImagenLibro = catchAsync(async (req, res, next) => {
       return next(new AppError('La imagen no puede ser mayor a 5MB', 400));
     }
 
+    // Obtener el libro para verificar las imágenes existentes si no se proporciona orden
+    let ordenImagen = req.body.orden !== undefined ? parseInt(req.body.orden) : undefined;
+    
+    if (ordenImagen === undefined) {
+      // Buscar el libro para determinar el orden automáticamente
+      const libro = await libroService.obtenerLibroPorId(req.params.id);
+      
+      if (!libro) {
+        return next(new AppError('Libro no encontrado', 404));
+      }
+      
+      // Determinar el orden basado en imágenes existentes
+      if (!libro.imagenes || libro.imagenes.length === 0) {
+        // Primera imagen, asignar orden 0 (portada)
+        ordenImagen = 0;
+      } else {
+        // Buscar el orden más alto y sumar 1
+        const ordenMasAlto = Math.max(...libro.imagenes.map(img => img.orden));
+        ordenImagen = ordenMasAlto + 1;
+      }
+      
+      console.log(`Orden determinado automáticamente: ${ordenImagen}`);
+    }
+    
+    // Determinar el tipo de imagen basado en el orden
+    let tipoImagen = req.body.tipo;
+    
+    if (!tipoImagen) {
+      if (ordenImagen === 0) {
+        tipoImagen = 'portada';
+      } else if (ordenImagen === 1) {
+        tipoImagen = 'contraportada';
+      } else {
+        tipoImagen = 'detalle'; // Por defecto
+      }
+    } else if ((ordenImagen === 0 && tipoImagen !== 'portada') || 
+               (ordenImagen === 1 && tipoImagen !== 'contraportada')) {
+      // Forzar coherencia entre orden y tipo
+      tipoImagen = ordenImagen === 0 ? 'portada' : 'contraportada';
+      console.log(`Tipo ajustado para mantener coherencia con orden ${ordenImagen}: ${tipoImagen}`);
+    }
+
     // Preparar metadatos de la imagen
     const metadatos = {
-      tipo: req.body.tipo || 'detalle',
-      orden: req.body.orden !== undefined ? parseInt(req.body.orden) : undefined,
+      tipo: tipoImagen,
+      orden: ordenImagen,
       alt_text: req.body.alt_text || ''
     };
 
@@ -986,6 +1028,11 @@ const actualizarOrdenImagenes = catchAsync(async (req, res, next) => {
     for (const item of req.body.ordenesNuevos) {
       if (!item.id_imagen || item.orden_nuevo === undefined) {
         return next(new AppError('Cada item debe tener id_imagen y orden_nuevo', 400));
+      }
+      
+      // Validar tipo si se proporciona
+      if (item.tipo_nuevo && !['portada', 'contraportada', 'contenido', 'detalle'].includes(item.tipo_nuevo)) {
+        return next(new AppError('Tipo de imagen no válido', 400));
       }
     }
 
