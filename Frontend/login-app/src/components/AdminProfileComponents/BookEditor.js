@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import CachedImage from '../CachedImage';
 
 const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
   const isEditMode = mode === 'edit';
-  console.log(book);
+  
   const [formData, setFormData] = useState({
     titulo: '',
     autor: '',
@@ -20,6 +21,15 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     descripcion: '',
     stock: 1
   });
+
+  const [discountData, setDiscountData] = useState({
+    tipo: "porcentaje",
+    valor: '',
+    fecha_inicio: "",
+    fecha_fin: "",
+    codigo_promocion: ''
+  });
+  
   
   const [bookImages, setBookImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -28,6 +38,8 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
   const [isLoadingLanguages, setIsLoadingLanguages] = useState(false);
   const [languageQuery, setLanguageQuery] = useState('');
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const [isLoadingImages, setIsLoadingImages] = useState(false);
+  const [showDiscountDates, setShowDiscountDates] = useState(false);
 
   // Get authentication token from cookies
   const getCookie = (name) => {
@@ -37,16 +49,307 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
 
   // Get auth token from cookie
   const getAuthToken = () => {
-    const authCookie = getCookie('authToken');
-    if (authCookie) {
-      try {
-        const parsedCookie = JSON.parse(authCookie);
-        return parsedCookie.authToken || parsedCookie.token || '';
-      } catch (e) {
-        return authCookie;
-      }
+    const dataCookie = getCookie("data");
+    if (!dataCookie) return '';
+    
+    try {
+      const parsedData = JSON.parse(dataCookie);
+      return parsedData.authToken || '';
+    } catch (e) {
+      console.error('Error parsing auth token:', e);
+      return '';
     }
-    return '';
+  };
+
+  // Actualizar tipo de imagen en el servidor
+  const updateImageType = async (imageId, newType) => {
+    if (!isEditMode || !book || !book.id) return false;
+    
+    const token = getAuthToken();
+    if (!token) {
+      console.error('No se encontró el token de autenticación');
+      return false;
+    }
+    
+    try {
+      // Llamar a la API para actualizar el tipo de imagen
+      const response = await axios.put(
+        `http://localhost:5000/api/v1/libros/${book.id}/imagenes/${imageId}`,
+        { tipo: newType },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        console.log(`Tipo de imagen actualizado a "${newType}" correctamente`);
+        return true;
+      } else {
+        console.error('Error al actualizar tipo de imagen:', response.data);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error al actualizar tipo de imagen:', error);
+      if (error.response) {
+        console.error('Detalles del error:', error.response.data);
+      }
+      return false;
+    }
+  };
+
+  // Actualizar orden de imágenes en el servidor
+  const updateImageOrder = async () => {
+    if (!isEditMode || !book || !book.id) return false;
+    
+    // Solo actualizar el orden si hay imágenes existentes
+    const existingImages = bookImages.filter(img => img.isExisting && img._id);
+    if (existingImages.length < 2) return true; // No es necesario actualizar si hay 0 o 1 imagen
+    
+    const token = getAuthToken();
+    if (!token) {
+      console.error('No se encontró el token de autenticación');
+      return false;
+    }
+    
+    try {
+      // Crear un array con el formato esperado por la API
+      const ordenesNuevos = [];
+      
+      // Mapear cada imagen a su nuevo orden basado en su posición actual
+      existingImages.forEach((img, idx) => {
+        ordenesNuevos.push({
+          id_imagen: img._id,
+          orden_nuevo: idx
+        });
+      });
+      
+      // Datos de la solicitud según la documentación
+      const requestData = { ordenesNuevos };
+      
+      console.log('Enviando actualización de orden:', JSON.stringify(requestData, null, 2));
+      
+      // Enviar la solicitud PATCH para actualizar el orden
+      const response = await axios({
+        method: 'PATCH',
+        url: `http://localhost:5000/api/v1/libros/${book.id}/imagenes/orden`,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        data: requestData
+      });
+      
+      console.log('Respuesta completa:', response);
+      
+      if (response.data && response.data.status === 'success') {
+        console.log('Orden de imágenes actualizado correctamente:', response.data);
+        return true;
+      } else {
+        console.error('Error al actualizar orden de imágenes:', response.data);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error al actualizar orden de imágenes:', error);
+      if (error.response) {
+        console.error('Detalles del error:', error.response.data);
+        console.error('Status:', error.response.status);
+        console.error('Headers:', error.response.headers);
+      }
+      return false;
+    }
+  };
+
+  // Función para obtener imágenes del servidor
+  const fetchImagesFromServer = async () => {
+    if (!isEditMode || !book || !book.id) return;
+    
+    try {
+      const response = await axios.get(`http://localhost:5000/api/v1/libros/${book.id}`);
+      if (response.data.status === 'success' && response.data.data.imagenes) {
+        const serverImages = response.data.data.imagenes.map(img => ({
+          _id: img._id,
+          url: img.url,
+          file: null,
+          type: img.tipo,
+          orden: img.orden,
+          alt: img.alt_text || book.title,
+          isExisting: true
+        }));
+        
+        // Ordenar por el campo orden actualizado
+        serverImages.sort((a, b) => a.orden - b.orden);
+        
+        // Forzar que la primera imagen sea portada y las demás contenido 
+        // independientemente de lo que esté almacenado en el servidor
+        if (serverImages.length > 0) {
+          serverImages[0].type = 'portada';
+          for (let i = 1; i < serverImages.length; i++) {
+            serverImages[i].type = 'contenido';
+          }
+        }
+        
+        // Mantener la imagen actual visible si es posible
+        const currentImageUrl = bookImages[currentImageIndex]?.url;
+        const newIndex = serverImages.findIndex(img => img.url === currentImageUrl);
+        
+        setBookImages(serverImages);
+        if (newIndex >= 0) {
+          setCurrentImageIndex(newIndex);
+        } else if (serverImages.length > 0) {
+          setCurrentImageIndex(0);
+        }
+      }
+    } catch (error) {
+      console.error('Error al cargar imágenes del servidor:', error);
+    }
+  };
+
+  // Función para actualizar tipos de imágenes en el servidor después de reordenar
+  const updateAllImageTypes = async () => {
+    if (!isEditMode || !book || !book.id || bookImages.length === 0) return false;
+    
+    try {
+      // Obtener token de autenticación
+      const token = getAuthToken();
+      if (!token) {
+        console.error('No se encontró el token de autenticación');
+        return false;
+      }
+      
+      // Actualizar el tipo de todas las imágenes para asegurar que coincidan con su posición
+      let success = true;
+      
+      // La primera imagen debe ser portada
+      if (bookImages[0].isExisting && bookImages[0]._id) {
+        console.log('Actualizando primera imagen a portada:', bookImages[0]._id);
+        const result = await updateImageType(bookImages[0]._id, 'portada');
+        if (!result) success = false;
+      }
+      
+      // Las demás imágenes deben ser contenido
+      for (let i = 1; i < bookImages.length; i++) {
+        if (bookImages[i].isExisting && bookImages[i]._id) {
+          console.log('Actualizando imagen a contenido:', bookImages[i]._id);
+          const result = await updateImageType(bookImages[i]._id, 'contenido');
+          if (!result) success = false;
+        }
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('Error al actualizar tipos de imágenes:', error);
+      return false;
+    }
+  };
+
+  const formatDateTimeForInput = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      return date.toISOString().slice(0, 16);
+    } catch (e) {
+      return '';
+    }
+  };
+
+  // Add discount to a book
+  const addDiscount = async (bookId) => {
+    if (!discountData.valor || parseFloat(discountData.valor) <= 0) {
+      return true; // No discount to add
+    }
+
+    const token = getAuthToken();
+    if (!token) {
+      console.error('No se encontró el token de autenticación');
+      return false;
+    }
+
+    try {
+      const discountPayload = {
+        tipo: discountData.tipo,
+        valor: parseFloat(discountData.valor),
+        fecha_inicio: discountData.fecha_inicio || new Date().toISOString(),
+        fecha_fin: discountData.fecha_fin || new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+        codigo_promocion: discountData.codigo_promocion || ''
+      };
+
+      console.log('Enviando descuento:', JSON.stringify(discountPayload, null, 2));
+      
+      const response = await axios.post(
+        `http://localhost:5000/api/v1/libros/${bookId}/descuentos`,
+        discountPayload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        console.log('Descuento agregado correctamente:', response.data);
+        return true;
+      } else {
+        console.error('Error al agregar descuento:', response.data);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error al agregar descuento:', error);
+      if (error.response) {
+        console.error('Detalles del error:', error.response.data);
+      }
+      return false;
+    }
+  };
+
+  // Fetch book's discount data if in edit mode
+  const fetchDiscountData = async () => {
+    if (!isEditMode || !book || !book.id) return;
+    
+    try {
+      const response = await axios.get(`http://localhost:5000/api/v1/libros/${book.id}`);
+      if (response.data.status === 'success' && 
+          response.data.data.precio_info && 
+          response.data.data.precio_info.descuentos && 
+          response.data.data.precio_info.descuentos.length > 0) {
+            
+        const activeDiscount = response.data.data.precio_info.descuentos.find(d => d.activo);
+        
+        if (activeDiscount) {
+          setDiscountData({
+            tipo: activeDiscount.tipo || 'porcentaje',
+            valor: activeDiscount.valor?.toString() || '',
+            fecha_inicio: formatDateTimeForInput(activeDiscount.fecha_inicio) || '',
+            fecha_fin: formatDateTimeForInput(activeDiscount.fecha_fin) || '',
+            codigo_promocion: activeDiscount.codigo_promocion || ''
+          });
+          
+          // If there's an active discount, show the date fields
+          if (activeDiscount.valor > 0) {
+            setShowDiscountDates(true);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error al cargar datos de descuento:', error);
+    }
+  };
+
+  const handleDiscountChange = (e) => {
+    const { name, value } = e.target;
+    
+    setDiscountData({
+      ...discountData,
+      [name]: value
+    });
+    
+    // If valor field is being changed, we need to check if we should show date fields
+    if (name === 'valor') {
+      const numericValue = parseFloat(value);
+      setShowDiscountDates(!isNaN(numericValue) && numericValue > 0 && numericValue <= 100);
+    }
   };
 
   // Fetch languages from API
@@ -81,10 +384,66 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     loadLanguages();
   }, []);
   
-  // Filter languages based on user input
-  const filteredLanguages = languages.filter(lang => 
-    lang.toLowerCase().includes(languageQuery.toLowerCase())
-  );
+  // Carga imágenes al montar el componente en modo edición
+  useEffect(() => {
+    if (isEditMode && book && book.id) {
+      const loadBookImages = async () => {
+        setIsLoadingImages(true);
+        await fetchImagesFromServer();
+        setIsLoadingImages(false);
+      };
+      loadBookImages();
+    }
+  }, [isEditMode, book?.id]);
+  
+  // Load book images if in edit mode
+  useEffect(() => {
+    const fetchBookImages = async () => {
+      if (isEditMode && book && book.id) {
+        // if (discountData.valor && parseFloat(discountData.valor) > 0) {
+        //   console.log()
+        //   await addDiscount(book.id);
+        // }
+        setIsLoadingImages(true);
+        try {
+          // Cargar todas las imágenes del libro
+          const response = await axios.get(`http://localhost:5000/api/v1/libros/${book.id}`);
+          if (response.data.status === 'success' && response.data.data.imagenes) {
+            // Mapear todas las imágenes desde la respuesta de la API
+            const images = response.data.data.imagenes.map(img => ({
+              _id: img._id,
+              url: img.url,
+              file: null,
+              type: img.tipo,
+              orden: img.orden,
+              alt: img.alt_text || book.title,
+              // Flag para distinguir imágenes existentes de las nuevas
+              isExisting: true
+            }));
+            
+            // Ordenar las imágenes por el campo "orden"
+            images.sort((a, b) => a.orden - b.orden);
+            
+            // Asegurar que la primera imagen sea portada y las demás contenido
+            if (images.length > 0) {
+              images[0].type = 'portada';
+              for (let i = 1; i < images.length; i++) {
+                images[i].type = 'contenido';
+              }
+            }
+            
+            setBookImages(images);
+          }
+        } catch (error) {
+          console.error('Error al cargar imágenes del libro:', error);
+        } finally {
+          setIsLoadingImages(false);
+        }
+      }
+    };
+
+    fetchBookImages();
+  }, [isEditMode, book]);
 
   // Carga los datos del libro cuando estamos en modo edición
   useEffect(() => {
@@ -105,24 +464,17 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         descripcion: book.description || '',
         stock: book.stock || 1
       });
-
-      if (book.image) {
-        setBookImages([{ url: book.image, file: null, type: 'portada', alt: book.title }]);
-      }
       
-      // Si hay imágenes adicionales, cargarlas también
-      if (book.additionalImages && book.additionalImages.length > 0) {
-        const additionalBookImages = book.additionalImages.map(img => ({
-          url: img.url,
-          file: null,
-          type: 'galeria',
-          alt: book.title
-        }));
-        
-        setBookImages([...bookImages, ...additionalBookImages]);
-      }
+      // Nota: las imágenes se cargan en el useEffect específico para ello
+      setLanguageQuery(book.language || '');
+      fetchDiscountData();
     }
   }, [isEditMode, book]);
+
+  // Filter languages based on user input
+  const filteredLanguages = languages.filter(lang => 
+    lang.toLowerCase().includes(languageQuery.toLowerCase())
+  );
 
   // Format date for the date input (YYYY-MM-DD)
   const formatDateForInput = (dateString) => {
@@ -138,6 +490,14 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
+      [name]: value
+    });
+  };
+
+  const handleChangeDiscount = (e) => {
+    const { name, value } = e.target;
+    setDiscountData({
+      ...discountData,
       [name]: value
     });
   };
@@ -164,10 +524,11 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     e.preventDefault();
     
     try {
-      // Get the auth token from cookies
-      const dataCookie = getCookie("data");
-      const parsedData = JSON.parse(dataCookie);
-      const token = parsedData.authToken;
+      const token = getAuthToken();
+      if (!token) {
+        alert('No se encontró la sesión. Por favor inicie sesión nuevamente.');
+        return;
+      }
       
       // Format the data for API submission
       const apiData = {
@@ -212,81 +573,92 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         }
       };
 
-      const method = isEditMode ? 'put' : 'post';
-      
       let response;
-      if (isEditMode){
-        response = await axios.put(`http://localhost:5000/api/v1/libros/${(book.id)}`, apiData, {
+      let bookId;
+      
+      if (isEditMode) {
+        response = await axios.put(`http://localhost:5000/api/v1/libros/${book.id}`, apiData, {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${String(token)}`
+            'Authorization': `Bearer ${token}`
           }
         });
-      }else{
+        bookId = book.id;
+        
+        // En modo edición, también actualizamos el orden y los tipos de imágenes
+        await updateAllImageTypes();
+        await updateImageOrder();
+      } else {
         response = await axios.post('http://localhost:5000/api/v1/libros', apiData, {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${String(token)}`
+            'Authorization': `Bearer ${token}`
           }
         });
+        bookId = response.data.data._id;
       }
 
-      
-      
+      if (response.data.status === 'success' && bookId) {
 
-      // If successful, upload the images
-      // if (response.data.data.id_libro) {
-      //   const bookId = response.data.data._id;
-        
-      //   // Upload images, considering the first one as the main cover
-      //   for (let i = 0; i < bookImages.length; i++) {
-      //     const image = bookImages[i];
-      //     if (image.file) {
-      //       const formData = new FormData();
-      //       formData.append('imagen', image.file);
-      //       formData.append('tipo', i === 0 ? 'portada' : 'galeria'); // First image is always the cover
-      //       formData.append('orden', i);
-      //       formData.append('alt_text', `${formData.titulo} - ${i === 0 ? 'Portada' : `Imagen ${i+1}`}`);
-            
-      //       await axios.post(
-      //         `http://localhost:5000/api/v1/libros/${bookId}/imagenes`,
-      //         formData,
-      //         {
-      //           headers: {
-      //             'Content-Type': 'multipart/form-data',
-      //             'Authorization': `Bearer ${String(token)}`
-      //           }
-      //         }
-      //       );
-      //     }
-      //   }
-        
-      //   // Call onSave callback after successful book creation and image uploads
-      //   // if (onSave) {
-      //   //   onSave(response.data.data);
-      //   // }
-      // }
+        if (discountData.valor && parseFloat(discountData.valor) > 0) {
+          console.log("Will add discount");
+          await addDiscount(book.id);
+        }
 
+        // Upload only new images (files)
+        const newImages = bookImages.filter(img => img.file);
+        
+        for (let i = 0; i < newImages.length; i++) {
+          const image = newImages[i];
+          const formData = new FormData();
+          formData.append('imagen', image.file);
+          
+          // Determinar el tipo basado en la posición
+          // La primera imagen (si no hay imágenes existentes) es la portada
+          const isFirstImage = !bookImages.some(img => img.isExisting) && i === 0;
+          const imageType = isFirstImage ? 'portada' : 'contenido';
+          
+          formData.append('tipo', imageType);
+          formData.append('orden', bookImages.indexOf(image)); // Mantener el orden actual
+          formData.append('alt_text', image.alt || 'Imagen de libro');
+          
+          try {
+            await axios.post(
+              `http://localhost:5000/api/v1/libros/${bookId}/imagenes`,
+              formData,
+              {
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                  'Authorization': `Bearer ${token}`
+                }
+              }
+            );
+          } catch (uploadError) {
+            console.error(`Error al subir imagen ${i}:`, uploadError);
+            alert(`Error al subir imagen ${i+1}: ${uploadError.response?.data?.message || uploadError.message}`);
+          }
+        }
+      }
+
+      // Finalizar y volver
       onCancel();
     } catch (error) {
       console.error('Error submitting book:', error);
-      alert('Error al guardar el libro. Por favor intente nuevamente.');
+      alert(`Error al guardar el libro: ${error.response?.data?.message || error.message}. Por favor intente nuevamente.`);
     }
   };
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      // If there are no images, the first upload will be the cover
-      const isFirstImage = bookImages.length === 0;
-      
+      // Create image objects for new uploaded files
       const newImages = files.map((file, idx) => {
         return {
           url: URL.createObjectURL(file),
           file: file,
-          // Only the first image uploaded when there are no images will be the cover
-          type: isFirstImage && idx === 0 ? 'portada' : 'galeria',
-          alt: formData.titulo || 'Libro'
+          type: bookImages.length === 0 ? 'portada' : 'contenido',
+          alt: formData.titulo || 'Libro',
+          isExisting: false
         };
       });
       
@@ -311,7 +683,6 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     }
   };
 
-  // Drag and drop functions
   const handleDragStart = (index) => {
     setDraggedIndex(index);
   };
@@ -333,11 +704,21 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       // Insert at the new position
       newImages.splice(index, 0, draggedImage);
       
-      // Update image types (first is always cover)
-      newImages[0].type = 'portada';
-      for (let i = 1; i < newImages.length; i++) {
-        newImages[i].type = 'galeria';
+      // Update image types in the UI (first is always cover)
+      if (newImages.length > 0) {
+        // Marcar la primera imagen como portada
+        newImages[0].type = 'portada';
+        
+        // Las demás imágenes son de tipo contenido
+        for (let i = 1; i < newImages.length; i++) {
+          newImages[i].type = 'contenido';
+        }
       }
+      
+      // Update the order property for each image
+      newImages.forEach((img, idx) => {
+        img.orden = idx;
+      });
       
       // Update the state
       setBookImages(newImages);
@@ -352,12 +733,54 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     }
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = async () => {
+    // Si estamos en modo edición y hay un cambio de orden, actualizar en el servidor
+    if (isEditMode && draggedIndex !== null) {
+      try {
+        // 1. Primero, actualizar el estado local para reflejar que la primera imagen es portada
+        const updatedImages = [...bookImages];
+        for (let i = 0; i < updatedImages.length; i++) {
+          updatedImages[i].type = i === 0 ? 'portada' : 'contenido';
+        }
+        setBookImages(updatedImages);
+        
+        // 2. Actualizar todos los tipos de imágenes en el servidor
+        await updateAllImageTypes();
+        
+        // 3. Actualizar el orden de todas las imágenes
+        const success = await updateImageOrder();
+        
+        // 4. Si todo fue exitoso, recargar las imágenes del servidor
+        if (success) {
+          console.log('Orden y tipos actualizados correctamente en el servidor');
+          
+          // Recargar las imágenes para asegurar consistencia
+          await fetchImagesFromServer();
+        } else {
+          console.error('No se pudo actualizar el orden o tipos de las imágenes');
+        }
+      } catch (error) {
+        console.error('Error al finalizar el arrastre:', error);
+      }
+    }
+    
     setDraggedIndex(null);
   };
 
-  const removeImage = (index) => {
+  const removeImage = async (index) => {
+    const image = bookImages[index];
     const newImages = [...bookImages];
+    
+    // Si es una imagen existente, eliminarla del servidor primero
+    if (image.isExisting && image._id) {
+      const success = await deleteImageFromServer(image._id);
+      if (!success) {
+        alert('Error al eliminar la imagen del servidor. Intente nuevamente.');
+        return;
+      }
+    }
+    
+    // Eliminar la imagen del array
     newImages.splice(index, 1);
     
     // If we removed all images, just clear the array
@@ -368,9 +791,19 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     }
     
     // If we removed the cover image, make the first remaining image the new cover
-    if (index === 0) {
+    if (index === 0 && newImages.length > 0) {
       newImages[0].type = 'portada';
+      
+      // Si es una imagen existente, actualizar su tipo a portada en el servidor
+      if (newImages[0].isExisting && newImages[0]._id) {
+        await updateImageType(newImages[0]._id, 'portada');
+      }
     }
+    
+    // Update the image order
+    newImages.forEach((img, idx) => {
+      img.orden = idx;
+    });
     
     setBookImages(newImages);
     
@@ -380,45 +813,91 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     } else if (currentImageIndex === index) {
       setCurrentImageIndex(Math.max(0, currentImageIndex - 1));
     }
+    
+    // Actualizar el orden en el servidor si quedan imágenes
+    if (newImages.length > 1 && isEditMode) {
+      await updateImageOrder();
+    }
   };
 
-  // Display max 3 thumbnails
+  // Eliminar imagen del servidor
+  const deleteImageFromServer = async (imageId) => {
+    if (!isEditMode || !book || !book.id) return false;
+    
+    const token = getAuthToken();
+    if (!token) {
+      alert('No se encontró la sesión. Por favor inicie sesión nuevamente.');
+      return false;
+    }
+    
+    try {
+      const response = await axios.delete(
+        `http://localhost:5000/api/v1/libros/${book.id}/imagenes/${imageId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        return true;
+      } else {
+        console.error('Error al eliminar imagen:', response.data);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error al eliminar imagen:', error);
+      return false;
+    }
+  };
+
+  // Display thumbnails - up to 3 unique images with correct labels
   const displayThumbnails = () => {
-    return Array(3).fill(0).map((_, index) => {
-      const imageIndex = (index + 1) % bookImages.length;
-      const image = bookImages[imageIndex] || null;
+    // Mostrar hasta 3 miniaturas, pero no repetir imágenes
+    // Si hay menos de 3 imágenes, algunas cajas quedarán vacías
+    return Array(3).fill(null).map((_, index) => {
+      // Solo mostrar una imagen si tenemos suficientes
+      const hasImage = index < bookImages.length;
+      const image = hasImage ? bookImages[index] : null;
       
       return (
         <div 
           key={index}
-          className={`w-16 h-16 border rounded ${image ? 'bg-white' : 'bg-gray-200'} flex items-center justify-center cursor-pointer ${draggedIndex === imageIndex ? 'opacity-50' : ''}`}
+          className={`w-16 h-16 border rounded ${hasImage ? 'bg-white' : 'bg-gray-200'} flex items-center justify-center cursor-pointer ${draggedIndex === index ? 'opacity-50' : ''}`}
           onClick={() => {
-            if (image) {
-              setCurrentImageIndex(imageIndex);
+            if (hasImage) {
+              setCurrentImageIndex(index);
             }
           }}
-          draggable={image !== null}
-          onDragStart={() => image && handleDragStart(imageIndex)}
-          onDragOver={(e) => image && handleDragOver(e, imageIndex)}
+          draggable={hasImage}
+          onDragStart={() => hasImage && handleDragStart(index)}
+          onDragOver={(e) => hasImage && handleDragOver(e, index)}
           onDragEnd={handleDragEnd}
         >
-          {image ? (
+          {hasImage ? (
             <div className="relative w-full h-full">
-              <img 
+              <CachedImage 
                 src={image.url} 
                 alt={`Miniatura ${index + 1}`} 
                 className="max-w-full max-h-full object-cover"
+                fallbackSrc="/placeholder-book.png"
               />
               <button 
                 type="button"
                 className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
                 onClick={(e) => {
                   e.stopPropagation();
-                  removeImage(imageIndex);
+                  removeImage(index);
                 }}
               >
                 ×
               </button>
+              
+              {/* Indicador de tipo de imagen basado exclusivamente en la posición */}
+              <span className="absolute bottom-0 left-0 right-0 text-xs text-center bg-black bg-opacity-50 text-white truncate">
+                {index === 0 ? 'P' : 'C'}
+              </span>
             </div>
           ) : (
             <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -447,12 +926,18 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
               onDragOver={(e) => handleDragOver(e, currentImageIndex)}
               onDragEnd={handleDragEnd}
             >
-              {bookImages.length > 0 ? (
+              {isLoadingImages ? (
+                <div className="text-center p-4">
+                  <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-gray-600">Cargando imágenes...</p>
+                </div>
+              ) : bookImages.length > 0 ? (
                 <div className="relative w-full h-full flex items-center justify-center">
-                  <img 
+                  <CachedImage 
                     src={bookImages[currentImageIndex].url} 
-                    alt="Portada del libro" 
+                    alt={bookImages[currentImageIndex].alt || "Portada del libro"} 
                     className="max-w-full max-h-full object-contain"
+                    fallbackSrc="/placeholder-book.png"
                   />
                   <button 
                     type="button"
@@ -464,6 +949,11 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
                   >
                     ×
                   </button>
+                  
+                  {/* Indicador del tipo de imagen */}
+                  <div className="absolute bottom-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
+                    {currentImageIndex === 0 ? 'Portada' : 'Contenido'}
+                  </div>
                 </div>
               ) : (
                 <div className="text-center p-4">
@@ -503,7 +993,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
             
             {/* Miniaturas */}
             <div className="flex space-x-2 mb-4">
-              {bookImages.length > 1 ? displayThumbnails() : (
+              {bookImages.length > 0 ? displayThumbnails() : (
                 Array(3).fill(0).map((_, index) => (
                   <div 
                     key={index}
@@ -516,6 +1006,13 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
                 ))
               )}
             </div>
+            
+            {/* Contador de imágenes */}
+            {bookImages.length > 0 && (
+              <div className="text-xs text-gray-600 mb-2">
+                Imagen {currentImageIndex + 1} de {bookImages.length}
+              </div>
+            )}
             
             {/* Botones para gestionar imágenes */}
             <div className="flex justify-center space-x-2 w-full">
@@ -531,7 +1028,22 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
               </label>
               <button 
                 type="button"
-                onClick={() => setBookImages([])}
+                onClick={() => {
+                  if (window.confirm('¿Está seguro de eliminar todas las imágenes? Esta acción no se puede deshacer.')) {
+                    // Para cada imagen existente, eliminarla del servidor
+                    const deleteAll = async () => {
+                      for (const img of bookImages) {
+                        if (img.isExisting && img._id) {
+                          await deleteImageFromServer(img._id);
+                        }
+                      }
+                      setBookImages([]);
+                      setCurrentImageIndex(0);
+                    };
+                    
+                    deleteAll();
+                  }
+                }}
                 className="bg-gray-200 text-gray-800 px-3 py-2 rounded hover:bg-gray-300"
                 disabled={bookImages.length === 0}
               >
@@ -540,6 +1052,9 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
             </div>
             <p className="text-sm text-gray-500 mt-2">
               Arrastre y suelte para reordenar las imágenes. La primera imagen será la portada principal.
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Tipos de imagen: Portada (primera), Contenido (resto)
             </p>
           </div>
         </div>
@@ -728,6 +1243,72 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
                   min="0"
                 />
               </div>
+
+              <div className="form-group">
+  <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
+  <input
+    type="number"
+    name="valor"
+    placeholder="Porcentaje descuento"
+    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+    value={discountData.valor}
+    onChange={(e) => {
+      let value = e.target.value;
+
+      // Allow empty string so user can clear the field
+      if (value === '') {
+        handleDiscountChange({
+          target: { name: 'valor', value: '' }
+        });
+        return;
+      }
+
+      let numericValue = Number(value);
+
+      if (isNaN(numericValue)) return;
+
+      // Clamp to range 0-100
+      if (numericValue < 0) numericValue = 0;
+      if (numericValue > 100) numericValue = 100;
+
+      // Update with the clamped value
+      handleDiscountChange({
+        target: { name: 'valor', value: numericValue.toString() }
+      });
+    }}
+    min="0"
+    max="100"
+  />
+</div>
+
+{showDiscountDates && (
+  <>
+    <div className="form-group">
+      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha inicio descuento</label>
+      <input
+        type="datetime-local"
+        name="fecha_inicio"
+        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        value={discountData.fecha_inicio}
+        onChange={handleDiscountChange}
+      />
+    </div>
+    
+    <div className="form-group">
+      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha fin descuento</label>
+      <input
+        type="datetime-local"
+        name="fecha_fin"
+        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        value={discountData.fecha_fin}
+        onChange={handleDiscountChange}
+      />
+    </div>
+  </>
+)}
+
+
+
             </div>
             
             {/* Campo Descripción (full width) */}

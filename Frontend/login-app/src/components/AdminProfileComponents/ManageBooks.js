@@ -1,33 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import BookEditor from './BookEditor';
-
-// Componente de imagen de libro con manejo de errores
-const BookImage = ({ imageUrl, title }) => {
-  const [hasError, setHasError] = useState(false);
-
-  const handleError = () => {
-    setHasError(true);
-  };
-
-  // Si ya sabemos que la imagen tiene error, no intentamos cargarla
-  if (hasError) {
-    return (
-      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-      </svg>
-    );
-  }
-
-  return (
-    <img 
-      src={imageUrl} 
-      alt={title}
-      className="max-w-full max-h-full object-contain"
-      onError={handleError}
-    />
-  );
-};
+import CachedImage from '../CachedImage';
 
 const ManageBooks = () => {
   const [books, setBooks] = useState([]);
@@ -51,7 +25,7 @@ const ManageBooks = () => {
     setIsLoading(true);
     try {
       const response = await axios.get('http://localhost:5000/api/v1/libros');
-      
+      console.log(response);
       if (response.data && response.data.status === 'success') {
         // Formatear los datos para mantener la estructura original
         const formattedBooks = response.data.data.map(book => {
@@ -61,7 +35,7 @@ const ManageBooks = () => {
           // Verificar si hay imágenes en el formato nuevo
           if (book.imagenes && book.imagenes.length > 0) {
             // Buscar la imagen de tipo "portada"
-            const portada = book.imagenes.find(img => img.tipo === 'portada');
+            const portada = book.imagenes.find(img => img.orden === 0);
             if (portada) {
               imageUrl = portada.url;
             } else {
@@ -78,10 +52,7 @@ const ManageBooks = () => {
           let discount = 0;
           if (book.precio_info && book.precio_info.descuentos && book.precio_info.descuentos.length > 0) {
             // Tomar el primer descuento disponible
-            discount = book.precio_info.descuentos[0].porcentaje || 0;
-          } else {
-            // Generar un descuento aleatorio como en la versión original
-            discount = Math.floor(Math.random() * 60);
+            discount = book.precio_info.descuentos[0].valor || 0;
           }
           
           return {
@@ -136,7 +107,7 @@ const ManageBooks = () => {
   const openEditor = (mode, book = null) => {
     setEditorMode(mode);
     setSelectedBook(book);
-    setSelectedBookid(book._id);
+    setSelectedBookid(book ? book.id : null);
     setShowEditor(true);
   };
 
@@ -287,7 +258,7 @@ const ManageBooks = () => {
             id: selectedBook.id
           } : null}
           mode={editorMode}
-          id={selectedBook.id}
+          id={selectedBook?.id}
           onSave={saveBook}
           onCancel={closeEditor}
         />
@@ -302,8 +273,8 @@ const ManageBooks = () => {
                 onClick={() => openEditor('add')}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700"
               >
-                <span className="material-icons-outlined mr-1">add</span>
-                Añadir Libro
+                <span className="material-icons-outlined mr-1">Añadir Libro</span>
+                
               </button>
               
               {/* Caja de búsqueda */}
@@ -356,7 +327,12 @@ const ManageBooks = () => {
                     <div className="col-span-1 flex items-center">
                       <div className="w-10 h-10 flex-shrink-0 mr-3 overflow-hidden rounded border border-gray-200 flex items-center justify-center bg-white">
                         {book.image ? (
-                          <BookImage imageUrl={book.image} title={book.title} />
+                          <CachedImage 
+                            src={book.image} 
+                            alt={book.title}
+                            className="max-w-full max-h-full object-contain"
+                            fallbackSrc="/placeholder-book.png"
+                          />
                         ) : (
                           getBookIcon(book.id)
                         )}
