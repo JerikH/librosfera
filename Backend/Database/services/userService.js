@@ -50,7 +50,7 @@ const userService = {
       console.log('URL de la imagen:', urlImagen);
       
       // Si ya existe una foto de perfil anterior y no es la default, eliminar físicamente
-      if (usuario.foto_perfil && usuario.foto_perfil !== 'default.jpg' && !usuario.foto_perfil.includes('default')) {
+      if (usuario.foto_perfil && usuario.foto_perfil !== 'http://localhost:5000/uploads/profiles/default.jpg' && !usuario.foto_perfil.includes('default')) {
         try {
           // Extraer nombre del archivo de la URL
           const nombreArchivoActual = usuario.foto_perfil.split('/').pop();
@@ -115,7 +115,7 @@ const userService = {
       }
 
       // Si ya existe una foto de perfil y no es la default, eliminar físicamente
-      if (usuario.foto_perfil && usuario.foto_perfil !== 'default.jpg' && !usuario.foto_perfil.includes('default')) {
+      if (usuario.foto_perfil && usuario.foto_perfil !== 'http://localhost:5000/uploads/profiles/default.jpg' && !usuario.foto_perfil.includes('default')) {
         try {
           // Extraer nombre del archivo de la URL
           const nombreArchivoActual = usuario.foto_perfil.split('/').pop();
@@ -140,7 +140,7 @@ const userService = {
       }
       
       // Restaurar foto de perfil por defecto
-      usuario.foto_perfil = 'default.jpg';
+      usuario.foto_perfil = 'http://localhost:5000/uploads/profiles/default.jpg';
       await usuario.save();
       
       console.log('Foto de perfil restaurada a default');

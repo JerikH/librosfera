@@ -116,7 +116,7 @@ const personaSchema = new Schema({
   },
   foto_perfil: {
     type: String,
-    default: 'default.jpg'
+    default: 'http://localhost:5000/uploads/profiles/default.jpg'
   }
 });
 
