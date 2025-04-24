@@ -1,7 +1,7 @@
 import React from 'react';
 import { logoutUser } from '../UserProfilePageComponents/authUtils';
 
-const Sidebar = ({ activeTab, setActiveTab, userData, isLoading }) => {
+const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }) => {
   // Función para manejar el logout
   const handleLogout = async () => {
     await logoutUser();
@@ -12,6 +12,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading }) => {
   const navItems = [
     { id: 'inicio', name: 'Inicio', icon: 'inicio' },
     { id: 'administrar-libro', name: 'Administrar Libros', icon: 'libro' },
+    { id: 'gestionar-usuarios', name: 'Gestionar Usuarios', icon: 'usuarios' },
     { id: 'gestionar-mensajes', name: 'Gestionar Mensajes', icon: 'mensaje' },
     { id: 'mi-perfil', name: 'Mi Perfil', icon: 'perfil' }
   ];
@@ -39,7 +40,10 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading }) => {
           {isLoading ? 'Cargando...' : (userData?.usuario || 'Admin')}
         </h2>
         
-        <button className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
+        <button 
+          onClick={onEditProfile}
+          className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm"
+        >
           Editar Perfil
         </button>
       </div>
@@ -61,6 +65,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading }) => {
                 <span className="material-icons-outlined mr-3">
                   {item.icon === 'inicio' && 'home'}
                   {item.icon === 'libro' && 'book'}
+                  {item.icon === 'usuarios' && 'people'}
                   {item.icon === 'mensaje' && 'mail'}
                   {item.icon === 'perfil' && 'person'}
                 </span>

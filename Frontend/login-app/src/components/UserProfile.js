@@ -5,12 +5,14 @@ import ProfilePage from './UserProfilePageComponents/ProfilePage';
 import PurchasesPage from './UserProfilePageComponents/PurchasesPage';
 import CartPage from './UserProfilePageComponents/CartPage';
 import CardPage from './UserProfilePageComponents/CardPage';
+import EditProfile from './EditProfile';
 import { fetchUserData, logoutUser } from './UserProfilePageComponents/authUtils';
 
 const UserProfile = () => {
   const [activeTab, setActiveTab] = useState('home');
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   
   // Check authentication on mount and redirect immediately if needed
   useEffect(() => {
@@ -49,7 +51,7 @@ const UserProfile = () => {
   
   // Fetch user data when active tab changes
   useEffect(() => {
-    if (!isLoading) { // Only refresh data if initial load is complete
+    if (!isLoading && !isEditingProfile) { // Only refresh data if initial load is complete
       const refreshData = async () => {
         const result = await fetchUserData();
         
@@ -63,12 +65,55 @@ const UserProfile = () => {
       
       refreshData();
     }
-  }, [activeTab, isLoading]);
+  }, [activeTab, isLoading, isEditingProfile]);
+  
+  // Handler para editar perfil
+  const handleEditProfile = () => {
+    setIsEditingProfile(true);
+  };
+  
+  // Handler para regresar de la edición de perfil
+  const handleGoBack = () => {
+    setIsEditingProfile(false);
+    // Refrescar datos del usuario
+    const refreshData = async () => {
+      const result = await fetchUserData();
+      if (result.success) {
+        setUserData(result.data);
+      }
+    };
+    refreshData();
+  };
   
   // Render content only if we have userData
   // If not, nothing is rendered while the redirect happens
   if (!userData) {
     return null;
+  }
+  
+  // Si estamos editando el perfil, mostrar el editor
+  if (isEditingProfile) {
+    return (
+      <div className="flex h-screen bg-[#f9fafb]">
+        {/* Left sidebar */}
+        <Sidebar 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab} 
+          userData={userData}
+          isLoading={isLoading}
+          onEditProfile={handleEditProfile}
+        />
+        
+        {/* Main content area */}
+        <div className="flex-1 flex h-full overflow-y-auto p-6">
+          <EditProfile 
+            userData={userData}
+            userType="user"
+            onGoBack={handleGoBack}
+          />
+        </div>
+      </div>
+    );
   }
   
   return (
@@ -79,6 +124,7 @@ const UserProfile = () => {
         setActiveTab={setActiveTab} 
         userData={userData}
         isLoading={isLoading}
+        onEditProfile={handleEditProfile}
       />
       
       {/* Main content area */}
@@ -92,8 +138,8 @@ const UserProfile = () => {
           </div>
         ) : (
           <>
-            {activeTab === 'home' && <Dashboard userData={userData} />}
-            {activeTab === 'profile' && <ProfilePage userData={userData} />}
+            {activeTab === 'home' && <Dashboard userData={userData} onEditProfile={handleEditProfile} />}
+            {activeTab === 'profile' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
             {activeTab === 'compras' && <PurchasesPage />}
             {activeTab === 'carrito' && <CartPage />}
             {activeTab === 'tarjeta' && <CardPage />}
