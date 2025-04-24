@@ -35,7 +35,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(morgan('dev')); // Logging
 
 // Añadir middleware de depuración en ambiente de desarrollo
-if (process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') {
+if (process.env.NODE_ENV === 'development' && process.env.DEBUG === 'true') {
   app.use(debugMiddleware);
   console.log('Middleware de depuración activado');
 }
@@ -57,6 +57,7 @@ app.use('/uploads', express.static(uploadsPath));
 // Crear directorios necesarios si no existen
 const fs = require('fs');
 const librosPath = path.join(uploadsPath, 'libros');
+const profilesPath = path.join(uploadsPath, 'profiles');
 try {
   if (!fs.existsSync(uploadsPath)) {
     fs.mkdirSync(uploadsPath, { recursive: true });
@@ -65,6 +66,10 @@ try {
   if (!fs.existsSync(librosPath)) {
     fs.mkdirSync(librosPath, { recursive: true });
     console.log('Directorio de imágenes de libros creado:', librosPath);
+  }
+  if (!fs.existsSync(profilesPath)) {
+    fs.mkdirSync(profilesPath, { recursive: true });
+    console.log('Directorio de imágenes de perfiles creado:', profilesPath);
   }
 } catch (error) {
   console.error('Error creando directorios:', error);
