@@ -1571,12 +1571,20 @@ const libroService = {
       
       console.log('URL de la imagen:', urlImagen);
       
+      // Inicializar arreglo de imágenes si no existe
+      if (!libro.imagenes) {
+        libro.imagenes = [];
+      }
+      
+      // Verificar si el orden ya está asignado a otra imagen
+      const ordenYaAsignado = libro.imagenes.find(img => img.orden === metadatos.orden);
+      
       // Preparar datos de la imagen
       const imagenData = {
         url: urlImagen,
         nombre_archivo: archivo.filename,
         tipo: metadatos.tipo || 'detalle',
-        orden: metadatos.orden !== undefined ? parseInt(metadatos.orden) : 999, // Por defecto al final
+        orden: metadatos.orden,
         alt_text: metadatos.alt_text || libro.titulo,
         fecha_subida: new Date(),
         activa: true
@@ -1584,31 +1592,33 @@ const libroService = {
       
       console.log('Datos de imagen a guardar:', imagenData);
       
-      // Agregar la imagen al libro
-      if (!libro.imagenes) {
-        libro.imagenes = [];
+      // Si el orden ya está asignado, necesitamos reordenar
+      if (ordenYaAsignado) {
+        console.log(`Orden ${imagenData.orden} ya asignado, reordenando imágenes...`);
+        
+        // Si es orden 0 (portada) o 1 (contraportada), desplazar la imagen existente
+        if (imagenData.orden === 0 || imagenData.orden === 1) {
+          // Actualizar tipos según el orden
+          imagenData.tipo = imagenData.orden === 0 ? 'portada' : 'contraportada';
+          
+          // Desplazar todas las imágenes con orden >= al nuevo
+          libro.imagenes.forEach(img => {
+            if (img.orden >= imagenData.orden) {
+              img.orden += 1;
+              
+              // Actualizar tipo según el nuevo orden
+              if (img.orden === 1) {
+                img.tipo = 'contraportada';
+              } else if (img.orden > 1 && img.tipo === 'portada') {
+                img.tipo = 'detalle';
+              }
+            }
+          });
+        }
       }
       
-      // Si es portada con orden 0, verificar si ya existe y actualizar
-      if (imagenData.tipo === 'portada' && imagenData.orden === 0) {
-        const portadaIndex = libro.imagenes.findIndex(
-          img => img.tipo === 'portada' && img.orden === 0
-        );
-        
-        if (portadaIndex >= 0) {
-          // Actualizar portada existente
-          libro.imagenes[portadaIndex] = {
-            ...libro.imagenes[portadaIndex].toObject(),
-            ...imagenData
-          };
-        } else {
-          // Agregar nueva portada
-          libro.imagenes.push(imagenData);
-        }
-      } else {
-        // Agregar imagen normal
-        libro.imagenes.push(imagenData);
-      }
+      // Agregar la nueva imagen
+      libro.imagenes.push(imagenData);
       
       // Ordenar imágenes por orden
       libro.imagenes.sort((a, b) => a.orden - b.orden);
@@ -1643,7 +1653,7 @@ const libroService = {
    */
   async actualizarOrdenImagenes(idLibro, ordenesNuevos) {
     try {
-      console.log(`Actualizando orden de imágenes del libro ${idLibro}:`, ordenesNuevos);
+      console.log(`Actualizando orden de imágenes del libro ${idLibro}:`, JSON.stringify(ordenesNuevos, null, 2));
       
       // Buscar el libro
       let libro;
@@ -1657,38 +1667,177 @@ const libroService = {
         throw new Error(`Libro no encontrado con ID: ${idLibro}`);
       }
   
-      // Guardar el valor de ordenesNuevos para debugging
-      console.log('Órdenes nuevos recibidos:', JSON.stringify(ordenesNuevos));
-      
-      // Actualizar orden de imágenes - MEJORAR LA LÓGICA
+      if (!libro.imagenes || libro.imagenes.length === 0) {
+        throw new Error('El libro no tiene imágenes para reordenar');
+      }
+  
+      // Crear un mapa temporal de las imágenes actuales para fácil referencia
+      const imagenesMap = new Map();
+      libro.imagenes.forEach(img => {
+        imagenesMap.set(img._id.toString(), {
+          id: img._id.toString(),
+          ordenActual: img.orden,
+          tipoActual: img.tipo
+        });
+      });
+  
+      // Primero, verificar si hay cambios que afecten a las posiciones 0 y 1
+      // que requieren tratamiento especial
+      let cambioEnPortada = false;
+      let cambioEnContraportada = false;
+      let nuevaPortadaId = null;
+      let nuevaContraportadaId = null;
+  
       ordenesNuevos.forEach(item => {
-        // Buscar por ID MongoDB o por índice si el ID no existe
+        if (item.orden_nuevo === 0) {
+          cambioEnPortada = true;
+          nuevaPortadaId = item.id_imagen;
+        }
+        if (item.orden_nuevo === 1) {
+          cambioEnContraportada = true;
+          nuevaContraportadaId = item.id_imagen;
+        }
+      });
+  
+      // Crear un mapa de órdenes para detectar conflictos
+      const ordenesAsignados = new Map();
+      
+      // Crear un mapa para registrar los cambios a realizar
+      const cambios = [];
+  
+      // Procesar cada cambio de orden
+      ordenesNuevos.forEach(item => {
         const imagen = libro.imagenes.id(item.id_imagen);
-        if (imagen) {
-          imagen.orden = item.orden_nuevo;
-        } else {
-          // Si no encuentra por ID, intentar buscar la imagen por índice o URL
-          // Esto es un fallback por si los IDs están mal formados
+        
+        if (!imagen) {
+          // Intentar buscar por otros medios si el ID directo falla
           const imagenIndex = libro.imagenes.findIndex(img => 
             (img._id && img._id.toString() === item.id_imagen) || 
             img.url.includes(item.id_imagen)
           );
           
           if (imagenIndex !== -1) {
-            libro.imagenes[imagenIndex].orden = item.orden_nuevo;
-            libro.markModified(`imagenes.${imagenIndex}.orden`);
+            const imagenActual = libro.imagenes[imagenIndex];
+            cambios.push({
+              imagen: imagenActual,
+              ordenNuevo: item.orden_nuevo,
+              tipoNuevo: item.tipo_nuevo,
+              index: imagenIndex
+            });
+            
+            // Registrar el orden asignado
+            if (ordenesAsignados.has(item.orden_nuevo)) {
+              ordenesAsignados.set(item.orden_nuevo, [...ordenesAsignados.get(item.orden_nuevo), imagenIndex]);
+            } else {
+              ordenesAsignados.set(item.orden_nuevo, [imagenIndex]);
+            }
+          }
+        } else {
+          cambios.push({
+            imagen: imagen,
+            ordenNuevo: item.orden_nuevo,
+            tipoNuevo: item.tipo_nuevo,
+            index: libro.imagenes.indexOf(imagen)
+          });
+          
+          // Registrar el orden asignado
+          if (ordenesAsignados.has(item.orden_nuevo)) {
+            ordenesAsignados.set(item.orden_nuevo, [...ordenesAsignados.get(item.orden_nuevo), libro.imagenes.indexOf(imagen)]);
+          } else {
+            ordenesAsignados.set(item.orden_nuevo, [libro.imagenes.indexOf(imagen)]);
           }
         }
       });
-      
+  
+      // Detectar conflictos de orden (más de una imagen con el mismo orden)
+      ordenesAsignados.forEach((indices, orden) => {
+        if (indices.length > 1) {
+          console.log(`Conflicto detectado: ${indices.length} imágenes asignadas al orden ${orden}`);
+          
+          // Resolver conflicto incrementando el orden para todas excepto la primera
+          for (let i = 1; i < indices.length; i++) {
+            let nuevoOrden = orden + i;
+            
+            // Buscar el siguiente orden disponible
+            while (ordenesAsignados.has(nuevoOrden)) {
+              nuevoOrden++;
+            }
+            
+            const cambioConflicto = cambios.find(c => c.index === indices[i]);
+            if (cambioConflicto) {
+              console.log(`Resolviendo conflicto: Imagen en índice ${indices[i]} movida de orden ${orden} a ${nuevoOrden}`);
+              cambioConflicto.ordenNuevo = nuevoOrden;
+              ordenesAsignados.set(nuevoOrden, [indices[i]]);
+            }
+          }
+        }
+      });
+  
+      // Aplicar cambios, asegurando que el tipo coincida con el orden
+      cambios.forEach(cambio => {
+        // Determinar el tipo basado en el orden, si no se especificó uno nuevo
+        let tipoFinal = cambio.tipoNuevo;
+        
+        if (!tipoFinal) {
+          if (cambio.ordenNuevo === 0) {
+            tipoFinal = 'portada';
+          } else if (cambio.ordenNuevo === 1) {
+            tipoFinal = 'contraportada';
+          } else if (cambio.ordenNuevo > 1) {
+            // Mantener 'contenido' si ya lo era, de lo contrario usar 'detalle'
+            tipoFinal = cambio.imagen.tipo === 'contenido' ? 'contenido' : 'detalle';
+          }
+        } else {
+          // Asegurar coherencia entre tipo y orden
+          if (cambio.ordenNuevo === 0 && tipoFinal !== 'portada') {
+            console.log(`Ajustando tipo: se especificó '${tipoFinal}' para orden 0, usando 'portada'`);
+            tipoFinal = 'portada';
+          } else if (cambio.ordenNuevo === 1 && tipoFinal !== 'contraportada') {
+            console.log(`Ajustando tipo: se especificó '${tipoFinal}' para orden 1, usando 'contraportada'`);
+            tipoFinal = 'contraportada';
+          }
+        }
+        
+        // Aplicar cambios
+        cambio.imagen.orden = cambio.ordenNuevo;
+        cambio.imagen.tipo = tipoFinal;
+      });
+  
       // Ordenar imágenes por orden
       libro.imagenes.sort((a, b) => a.orden - b.orden);
+      
+      // Verificar que hay una portada (orden 0) y contraportada (orden 1)
+      if (libro.imagenes.length > 0 && libro.imagenes[0].orden !== 0) {
+        console.log('No se encontró portada (orden 0), asignando la primera imagen');
+        libro.imagenes[0].orden = 0;
+        libro.imagenes[0].tipo = 'portada';
+      }
+      
+      if (libro.imagenes.length > 1 && libro.imagenes[1].orden !== 1) {
+        console.log('No se encontró contraportada (orden 1), asignando la segunda imagen');
+        libro.imagenes[1].orden = 1;
+        libro.imagenes[1].tipo = 'contraportada';
+      }
+      
+      // Asegurar orden consecutivo sin huecos
+      for (let i = 0; i < libro.imagenes.length; i++) {
+        libro.imagenes[i].orden = i;
+        
+        // Asegurar coherencia tipo-orden
+        if (i === 0) {
+          libro.imagenes[i].tipo = 'portada';
+        } else if (i === 1) {
+          libro.imagenes[i].tipo = 'contraportada';
+        } else if (libro.imagenes[i].tipo !== 'contenido') {
+          libro.imagenes[i].tipo = 'detalle';
+        }
+      }
       
       libro.markModified('imagenes');
       await libro.save();
       
       console.log('Orden de imágenes actualizado correctamente');
-      return libro;
+      return libro.toObject();
     } catch (error) {
       console.error('Error actualizando orden de imágenes:', error);
       throw error;
@@ -1777,21 +1926,56 @@ const libroService = {
         throw new Error(`Imagen no encontrada con ID: ${idImagen}`);
       }
       
-      // Guardar nombre de archivo para eliminar después
+      // Guardar datos importantes antes de eliminar
+      const ordenEliminado = libro.imagenes[imagenIndex].orden;
+      const tipoEliminado = libro.imagenes[imagenIndex].tipo;
       const nombreArchivo = libro.imagenes[imagenIndex].nombre_archivo;
       
-      // Eliminar la imagen utilizando splice (más seguro que .remove())
+      // Eliminar la imagen utilizando splice
       libro.imagenes.splice(imagenIndex, 1);
-      libro.markModified('imagenes');
       
+      // Reordenar las imágenes restantes
+      if (libro.imagenes.length > 0) {
+        // Si se eliminó la portada o contraportada, promover otras imágenes
+        if (ordenEliminado === 0 || ordenEliminado === 1) {
+          // Actualizar órdenes y tipos
+          libro.imagenes.forEach(img => {
+            // Reducir orden de todas las imágenes con orden > ordenEliminado
+            if (img.orden > ordenEliminado) {
+              img.orden -= 1;
+            }
+            
+            // Actualizar tipos según el nuevo orden
+            if (img.orden === 0) {
+              img.tipo = 'portada';
+            } else if (img.orden === 1) {
+              img.tipo = 'contraportada';
+            }
+          });
+        } else {
+          // Para otras imágenes, simplemente reducir el orden de las posteriores
+          libro.imagenes.forEach(img => {
+            if (img.orden > ordenEliminado) {
+              img.orden -= 1;
+            }
+          });
+        }
+        
+        // Ordenar imágenes por orden
+        libro.imagenes.sort((a, b) => a.orden - b.orden);
+      }
+      
+      libro.markModified('imagenes');
       await libro.save();
       
       // Eliminar archivo físico
       try {
-        const directorioImagenes = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads/libros');
-        const rutaArchivo = path.join(directorioImagenes, nombreArchivo);
-        await fs.unlink(rutaArchivo).catch(e => console.warn(`Aviso: ${e.message}`));
-        console.log('Archivo físico eliminado');
+        if (nombreArchivo) {
+          const directorioImagenes = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads/libros');
+          const rutaArchivo = path.join(directorioImagenes, nombreArchivo);
+          await fs.unlink(rutaArchivo).catch(e => console.warn(`Aviso: ${e.message}`));
+          console.log('Archivo físico eliminado');
+        }
       } catch (err) {
         console.warn(`No se pudo eliminar el archivo físico: ${err.message}`);
         // Continuar incluso si no se puede eliminar el archivo físico

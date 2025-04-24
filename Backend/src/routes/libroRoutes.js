@@ -817,6 +817,14 @@ router.post(
  *                   required:
  *                     - id_imagen
  *                     - orden_nuevo
+ *                   properties:
+ *                     id_imagen:
+ *                       type: string
+ *                     orden_nuevo:
+ *                       type: integer
+ *                     tipo_nuevo:
+ *                       type: string
+ *                       enum: [portada, contraportada, contenido, detalle]
  *     responses:
  *       200:
  *         description: Orden actualizado correctamente
@@ -825,7 +833,12 @@ router.post(
  *       403:
  *         description: No tiene permisos para ordenar imágenes
  */
-router.patch('/:id/imagenes/orden', protect, authorize('administrador', 'root'), actualizarOrdenImagenes);
+router.patch(
+  '/:id/imagenes/orden', 
+  protect, 
+  authorize('administrador', 'root'), 
+  actualizarOrdenImagenes
+);
 
 /**
  * @swagger
