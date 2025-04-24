@@ -1,5 +1,7 @@
 // Database/services/userService.js
 const mongoose = require('mongoose');
+const path = require('path');
+const fs = require('fs').promises;
 const { Usuario, Root, Administrador, Cliente } = require('../models');
 
 /**
@@ -7,6 +9,148 @@ const { Usuario, Root, Administrador, Cliente } = require('../models');
  * Proporciona métodos para todas las operaciones relacionadas con usuarios en la aplicación
  */
 const userService = {
+  /**
+   * Actualiza la foto de perfil de un usuario
+   * @param {String} userId - ID del usuario
+   * @param {Object} archivo - Archivo de imagen subido
+   * @returns {Promise<Object>} Usuario actualizado
+   */
+  async actualizarFotoPerfil(userId, archivo) {
+    try {
+      console.log('Actualizando foto de perfil para usuario:', userId);
+      
+      // Verificar si el usuario existe
+      let usuario;
+      if (mongoose.Types.ObjectId.isValid(userId)) {
+        usuario = await Usuario.findById(userId);
+      } else {
+        usuario = await Usuario.findOne({
+          $or: [
+            { id_cliente: userId },
+            { id_root: userId },
+            { usuario: userId },
+            { email: userId }
+          ]
+        });
+      }
+
+      if (!usuario) {
+        throw new Error(`Usuario no encontrado con ID: ${userId}`);
+      }
+
+      // Verificar que la imagen existe
+      if (!archivo || (!archivo.filename && !archivo.path)) {
+        throw new Error('No se recibió un archivo de imagen válido');
+      }
+
+      // URL para acceder a la imagen
+      const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+      const urlImagen = archivo.url || `${baseUrl}/uploads/profiles/${archivo.filename}`;
+      
+      console.log('URL de la imagen:', urlImagen);
+      
+      // Si ya existe una foto de perfil anterior y no es la default, eliminar físicamente
+      if (usuario.foto_perfil && usuario.foto_perfil !== 'default.jpg' && !usuario.foto_perfil.includes('default')) {
+        try {
+          // Extraer nombre del archivo de la URL
+          const nombreArchivoActual = usuario.foto_perfil.split('/').pop();
+          if (nombreArchivoActual) {
+            const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
+            const profilesDir = path.join(uploadDir, 'profiles');
+            const rutaArchivoActual = path.join(profilesDir, nombreArchivoActual);
+            
+            // Verificar si el archivo existe antes de intentar eliminarlo
+            const existeArchivo = await fs.access(rutaArchivoActual)
+              .then(() => true)
+              .catch(() => false);
+              
+            if (existeArchivo) {
+              await fs.unlink(rutaArchivoActual);
+            }
+          }
+        } catch (err) {
+          console.warn('No se pudo eliminar la foto de perfil anterior:', err.message);
+          // Continuar incluso si no se puede eliminar el archivo físico
+        }
+      }
+      
+      // Actualizar foto de perfil en el usuario
+      usuario.foto_perfil = urlImagen;
+      await usuario.save();
+      
+      console.log('Foto de perfil actualizada correctamente');
+      return usuario.toObject();
+    } catch (error) {
+      console.error('Error actualizando foto de perfil:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Elimina la foto de perfil de un usuario (establece a default)
+   * @param {String} userId - ID del usuario
+   * @returns {Promise<Object>} Usuario actualizado
+   */
+  async eliminarFotoPerfil(userId) {
+    try {
+      console.log('Eliminando foto de perfil para usuario:', userId);
+      
+      // Verificar si el usuario existe
+      let usuario;
+      if (mongoose.Types.ObjectId.isValid(userId)) {
+        usuario = await Usuario.findById(userId);
+      } else {
+        usuario = await Usuario.findOne({
+          $or: [
+            { id_cliente: userId },
+            { id_root: userId },
+            { usuario: userId },
+            { email: userId }
+          ]
+        });
+      }
+
+      if (!usuario) {
+        throw new Error(`Usuario no encontrado con ID: ${userId}`);
+      }
+
+      // Si ya existe una foto de perfil y no es la default, eliminar físicamente
+      if (usuario.foto_perfil && usuario.foto_perfil !== 'default.jpg' && !usuario.foto_perfil.includes('default')) {
+        try {
+          // Extraer nombre del archivo de la URL
+          const nombreArchivoActual = usuario.foto_perfil.split('/').pop();
+          if (nombreArchivoActual) {
+            const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
+            const profilesDir = path.join(uploadDir, 'profiles');
+            const rutaArchivoActual = path.join(profilesDir, nombreArchivoActual);
+            
+            // Verificar si el archivo existe antes de intentar eliminarlo
+            const existeArchivo = await fs.access(rutaArchivoActual)
+              .then(() => true)
+              .catch(() => false);
+              
+            if (existeArchivo) {
+              await fs.unlink(rutaArchivoActual);
+            }
+          }
+        } catch (err) {
+          console.warn('No se pudo eliminar el archivo físico:', err.message);
+          // Continuar incluso si no se puede eliminar el archivo físico
+        }
+      }
+      
+      // Restaurar foto de perfil por defecto
+      usuario.foto_perfil = 'default.jpg';
+      await usuario.save();
+      
+      console.log('Foto de perfil restaurada a default');
+      return usuario.toObject();
+    } catch (error) {
+      console.error('Error eliminando foto de perfil:', error);
+      throw error;
+    }
+  },
+
   /**
    * Busca un usuario por su dirección de email
    * @param {String} email - Email del usuario

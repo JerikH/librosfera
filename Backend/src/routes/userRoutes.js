@@ -12,7 +12,16 @@ const {
   updateUser,
   deleteUserById,
   createAdmin,
+  uploadProfilePhoto,
+  deleteProfilePhoto,
+  uploadUserPhoto,
+  deleteUserPhoto
 } = require('../controllers/userController');
+const { 
+  uploadProfileImage, 
+  checkUploadDirs 
+} = require('../middleware/profileUploadMiddleware');
+
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
@@ -608,6 +617,97 @@ const { protect, authorize } = require('../middleware/authMiddleware');
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
+/**
+ * @swagger
+ * /api/v1/users/profile/foto:
+ *   post:
+ *     summary: Subir foto de perfil
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - foto_perfil
+ *             properties:
+ *               foto_perfil:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Foto de perfil actualizada correctamente
+ *       400:
+ *         description: Error al subir imagen
+ *       401:
+ *         description: No autorizado
+ *   delete:
+ *     summary: Eliminar foto de perfil (restaurar a default)
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Foto de perfil eliminada correctamente
+ *       401:
+ *         description: No autorizado
+ */
+
+/**
+ * @swagger
+ * /api/v1/users/{id}/foto:
+ *   post:
+ *     summary: Subir foto de perfil para otro usuario (admin)
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del usuario
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - foto_perfil
+ *             properties:
+ *               foto_perfil:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Foto de perfil actualizada correctamente
+ *       400:
+ *         description: Error al subir imagen
+ *       403:
+ *         description: No tiene permisos
+ *   delete:
+ *     summary: Eliminar foto de perfil de otro usuario (admin)
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Foto de perfil eliminada correctamente
+ *       403:
+ *         description: No tiene permisos
+ *       404:
+ *         description: Usuario no encontrado
+ */
 
 // Rutas públicas
 router.post('/login', loginUser);
@@ -619,6 +719,19 @@ router.post('/register', registerUser);
 router.get('/profile', protect, getUserProfile);
 router.put('/profile', protect, updateUserProfile);
 router.delete('/profile', protect, deleteUser);
+router.post(
+  '/profile/foto', 
+  protect, 
+  checkUploadDirs,
+  uploadProfileImage,
+  uploadProfilePhoto
+);
+
+router.delete(
+  '/profile/foto', 
+  protect, 
+  deleteProfilePhoto
+);
 
 // Rutas protegidas para administradores y root
 router.get('/', protect, authorize('administrador', 'root'), getUsers);
@@ -629,5 +742,20 @@ router.delete('/:id', protect, authorize('administrador', 'root'), deleteUserByI
 // Rutas específicas para administradores y root
 // router.post('/admin', protect, authorize('root'), registerUser); // Ruta específica para crear administradores
 router.post('/admin', protect, authorize('root'), createAdmin);
+router.post(
+  '/:id/foto', 
+  protect, 
+  authorize('administrador', 'root'), 
+  checkUploadDirs,
+  uploadProfileImage,
+  uploadUserPhoto
+);
+
+router.delete(
+  '/:id/foto', 
+  protect, 
+  authorize('administrador', 'root'), 
+  deleteUserPhoto
+);
 
 module.exports = router;
