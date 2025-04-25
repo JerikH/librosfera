@@ -1,7 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { formatDate } from './authUtils';
+import { useNavigate } from 'react-router-dom';
+import CachedImage from '../CachedImage';
+import EditProfile from '../EditProfile';
 
 const ProfilePage = ({ userData }) => {
+  const navigate = useNavigate();
+  const [isEditing, setIsEditing] = useState(false);
+  
   // Get primary address if available
   const primaryAddress = userData?.direcciones && userData.direcciones.length > 0 
     ? userData.direcciones[0]
@@ -13,6 +19,30 @@ const ProfilePage = ({ userData }) => {
     window.location.href = '/Login';
   };
 
+  // Define profile image base URL - same as in EditProfile
+  const PROFILE_PIC_BASE_URL = '';
+  const DEFAULT_PROFILE_PIC = 'default.jpg';
+
+  // Get profile image URL
+  const profileImage = userData?.foto_perfil 
+    ? `${PROFILE_PIC_BASE_URL}${userData.foto_perfil}`
+    : `${PROFILE_PIC_BASE_URL}${DEFAULT_PROFILE_PIC}`;
+
+  // Handle edit profile button click
+  const handleEditProfile = () => {
+    setIsEditing(true);
+  };
+
+  // Handle go back from edit profile
+  const handleGoBack = () => {
+    setIsEditing(false);
+  };
+
+  // If in editing mode, show the EditProfile component
+  if (isEditing) {
+    return <EditProfile userData={userData} userType={userData?.tipo_usuario} onGoBack={handleGoBack} />;
+  }
+
   return (
     <div className="w-full flex flex-col h-full bg-gray-50 overflow-y-auto p-6">
       <div className="flex flex-col min-h-full">
@@ -21,11 +51,14 @@ const ProfilePage = ({ userData }) => {
         {/* User Profile Card */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-            {/* Profile Image */}
-            <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-              <span className="text-4xl text-gray-400">
-                {userData?.nombres?.charAt(0).toUpperCase() || 'U'}
-              </span>
+            {/* Profile Image - updated to use CachedImage like in EditProfile */}
+            <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border-4 border-blue-500">
+              <CachedImage 
+                src={profileImage} 
+                alt="Perfil" 
+                className="w-full h-full object-cover"
+                fallbackSrc={`${PROFILE_PIC_BASE_URL}${DEFAULT_PROFILE_PIC}`}
+              />
             </div>
             
             {/* User Info */}
@@ -54,7 +87,10 @@ const ProfilePage = ({ userData }) => {
               </div>
               
               <div className="flex gap-4">
-                <button className="bg-blue-500 text-white py-2 px-6 rounded font-medium hover:bg-blue-600 transition-colors">
+                <button 
+                  className="bg-blue-500 text-white py-2 px-6 rounded font-medium hover:bg-blue-600 transition-colors"
+                  onClick={handleEditProfile}
+                >
                   Editar Perfil
                 </button>
                 
@@ -171,7 +207,10 @@ const ProfilePage = ({ userData }) => {
                   <p className="font-medium">Cambiar Contraseña</p>
                   <p className="text-gray-500 text-sm">Actualiza tu contraseña de acceso</p>
                 </div>
-                <button className="text-blue-500 hover:underline">
+                <button 
+                  className="text-blue-500 hover:underline"
+                  onClick={handleEditProfile}
+                >
                   Cambiar
                 </button>
               </div>

@@ -41,13 +41,13 @@ if (process.env.NODE_ENV === 'development' && process.env.DEBUG === 'true') {
 }
 
 // Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // Límite de 100 peticiones por ventana
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(limiter);
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutos
+//   max: 100, // Límite de 100 peticiones por ventana
+//   standardHeaders: true,
+//   legacyHeaders: false,
+// });
+// app.use(limiter);
 
 // Directorio estático para archivos subidos
 const uploadsPath = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
