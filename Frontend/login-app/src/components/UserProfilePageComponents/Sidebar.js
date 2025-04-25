@@ -40,6 +40,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
   };
 
   return (
+    
     <div className="w-64 bg-gray-700 h-full flex flex-col">
       {/* User info */}
       <div className="flex flex-col items-center justify-center py-8 border-b border-gray-600">

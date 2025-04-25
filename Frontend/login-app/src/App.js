@@ -31,7 +31,7 @@ const App = () => {
         {/* Página principal, búsqueda y detalles de libro */}
         <Route path="/Home" element={<HomePage />} />
         <Route path="/search" element={<SearchResults />} />
-        <Route path="/book/:bookId" element={<BookDetails />} />
+        <Route path="/libros/:bookId" element={<BookDetails />} />
         
         {/* Rutas de perfil de usuario y administrador */}
         <Route path="/Profile" element={<UserProfile />} />

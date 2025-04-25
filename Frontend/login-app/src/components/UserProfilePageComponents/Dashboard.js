@@ -74,7 +74,7 @@ const Dashboard = ({ userData }) => {
       <div className="w-1/3 p-6">
         <div className="mb-8">
           {/* Search bar */}
-          <div className="relative mb-6">
+          {/* <div className="relative mb-6">
             <input
               type="text"
               placeholder="Buscar libro..."
@@ -85,11 +85,11 @@ const Dashboard = ({ userData }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
-          </div>
+          </div> */}
         </div>
         
         {/* Your Books */}
-        <div>
+        {/* <div>
           <h2 className="text-xl font-bold mb-4">Tus libros</h2>
           <div className="bg-gray-100 rounded-lg shadow p-5 flex flex-col">
             <div className="flex-grow overflow-auto" style={{ maxHeight: 'calc(100vh - 240px)' }}>
@@ -136,7 +136,7 @@ const Dashboard = ({ userData }) => {
               <a href="#" className="text-blue-600 text-sm hover:underline">Ver todos los libros</a>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </>
   );

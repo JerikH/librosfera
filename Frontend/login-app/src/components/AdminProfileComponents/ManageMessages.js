@@ -338,7 +338,7 @@ const ManageMessages = () => {
                 className={`p-4 hover:bg-gray-50 cursor-pointer ${
                   message.status === 'unread' ? 'bg-blue-50' : ''
                 }`}
-                onClick={() => openMessageDetail(message)}
+                //onClick={() => openMessageDetail(message)}
               >
                 <div className="flex justify-between items-start mb-1">
                   <h3 className={`font-medium ${message.status === 'unread' ? 'font-bold' : ''}`}>
