@@ -224,13 +224,15 @@ const Dashboard = ({ userData }) => {
             />
             <StatCard 
               title="Ventas" 
-              value={stats.totalSales} 
+              //value={stats.totalSales} 
+              value={0} 
               icon={icons.shopping_cart} 
               color="bg-purple-500" 
             />
             <StatCard 
               title="Mensajes Pendientes" 
-              value={stats.pendingMessages} 
+              //value={stats.pendingMessages} 
+              value={0} 
               icon={icons.mail} 
               color="bg-amber-500" 
             />
