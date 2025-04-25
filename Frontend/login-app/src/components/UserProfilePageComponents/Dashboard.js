@@ -1,144 +1,181 @@
-import React from 'react';
-import { BookOpen, Heart, DollarSign } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 
-const Dashboard = ({ userData }) => {
-  // Format user name from userData
-  const userName = userData ? `${userData.nombres || ''} ${userData.apellidos || ''}` : 'Usuario';
+const Dashboard = ({ userData, onEditProfile }) => {
+  const [balance, setBalance] = useState(8000);
+  const [recentPurchases, setRecentPurchases] = useState([]);
+  const [userLibrary, setUserLibrary] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  useEffect(() => {
+    // Simulación de carga de datos
+    const loadData = async () => {
+      try {
+        // Aquí se podrían hacer llamadas API para obtener los datos reales
+        setTimeout(() => {
+          // Datos de ejemplo para compras recientes
+          const purchasesData = [
+            {
+              id: 1,
+              bookId: 5,
+              title: 'Libro 5',
+              price: 14200.00,
+              returnable: true,
+              date: '2023-11-05'
+            },
+            {
+              id: 2,
+              bookId: 4,
+              title: 'Libro 4',
+              price: 12999.00,
+              returnable: false,
+              date: '2023-10-28'
+            }
+          ];
+          
+          // Datos de ejemplo para la biblioteca del usuario
+          const libraryData = [
+            { id: 2, title: 'Libro 2', type: 'book' },
+            { id: 3, title: 'Libro 3', type: 'book' },
+            { id: 4, title: 'Libro 4', type: 'book', featured: true },
+            { id: 5, title: 'Libro 5', type: 'book' },
+            { id: 6, title: 'Libro 6', type: 'course' }
+          ];
+          
+          setRecentPurchases(purchasesData);
+          setUserLibrary(libraryData);
+          setIsLoading(false);
+        }, 1000);
+      } catch (error) {
+        console.error("Error cargando datos del dashboard:", error);
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, []);
+  
+  if (isLoading) {
+    return (
+      <div className="w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-700">Cargando información...</p>
+        </div>
+      </div>
+    );
+  }
   
   return (
-    <>
-      {/* Middle column - Column 2 (larger) */}
-      <div className="w-2/3 p-6">
-        <header className="mb-8">
-          <h1 className="text-2xl font-bold">Buenos Días, <span className="text-gray-400">{userName}</span></h1>
-        </header>
-        
-        {/* Balance Card - Credit card dimensions */}
-        <div className="bg-gray-600 text-white rounded-lg p-5 mb-8 w-96 h-56 flex flex-col justify-between">
-          <div>
-            <div className="text-sm">Saldo disponible</div>
-            <div className="text-3xl font-bold mt-1">$ 8,000</div>
-          </div>
-          <div className="h-24">
-            <svg viewBox="0 0 300 50" className="w-full h-full">
-              <path d="M0,25 L50,10 L100,30 L150,5 L200,15 L250,30 L300,15" fill="none" stroke="#3b82f6" strokeWidth="2" />
-              <path d="M150,25 L200,35 L250,15 L300,25" fill="none" stroke="#fff" strokeWidth="1" strokeOpacity="0.3" />
+    <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">
+          Buenos Días, <span className="text-gray-400">{userData?.usuario || userData?.username}</span>
+        </h1>
+        <div className="relative w-64">
+          <input
+            type="text"
+            placeholder="Buscar libro..."
+            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <button className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-          </div>
-        </div>
-        
-        {/* Recent Purchases */}
-        <div>
-          <h2 className="text-xl font-bold mb-4">Compras recientes</h2>
-          <div className="bg-white rounded-lg shadow p-5">
-            <div className="border-b pb-5 mb-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-16 h-16 bg-amber-100 border border-amber-200 flex justify-center items-center mr-3 p-1">
-                    <div className="text-center text-xs">
-                      <div>Libro</div>
-                      <div>5</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="truncate max-w-[120px] mr-3">Libro 5</div>
-                    <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full whitespace-nowrap">Devolución Disponible</span>
-                  </div>
-                </div>
-                <div className="font-bold">$ 14,200.00</div>
-              </div>
-            </div>
-            
-            <div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-16 h-16 bg-red-100 border border-red-200 flex justify-center items-center mr-3 p-1">
-                    <div className="text-center text-xs">
-                      <div>Libro</div>
-                      <div>4</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="truncate max-w-[120px] mr-3">Libro 4</div>
-                    <span className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded-full whitespace-nowrap">Devolución no disponible</span>
-                  </div>
-                </div>
-                <div className="font-bold">$ 12,999.00</div>
-              </div>
-            </div>
-          </div>
+          </button>
         </div>
       </div>
       
-      {/* Right column - Column 3 (smaller) */}
-      <div className="w-1/3 p-6">
-        <div className="mb-8">
-          {/* Search bar */}
-          <div className="relative mb-6">
-            <input
-              type="text"
-              placeholder="Buscar libro..."
-              className="w-full border rounded-md py-2 px-3 pr-8"
-            />
-            <button className="absolute right-2 top-1/2 transform -translate-y-1/2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="md:col-span-2">
+          {/* Balance card */}
+          <div className="bg-[#515F7D] rounded-lg p-6 h-48 mb-6 relative overflow-hidden">
+            <div>
+              <p className="text-gray-300 mb-1">Saldo disponible</p>
+              <h3 className="text-white text-3xl font-bold">$ {balance.toLocaleString('es-CO')}</h3>
+            </div>
+            
+            {/* Graph visualization (simplified) */}
+            <div className="absolute bottom-0 left-0 right-0 h-24">
+              <svg viewBox="0 0 400 100" className="w-full h-full">
+                <path
+                  d="M0,50 Q50,30 100,50 T200,60 T300,40 T400,50"
+                  fill="none"
+                  stroke="#4287f5"
+                  strokeWidth="2"
+                />
               </svg>
-            </button>
+            </div>
+          </div>
+          
+          {/* Recent purchases */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-xl font-semibold mb-4">Compras recientes</h2>
+            <div className="space-y-4">
+              {recentPurchases.map(purchase => (
+                <div key={purchase.id} className="flex items-center justify-between border-b pb-4">
+                  <div className="flex items-center">
+                    <div className={`w-12 h-12 ${purchase.bookId % 2 === 0 ? 'bg-yellow-100' : 'bg-pink-100'} flex items-center justify-center`}>
+                      <span className="text-xs">
+                        Libro<br/>{purchase.bookId}
+                      </span>
+                    </div>
+                    <div className="ml-4">
+                      <h4 className="font-medium">{purchase.title}</h4>
+                      <div className="mt-1">
+                        <span className={`text-xs px-2 py-1 rounded ${purchase.returnable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          Devolución {purchase.returnable ? 'Disponible' : 'no disponible'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold">$ {purchase.price.toLocaleString('es-CO')}</div>
+                    <div className="text-xs text-gray-500">{purchase.date}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         
-        {/* Your Books */}
-        <div>
-          <h2 className="text-xl font-bold mb-4">Tus libros</h2>
-          <div className="bg-gray-100 rounded-lg shadow p-5 flex flex-col">
-            <div className="flex-grow overflow-auto" style={{ maxHeight: 'calc(100vh - 240px)' }}>
-              <ul className="space-y-4">
-                <li className="flex items-center">
-                  <div className="w-12 h-16 bg-black rounded flex justify-center items-center mr-3">
-                    <Heart size={18} className="text-white" />
-                  </div>
-                  <span>Libro 1</span>
-                </li>
-                <li className="flex items-center">
-                  <div className="w-12 h-16 bg-amber-100 border border-amber-200 rounded flex justify-center items-center mr-3">
-                    <BookOpen size={18} className="text-amber-800" />
-                  </div>
-                  <span>Libro 2</span>
-                </li>
-                <li className="flex items-center">
-                  <div className="w-12 h-16 bg-amber-100 border border-amber-200 rounded flex justify-center items-center mr-3">
-                    <BookOpen size={18} className="text-amber-800" />
-                  </div>
-                  <span>Libro 3</span>
-                </li>
-                <li className="flex items-center">
-                  <div className="w-12 h-16 bg-black rounded flex justify-center items-center mr-3">
-                    <BookOpen size={18} className="text-white" />
-                  </div>
-                  <span>Libro 4</span>
-                </li>
-                <li className="flex items-center">
-                  <div className="w-12 h-16 bg-amber-100 border border-amber-200 rounded flex justify-center items-center mr-3">
-                    <BookOpen size={18} className="text-amber-800" />
-                  </div>
-                  <span>Libro 5</span>
-                </li>
-                <li className="flex items-center">
-                  <div className="w-12 h-16 bg-blue-100 border border-blue-300 rounded flex justify-center items-center mr-3">
-                    <DollarSign size={18} className="text-blue-800" />
-                  </div>
-                  <span>Libro 6</span>
-                </li>
-              </ul>
-            </div>
-            <div className="pt-2 text-right border-t mt-3">
-              <a href="#" className="text-blue-600 text-sm hover:underline">Ver todos los libros</a>
-            </div>
+        {/* Right column - Library */}
+        <div className="bg-white rounded-lg shadow-sm p-6 h-fit">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Tus libros</h2>
+            <button className="text-gray-400 hover:text-gray-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {userLibrary.map(item => (
+              <div 
+                key={item.id} 
+                className={`flex items-center p-3 rounded-md ${
+                  item.featured ? 'bg-black text-white' : 
+                  item.type === 'course' ? 'bg-blue-50' : 'bg-yellow-50'
+                }`}
+              >
+                <div className="mr-3">
+                  {item.type === 'course' ? (
+                    <span className="text-blue-500">$</span>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  )}
+                </div>
+                <span>{item.title}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 text-center">
+            <a href="#" className="text-blue-600 hover:underline text-sm">Ver todos los libros</a>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
