@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
 const Dashboard = ({ userData }) => {
   const [stats, setStats] = useState({
@@ -10,17 +11,60 @@ const Dashboard = ({ userData }) => {
   });
   
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // API base URL
+  const API_BASE_URL = 'http://localhost:5000';
+
+  // API token from localStorage
+  const getCookie = (name) => {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  };
+
+  const getAuthToken = () => {
+    const dataCookie = getCookie("data");
+    if (!dataCookie) return '';
+    
+    try {
+      const parsedData = JSON.parse(dataCookie);
+      return parsedData.authToken || '';
+    } catch (e) {
+      console.error('Error parsing auth token:', e);
+      return '';
+    }
+  };
 
   useEffect(() => {
-    // Simular carga de estadísticas
+    // Fetch dashboard statistics
     const fetchStats = async () => {
+      setIsLoading(true);
+      setError(null);
+      
       try {
-        // Aquí iría una llamada API real para obtener estadísticas
-        // Simulamos una respuesta después de un segundo
-        setTimeout(() => {
+        // Fetch books count (we only need the pagination data, not the actual books)
+        const booksResponse = await axios.get(`${API_BASE_URL}/api/v1/libros?limite=1`, {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        // Fetch users count (we only need the pagination data, not the actual users)
+        const usersResponse = await axios.get(`${API_BASE_URL}/api/v1/users?limite=1`, {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        // Check if both requests were successful
+        if (booksResponse.data.status === 'success' && usersResponse.data.status === 'success') {
+          // Set the stats with real data from API
           setStats({
-            totalBooks: 247,
-            totalUsers: 1458,
+            totalBooks: booksResponse.data.paginacion.total,
+            totalUsers: usersResponse.data.paginacion.total,
+            // Keep the dummy data for other stats that are not provided by API yet
             totalSales: 856,
             pendingMessages: 12,
             recentActivity: [
@@ -31,10 +75,22 @@ const Dashboard = ({ userData }) => {
               { id: 5, type: 'book', action: 'Libro actualizado', timestamp: '2023-11-09 16:50', book: 'Matemáticas Avanzadas' }
             ]
           });
-          setIsLoading(false);
-        }, 1000);
+        } else {
+          throw new Error('Error al obtener estadísticas: Respuesta no exitosa');
+        }
       } catch (error) {
         console.error('Error al cargar estadísticas:', error);
+        setError('No se pudieron cargar las estadísticas. Por favor, inténtelo de nuevo más tarde.');
+        
+        // Set fallback data in case of error
+        setStats({
+          totalBooks: 0,
+          totalUsers: 0,
+          totalSales: 0,
+          pendingMessages: 0,
+          recentActivity: []
+        });
+      } finally {
         setIsLoading(false);
       }
     };
@@ -61,12 +117,18 @@ const Dashboard = ({ userData }) => {
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-1">
-          Bienvenido, {userData?.username || 'Administrador'}
+          Bienvenido, {userData?.nombre || userData?.usuario || 'Administrador'}
         </h1>
         <p className="text-gray-600">
           Panel de control y resumen de actividades
         </p>
       </div>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <p>{error}</p>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -100,13 +162,15 @@ const Dashboard = ({ userData }) => {
             />
             <StatCard 
               title="Ventas" 
-              value={stats.totalSales} 
+              // value={stats.totalSales}
+              value={0} 
               icon="shopping_cart" 
               color="bg-purple-500" 
             />
             <StatCard 
               title="Mensajes Pendientes" 
-              value={stats.pendingMessages} 
+              // value={stats.pendingMessages} 
+              value={0} 
               icon="mail" 
               color="bg-amber-500" 
             />
@@ -115,38 +179,42 @@ const Dashboard = ({ userData }) => {
           {/* Recent Activity */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Actividad Reciente</h2>
-            <div className="divide-y divide-gray-200">
-              {stats.recentActivity.map((activity) => (
-                <div key={activity.id} className="py-3 flex items-start">
-                  <div className={`
-                    w-8 h-8 rounded-full flex items-center justify-center mt-1
-                    ${activity.type === 'user' ? 'bg-green-100 text-green-600' : ''}
-                    ${activity.type === 'book' ? 'bg-blue-100 text-blue-600' : ''}
-                    ${activity.type === 'sale' ? 'bg-purple-100 text-purple-600' : ''}
-                    ${activity.type === 'message' ? 'bg-amber-100 text-amber-600' : ''}
-                  `}>
-                    <span className="material-icons-outlined text-sm">
-                      {activity.type === 'user' && 'person'}
-                      {activity.type === 'book' && 'book'}
-                      {activity.type === 'sale' && 'shopping_cart'}
-                      {activity.type === 'message' && 'mail'}
-                    </span>
-                  </div>
-                  <div className="ml-3 flex-1">
-                    <p className="text-sm font-medium text-gray-800">{activity.action}</p>
-                    <div className="flex justify-between">
-                      <p className="text-xs text-gray-500">
-                        {activity.user && `Usuario: ${activity.user}`}
-                        {activity.book && `Libro: ${activity.book}`}
-                        {activity.amount && `Monto: ${activity.amount}`}
-                        {activity.from && `De: ${activity.from}`}
-                      </p>
-                      <p className="text-xs text-gray-500">{activity.timestamp}</p>
+            {stats.recentActivity.length > 0 ? (
+              <div className="divide-y divide-gray-200">
+                {stats.recentActivity.map((activity) => (
+                  <div key={activity.id} className="py-3 flex items-start">
+                    <div className={`
+                      w-8 h-8 rounded-full flex items-center justify-center mt-1
+                      ${activity.type === 'user' ? 'bg-green-100 text-green-600' : ''}
+                      ${activity.type === 'book' ? 'bg-blue-100 text-blue-600' : ''}
+                      ${activity.type === 'sale' ? 'bg-purple-100 text-purple-600' : ''}
+                      ${activity.type === 'message' ? 'bg-amber-100 text-amber-600' : ''}
+                    `}>
+                      <span className="material-icons-outlined text-sm">
+                        {activity.type === 'user' && 'person'}
+                        {activity.type === 'book' && 'book'}
+                        {activity.type === 'sale' && 'shopping_cart'}
+                        {activity.type === 'message' && 'mail'}
+                      </span>
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <p className="text-sm font-medium text-gray-800">{activity.action}</p>
+                      <div className="flex justify-between">
+                        <p className="text-xs text-gray-500">
+                          {activity.user && `Usuario: ${activity.user}`}
+                          {activity.book && `Libro: ${activity.book}`}
+                          {activity.amount && `Monto: ${activity.amount}`}
+                          {activity.from && `De: ${activity.from}`}
+                        </p>
+                        <p className="text-xs text-gray-500">{activity.timestamp}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-4">No hay actividad reciente para mostrar</p>
+            )}
             <div className="mt-4 pt-4 border-t border-gray-200">
               <button className="text-blue-600 text-sm hover:text-blue-800 font-medium flex items-center">
                 Ver todas las actividades

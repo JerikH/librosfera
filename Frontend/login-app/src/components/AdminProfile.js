@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import Sidebar from './AdminProfileComponents/Sidebar';
 import Dashboard from './AdminProfileComponents/Dashboard';
 import ManageBooks from './AdminProfileComponents/ManageBooks';
@@ -6,7 +7,6 @@ import ManageMessages from './AdminProfileComponents/ManageMessages';
 import ManageUsers from './AdminProfileComponents/ManageUsers';
 import ProfilePage from './UserProfilePageComponents/ProfilePage';
 import EditProfile from './EditProfile';
-import { useNavigate } from 'react-router-dom';
 
 // Helper function to check if a user is admin
 const isAdmin = (userData) => {
@@ -94,6 +94,23 @@ const AdminProfile = () => {
     };
     refreshData();
   };
+
+  const handleLogout = () => {
+    // Limpiar las cookies
+    document.cookie.split(";").forEach((cookie) => {
+      document.cookie = cookie
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
+    });
+    
+    // Redireccionar a la página de login
+    navigate('/login');
+  };
+
+  // Función para ir al perfil de usuario
+  const goToProfile = () => {
+    navigate('/Profile');
+  };
   
   // Render loading state if no userData yet
   if (isLoading || !userData) {
@@ -107,49 +124,77 @@ const AdminProfile = () => {
     );
   }
   
-  // Si estamos editando el perfil, mostrar el editor
-  if (isEditingProfile) {
-    return (
-      <div className="flex h-screen bg-[#f9fafb]">
-        {/* Left sidebar */}
-        <Sidebar 
-          activeTab={activeTab} 
-          setActiveTab={setActiveTab} 
-          userData={userData}
-          isLoading={isLoading}
-          onEditProfile={handleEditProfile}
-        />
-        
-        {/* Main content area */}
-        <div className="flex-1 flex h-full overflow-y-auto p-6">
-          <EditProfile 
-            userData={userData}
-            userType="admin"
-            onGoBack={handleGoBack}
-          />
-        </div>
-      </div>
-    );
-  }
-  
   return (
-    <div className="flex h-screen bg-[#f9fafb]">
-      {/* Left sidebar */}
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        userData={userData}
-        isLoading={isLoading}
-        onEditProfile={handleEditProfile}
-      />
-      
-      {/* Main content area */}
-      <div className="flex-1 flex h-full">
-        {activeTab === 'inicio' && <Dashboard userData={userData} />}
-        {activeTab === 'administrar-libro' && <ManageBooks />}
-        {activeTab === 'gestionar-usuarios' && <ManageUsers />}
-        {activeTab === 'gestionar-mensajes' && <ManageMessages />}
-        {activeTab === 'mi-perfil' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
+    <div className="flex flex-col h-screen">
+      {/* Top navigation bar only */}
+      <header className="bg-white shadow-sm w-full">
+        <div className="bg-gray-800 text-white">
+          <div className="container mx-auto px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Link to="/home" className="font-bold text-xl">Librosfera</Link>
+              <span className="text-sm">Panel de Administración</span>
+            </div>
+            <div className="flex items-center space-x-4">
+              <button 
+                onClick={goToProfile}
+                className="text-sm hover:underline cursor-pointer"
+              >
+                Mi Cuenta
+              </button>
+              <button 
+                onClick={handleLogout}
+                className="text-sm hover:underline cursor-pointer"
+              >
+                Cerrar Sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Content Area */}
+      <div className="flex flex-1 bg-[#f9fafb]">
+        {isEditingProfile ? (
+          <>
+            {/* Left sidebar */}
+            <Sidebar 
+              activeTab={activeTab} 
+              setActiveTab={setActiveTab} 
+              userData={userData}
+              isLoading={isLoading}
+              onEditProfile={handleEditProfile}
+            />
+            
+            {/* Main content area */}
+            <div className="flex-1 flex h-full overflow-y-auto p-6">
+              <EditProfile 
+                userData={userData}
+                userType="admin"
+                onGoBack={handleGoBack}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Left sidebar */}
+            <Sidebar 
+              activeTab={activeTab} 
+              setActiveTab={setActiveTab} 
+              userData={userData}
+              isLoading={isLoading}
+              onEditProfile={handleEditProfile}
+            />
+            
+            {/* Main content area */}
+            <div className="flex-1 flex h-full">
+              {activeTab === 'inicio' && <Dashboard userData={userData} />}
+              {activeTab === 'administrar-libro' && <ManageBooks />}
+              {activeTab === 'gestionar-usuarios' && <ManageUsers />}
+              {activeTab === 'gestionar-mensajes' && <ManageMessages />}
+              {activeTab === 'mi-perfil' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

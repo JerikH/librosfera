@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import UserLayout from './UserLayout';
+import CachedImage from './CachedImage'; // Import the CachedImage component
 
 const BookDetails = () => {
   const { bookId } = useParams();
@@ -11,73 +13,84 @@ const BookDetails = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Simular la carga de datos del libro desde una API
     const fetchBookDetails = async () => {
       try {
-        // En un escenario real, aquí harías una llamada a la API
-        // para obtener los detalles del libro con el ID proporcionado
-        setTimeout(() => {
-          // Datos simulados
+        // Realizar la llamada a la API con axios
+        const response = await axios.get(`http://localhost:5000/api/v1/libros/${bookId}`);
+        
+        // Con axios, los datos ya vienen en formato JSON
+        const result = response.data;
+        
+        if (result.status === 'success' && result.data) {
+          // Mapear los datos de la API al formato esperado por el componente
+          const apiBook = result.data;
+          
+          // Calcular el precio con descuento si hay descuentos
+          let discountPercentage = 0;
+          let originalPrice = apiBook.precio_info.precio_base;
+          
+          if (apiBook.precio_info.descuentos && apiBook.precio_info.descuentos.length > 0) {
+            // Tomar el primer descuento disponible como ejemplo
+            discountPercentage = apiBook.precio_info.descuentos[0].porcentaje || 0;
+          }
+          
+          // Formatear la información del autor
+          const authorName = apiBook.autor_nombre_completo || 
+            (apiBook.autor && apiBook.autor.length > 0 ? 
+              `${apiBook.autor[0].nombre} ${apiBook.autor[0].apellidos}` : 
+              'Autor desconocido');
+          
+          // Determinar la URL de la imagen
+          let imageUrl = null;
+          
+          // Verificar si hay imágenes en el formato nuevo
+          if (apiBook.imagenes && apiBook.imagenes.length > 0) {
+            // Buscar la imagen de tipo "portada"
+            const portada = apiBook.imagenes.find(img => img.orden === 0);
+            if (portada) {
+              imageUrl = portada.url;
+            } else {
+              // Si no hay tipo "portada", usar la primera imagen
+              imageUrl = apiBook.imagenes[0].url;
+            }
+          } 
+          // Si no hay imágenes en el formato nuevo, verificar el formato legacy
+          else if (apiBook.imagenes_legacy && apiBook.imagenes_legacy.portada) {
+            imageUrl = apiBook.imagenes_legacy.portada;
+          }
+          
+          // Mapear los datos al formato esperado por el componente
           const bookData = {
-            id: parseInt(bookId),
-            title: "Cien años de soledad",
-            subtitle: "Obra maestra del realismo mágico",
-            author: "Gabriel García Márquez",
-            description: `Una de las obras más importantes y de mayor reconocimiento de la literatura hispanoamericana y universal. La historia narra la vida de la familia Buendía a lo largo de siete generaciones en el pueblo ficticio de Macondo.
-            
-            Con su inigualable estilo y su inagotable riqueza imaginativa, Gabriel García Márquez ha creado un lugar y unos personajes que se quedarán para siempre en la mente de los lectores. Esta novela, considerada una de las más representativas del llamado realismo mágico, narra la historia de la familia Buendía a lo largo de siete generaciones en el pueblo ficticio de Macondo.
-            
-            A través de un mundo donde conviven lo cotidiano con lo fantástico, García Márquez hace un retrato de la idiosincrasia latinoamericana con todas sus grandezas y miserias; con sus personajes entrañables y extravagantes; con su prosa deslumbrante y su sabiduría sobrecogedora.`,
-            publisher: "Editorial Planeta",
-            publishedDate: "2007-05-30",
-            isbn: "9788497592208",
-            pages: 496,
-            language: "Español",
-            categories: ["Ficción", "Novela", "Literatura latinoamericana", "Realismo mágico"],
-            price: 45000,
-            originalPrice: 50000,
-            discount: 10,
-            rating: 4.8,
-            reviews: 1256,
-            stock: 42,
-            format: "Tapa blanda",
-            edition: "Edición conmemorativa",
-            images: [
-              "/books/cien-anos-1.jpg",
-              "/books/cien-anos-2.jpg",
-              "/books/cien-anos-3.jpg"
-            ],
-            relatedBooks: [
-              {
-                id: 2,
-                title: "El amor en los tiempos del cólera",
-                author: "Gabriel García Márquez",
-                price: 42000,
-                discount: 5,
-                image: "/books/amor-colera.jpg"
-              },
-              {
-                id: 3,
-                title: "Crónica de una muerte anunciada",
-                author: "Gabriel García Márquez",
-                price: 35000,
-                discount: 0,
-                image: "/books/cronica.jpg"
-              },
-              {
-                id: 4,
-                title: "El laberinto de la soledad",
-                author: "Octavio Paz",
-                price: 38000,
-                discount: 15,
-                image: "/books/laberinto.jpg"
-              }
-            ]
+            id: apiBook._id,
+            title: apiBook.titulo,
+            subtitle: "", // No hay campo equivalente en la API
+            author: authorName,
+            description: apiBook.descripcion || "Sin descripción disponible",
+            publisher: apiBook.editorial || "Editorial no especificada",
+            publishedDate: apiBook.fecha_publicacion ? new Date(apiBook.fecha_publicacion).toLocaleDateString('es-CO') : "Fecha no disponible",
+            isbn: "", // No hay campo equivalente en la API
+            pages: apiBook.numero_paginas || 0,
+            language: apiBook.idioma || "No especificado",
+            categories: apiBook.palabras_clave || [],
+            price: apiBook.precio || apiBook.precio_info.precio_base,
+            originalPrice: originalPrice,
+            discount: discountPercentage,
+            rating: 0, // No hay campo equivalente en la API
+            reviews: 0, // No hay campo equivalente en la API
+            stock: apiBook.stock || 0,
+            format: apiBook.estado || "No especificado",
+            edition: "", // No hay campo equivalente en la API
+            image: imageUrl, // Única imagen principal
+            images: apiBook.imagenes ? apiBook.imagenes.map(img => img.url) : [],
+            relatedBooks: [] // No hay campo equivalente en la API
           };
           
           setBook(bookData);
-          setIsLoading(false);
-        }, 1000);
+        } else {
+          throw new Error('Formato de respuesta incorrecto');
+        }
+        
+        setIsLoading(false);
       } catch (error) {
         console.error('Error fetching book details:', error);
         setIsLoading(false);
@@ -160,6 +173,41 @@ const BookDetails = () => {
     );
   };
 
+  // Función para mostrar el ícono de libro predeterminado
+  const getBookIcon = (id) => {
+    const icons = [
+      <div key={1} className="text-indigo-500">
+        <svg className="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M4 19.5v-15A2.5 2.5 0 016.5 2H20v20H6.5A2.5 2.5 0 014 19.5zM16 12h-7m0-4h7m-7 8h7"></path>
+        </svg>
+      </div>,
+      <div key={2} className="text-gray-500">
+        <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+        </svg>
+      </div>,
+      <div key={3} className="text-gray-700">
+        <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+        </svg>
+      </div>,
+      <div key={4} className="text-cyan-500">
+        <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+        </svg>
+      </div>
+    ];
+    
+    // Calculamos un hash a partir del ID para obtener un ícono consistente
+    const idString = id.toString();
+    let hash = 0;
+    for (let i = 0; i < idString.length; i++) {
+      hash += idString.charCodeAt(i);
+    }
+    
+    return icons[hash % icons.length];
+  };
+
   if (isLoading) {
     return (
       <UserLayout>
@@ -234,11 +282,12 @@ const BookDetails = () => {
                   clipRule="evenodd"
                 />
               </svg>
-              {book.categories && (
+              {/* {book.categories && book.categories.length > 0 && (
                 <a href={`/category/${book.categories[0]}`} className="text-blue-600 hover:underline">
                   {book.categories[0]}
                 </a>
-              )}
+              )} */}
+              {book.categories[0]}
             </li>
             <li className="flex items-center">
               <svg
@@ -262,16 +311,17 @@ const BookDetails = () => {
             {/* Columna izquierda - Imágenes */}
             <div className="md:w-2/5 mb-6 md:mb-0 md:pr-8">
               <div className="sticky top-6">
-                <div className="aspect-w-3 aspect-h-4 bg-gray-100 rounded-lg overflow-hidden mb-4">
-                  <img
-                    src={book.images?.[0] || '/placeholder-book.jpg'}
-                    alt={book.title}
-                    className="object-contain w-full h-full"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = '/placeholder-book.jpg';
-                    }}
-                  />
+                <div className="aspect-w-3 aspect-h-4 bg-gray-100 rounded-lg overflow-hidden mb-4 flex items-center justify-center">
+                  {book.image ? (
+                    <CachedImage 
+                      src={book.image} 
+                      alt={book.title}
+                      className="max-w-full max-h-full object-contain"
+                      fallbackSrc="/placeholder-book.png"
+                    />
+                  ) : (
+                    getBookIcon(book.id)
+                  )}
                 </div>
 
                 {/* Miniaturas */}
@@ -280,16 +330,13 @@ const BookDetails = () => {
                     {book.images.map((img, idx) => (
                       <div
                         key={idx}
-                        className="aspect-w-1 aspect-h-1 bg-gray-100 rounded border overflow-hidden cursor-pointer"
+                        className="aspect-w-1 aspect-h-1 bg-gray-100 rounded border overflow-hidden cursor-pointer flex items-center justify-center"
                       >
-                        <img
-                          src={img}
+                        <CachedImage 
+                          src={img} 
                           alt={`${book.title} - Vista ${idx + 1}`}
-                          className="object-cover w-full h-full"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = '/placeholder-book.jpg';
-                          }}
+                          className="max-w-full max-h-full object-contain"
+                          fallbackSrc="/placeholder-book.png"
                         />
                       </div>
                     ))}
@@ -307,13 +354,14 @@ const BookDetails = () => {
               )}
               
               <p className="text-lg mb-4">
-                por{' '}
-                <a
+                por {book.author}
+                {/* <a
                   href={`/author/${encodeURIComponent(book.author)}`}
                   className="font-medium text-blue-600 hover:underline"
+                  disabled={true}
                 >
                   {book.author}
-                </a>
+                </a> */}
               </p>
 
               {/* Calificación */}
@@ -331,10 +379,12 @@ const BookDetails = () => {
                   <p className="text-sm text-gray-500">Publicación</p>
                   <p className="font-medium">{book.publishedDate || 'No disponible'}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">ISBN</p>
-                  <p className="font-medium">{book.isbn || 'No disponible'}</p>
-                </div>
+                {book.isbn && (
+                  <div>
+                    <p className="text-sm text-gray-500">ISBN</p>
+                    <p className="font-medium">{book.isbn}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-sm text-gray-500">Idioma</p>
                   <p className="font-medium">{book.language || 'No disponible'}</p>
@@ -343,10 +393,12 @@ const BookDetails = () => {
                   <p className="text-sm text-gray-500">Formato</p>
                   <p className="font-medium">{book.format || 'Tapa blanda'}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Edición</p>
-                  <p className="font-medium">{book.edition || 'Estándar'}</p>
-                </div>
+                {book.edition && (
+                  <div>
+                    <p className="text-sm text-gray-500">Edición</p>
+                    <p className="font-medium">{book.edition}</p>
+                  </div>
+                )}
               </div>
 
               {/* Precio y disponibilidad */}
@@ -378,7 +430,7 @@ const BookDetails = () => {
                 </p>
               </div>
 
-              {/* Cantidad y botones de acción */}
+              {/* Cantidad y botones de acción - SIEMPRE DESHABILITADOS */}
               <div className="mb-8">
                 <div className="flex items-center mb-4">
                   <span className="mr-4 font-medium">Cantidad</span>
@@ -386,7 +438,7 @@ const BookDetails = () => {
                     <button
                       onClick={decrementQuantity}
                       className="px-3 py-1 text-gray-600 hover:bg-gray-100"
-                      disabled={quantity <= 1}
+                      disabled={true}
                     >
                       -
                     </button>
@@ -397,11 +449,12 @@ const BookDetails = () => {
                       value={quantity}
                       onChange={handleQuantityChange}
                       className="w-12 text-center border-x border-gray-300 py-1"
+                      disabled={true}
                     />
                     <button
                       onClick={incrementQuantity}
                       className="px-3 py-1 text-gray-600 hover:bg-gray-100"
-                      disabled={quantity >= book.stock}
+                      disabled={true}
                     >
                       +
                     </button>
@@ -411,8 +464,8 @@ const BookDetails = () => {
                 <div className="flex space-x-4">
                   <button
                     onClick={addToCart}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg flex items-center justify-center font-medium"
-                    disabled={book.stock <= 0}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg flex items-center justify-center font-medium opacity-50 cursor-not-allowed"
+                    disabled={true}
                   >
                     <svg
                       className="w-5 h-5 mr-2"
@@ -431,8 +484,8 @@ const BookDetails = () => {
                   </button>
                   <button
                     onClick={buyNow}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-lg flex items-center justify-center font-medium"
-                    disabled={book.stock <= 0}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-lg flex items-center justify-center font-medium opacity-50 cursor-not-allowed"
+                    disabled={true}
                   >
                     <svg
                       className="w-5 h-5 mr-2"
@@ -506,32 +559,40 @@ const BookDetails = () => {
                         <p className="font-medium">Fecha de publicación</p>
                         <p className="text-gray-600">{book.publishedDate}</p>
                       </div>
-                      <div className="border-b pb-3">
-                        <p className="font-medium">ISBN</p>
-                        <p className="text-gray-600">{book.isbn}</p>
-                      </div>
-                      <div className="border-b pb-3">
-                        <p className="font-medium">Páginas</p>
-                        <p className="text-gray-600">{book.pages}</p>
-                      </div>
+                      {book.isbn && (
+                        <div className="border-b pb-3">
+                          <p className="font-medium">ISBN</p>
+                          <p className="text-gray-600">{book.isbn}</p>
+                        </div>
+                      )}
+                      {book.pages > 0 && (
+                        <div className="border-b pb-3">
+                          <p className="font-medium">Páginas</p>
+                          <p className="text-gray-600">{book.pages}</p>
+                        </div>
+                      )}
                       <div className="border-b pb-3">
                         <p className="font-medium">Idioma</p>
                         <p className="text-gray-600">{book.language}</p>
                       </div>
-                      <div className="border-b pb-3">
-                        <p className="font-medium">Categorías</p>
-                        <p className="text-gray-600">
-                          {book.categories?.join(', ')}
-                        </p>
-                      </div>
+                      {book.categories && book.categories.length > 0 && (
+                        <div className="border-b pb-3">
+                          <p className="font-medium">Categorías</p>
+                          <p className="text-gray-600">
+                            {book.categories.join(', ')}
+                          </p>
+                        </div>
+                      )}
                       <div className="border-b pb-3">
                         <p className="font-medium">Formato</p>
                         <p className="text-gray-600">{book.format}</p>
                       </div>
-                      <div className="border-b pb-3">
-                        <p className="font-medium">Edición</p>
-                        <p className="text-gray-600">{book.edition}</p>
-                      </div>
+                      {book.edition && (
+                        <div className="border-b pb-3">
+                          <p className="font-medium">Edición</p>
+                          <p className="text-gray-600">{book.edition}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
