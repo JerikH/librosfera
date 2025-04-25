@@ -8,7 +8,8 @@ import WelcomePage from './components/Welcome';
 import UserProfile from './components/UserProfile';
 import AdminProfile from './components/AdminProfile';
 import HomePage from './components/HomePage';
-import SearchResults from './components/SearchResults'; // Importar el componente de resultados de búsqueda
+import SearchResults from './components/SearchResults';
+import BookDetails from './components/BookDetails'; // Importar el componente de detalles del libro
 
 const App = () => {
   return (
@@ -27,9 +28,10 @@ const App = () => {
         {/* Ruta para la página de bienvenida (legacy) */}
         <Route path="/Welcome" element={<WelcomePage />} />
         
-        {/* Página principal y búsqueda */}
+        {/* Página principal, búsqueda y detalles de libro */}
         <Route path="/Home" element={<HomePage />} />
         <Route path="/search" element={<SearchResults />} />
+        <Route path="/book/:bookId" element={<BookDetails />} />
         
         {/* Rutas de perfil de usuario y administrador */}
         <Route path="/Profile" element={<UserProfile />} />
