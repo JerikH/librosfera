@@ -7,7 +7,8 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
   
   const [formData, setFormData] = useState({
     titulo: '',
-    autor: '',
+    autor_nombre: '',  // New field for author's first name
+    autor_apellidos: '', // New field for author's last name
     editorial: '',
     año: '',
     genero: '',
@@ -29,8 +30,15 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     fecha_fin: "",
     codigo_promocion: ''
   });
+
+  const availableGenres = ['Ficción', 'No Ficción', 'Ciencia Ficción', 'Fantasía', 'Romance', 'Biografía', 'Historia', 'Ciencia', 'Filosofía', 'Arte', 'Tecnología'];
   
   
+  const [showGenreDropdown, setShowGenreDropdown] = useState(false);
+  const [genreSearch, setGenreSearch] = useState('');
+  const [selectedGenres, setSelectedGenres] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formMessage, setFormMessage] = useState({ type: '', text: '' });
   const [bookImages, setBookImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -256,6 +264,9 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
 
   // Add discount to a book
   const addDiscount = async (bookId) => {
+
+    //console.log("Info to discont:", book);
+
     if (!discountData.valor || parseFloat(discountData.valor) <= 0) {
       return true; // No discount to add
     }
@@ -445,12 +456,36 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     fetchBookImages();
   }, [isEditMode, book]);
 
+  useEffect(() => {
+    // Close dropdown when clicking outside
+    const handleClickOutside = (event) => {
+      // Check if the click is outside the dropdown area
+      const dropdown = document.querySelector('.genres-dropdown');
+      if (showGenreDropdown && dropdown && !dropdown.contains(event.target)) {
+        setShowGenreDropdown(false);
+      }
+    };
+  
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showGenreDropdown]);
+
   // Carga los datos del libro cuando estamos en modo edición
   useEffect(() => {
     if (isEditMode && book) {
+      const bookGenres = book.genre ? book.genre.split(',').map(g => g.trim()) : [];
+      
+      // Split author into name and surname
+      const authorParts = book.author ? book.author.split(' ') : ['', ''];
+      const authorName = authorParts[0] || '';
+      const authorSurname = authorParts.slice(1).join(' ') || '';
+      
       setFormData({
         titulo: book.title || '',
-        autor: book.author || '',
+        autor_nombre: authorName,
+        autor_apellidos: authorSurname,
         editorial: book.editorial || '',
         año: book.year || '',
         genero: book.genre || '',
@@ -465,7 +500,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         stock: book.stock || 1
       });
       
-      // Nota: las imágenes se cargan en el useEffect específico para ello
+      setSelectedGenres(bookGenres);
       setLanguageQuery(book.language || '');
       fetchDiscountData();
     }
@@ -522,11 +557,14 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    setIsSubmitting(true);
+    setFormMessage({ type: '', text: '' });
+
     try {
       const token = getAuthToken();
       if (!token) {
         alert('No se encontró la sesión. Por favor inicie sesión nuevamente.');
+        setIsSubmitting(false);
         return;
       }
       
@@ -534,8 +572,8 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       const apiData = {
         titulo: formData.titulo,
         autor: [{
-          nombre: formData.autor.split(' ')[0] || '',
-          apellidos: formData.autor.split(' ').slice(1).join(' ') || 'a',
+          nombre: formData.autor_nombre || '',
+        apellidos: formData.autor_apellidos || '',
           nacionalidad: 'd',
           biografia: 'f',
           fechas: {
@@ -547,7 +585,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
           }
         }],
         editorial: formData.editorial,
-        genero: formData.genero,
+        genero: selectedGenres.join(', '), 
         idioma: formData.idioma,
         fecha_publicacion: formData.fecha,
         anio_publicacion: parseInt(formData.año) || null,
@@ -566,7 +604,8 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         stock: parseInt(formData.stock) || 1,
         descripcion: formData.descripcion || '',
         tabla_contenido: '',
-        palabras_clave: [formData.genero.toLowerCase()],
+        palabras_clave: selectedGenres.map(g => g.toLowerCase()),
+        ISBN: formData.issn || '',
         edicion: {
           numero: 1,
           descripcion: 'Primera edición'
@@ -599,10 +638,10 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       }
 
       if (response.data.status === 'success' && bookId) {
-
+        
         if (discountData.valor && parseFloat(discountData.valor) > 0) {
-          console.log("Will add discount");
-          await addDiscount(book.id);
+          console.log("Will add discount: ", bookId);
+          await addDiscount(bookId);
         }
 
         // Upload only new images (files)
@@ -640,11 +679,17 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         }
       }
 
-      // Finalizar y volver
-      onCancel();
+      setFormMessage({ type: 'success', text: 'Libro guardado exitosamente.' });
+      setTimeout(() => onCancel(), 1500); // Delay to show the success message
+
     } catch (error) {
       console.error('Error submitting book:', error);
-      alert(`Error al guardar el libro: ${error.response?.data?.message || error.message}. Por favor intente nuevamente.`);
+      setFormMessage({ 
+        type: 'error', 
+        text: `${error.response?.data?.message?.replace(/Validation failed: [^:]+:/, '') || error.message}. Por favor intente nuevamente.` 
+      });
+      
+      setIsSubmitting(false);
     }
   };
 
@@ -918,78 +963,103 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       <div className="flex flex-col md:flex-row gap-8">
         {/* Columna izquierda - Imagen del libro */}
         <div className="md:w-1/3">
-          <div className="flex flex-col items-center">
-            <div 
-              className="w-full h-80 bg-gray-200 border rounded-lg flex items-center justify-center mb-4 relative overflow-hidden"
-              draggable={bookImages.length > 0}
-              onDragStart={() => handleDragStart(currentImageIndex)}
-              onDragOver={(e) => handleDragOver(e, currentImageIndex)}
-              onDragEnd={handleDragEnd}
-            >
-              {isLoadingImages ? (
-                <div className="text-center p-4">
-                  <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-gray-600">Cargando imágenes...</p>
-                </div>
-              ) : bookImages.length > 0 ? (
-                <div className="relative w-full h-full flex items-center justify-center">
-                  <CachedImage 
-                    src={bookImages[currentImageIndex].url} 
-                    alt={bookImages[currentImageIndex].alt || "Portada del libro"} 
-                    className="max-w-full max-h-full object-contain"
-                    fallbackSrc="/placeholder-book.png"
-                  />
-                  <button 
-                    type="button"
-                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeImage(currentImageIndex);
-                    }}
-                  >
-                    ×
-                  </button>
-                  
-                  {/* Indicador del tipo de imagen */}
-                  <div className="absolute bottom-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
-                    {currentImageIndex === 0 ? 'Portada' : 'Contenido'}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center p-4">
-                  <div className="w-24 h-24 mx-auto border-2 border-gray-400 rounded-full flex items-center justify-center">
-                    <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                  <p className="mt-2 text-gray-500">Haga clic para agregar imagen</p>
-                </div>
-              )}
-              
-              {/* Botones de navegación */}
-              {bookImages.length > 1 && (
-                <>
-                  <button 
-                    type="button"
-                    className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-gray-100"
-                    onClick={handlePrevImage}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                  <button 
-                    type="button"
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-gray-100"
-                    onClick={handleNextImage}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </>
-              )}
-            </div>
+  <div className="flex flex-col items-center">
+    <label 
+      className="w-full h-80 bg-gray-200 border rounded-lg flex items-center justify-center mb-4 relative overflow-hidden cursor-pointer"
+      draggable={bookImages.length > 0}
+      onDragStart={() => handleDragStart(currentImageIndex)}
+      onDragOver={(e) => handleDragOver(e, currentImageIndex)}
+      onDragEnd={handleDragEnd}
+    >
+      {isLoadingImages ? (
+    <div className="text-center p-4">
+      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-gray-600">Cargando imágenes...</p>
+    </div>
+  ) : bookImages.length > 0 ? (
+    <div 
+      className="flex transition-transform duration-300 ease-in-out h-full"
+      style={{ transform: `translateX(-${currentImageIndex * 100}%)` }}
+    >
+      {bookImages.map((image, index) => (
+        <div 
+          key={index}
+          className="min-w-full h-full flex-shrink-0 flex items-center justify-center"
+          draggable={true}
+          onDragStart={() => handleDragStart(index)}
+          onDragOver={(e) => handleDragOver(e, index)}
+          onDragEnd={handleDragEnd}
+        >
+          <CachedImage 
+            src={image.url} 
+            alt={image.alt || "Imagen del libro"} 
+            className="max-w-full max-h-full object-contain"
+            fallbackSrc="/placeholder-book.png"
+          />
+          <button 
+            type="button"
+            className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
+            onClick={(e) => {
+              e.stopPropagation();
+              removeImage(index);
+            }}
+          >
+            ×
+          </button>
+          
+          {/* Indicador del tipo de imagen */}
+          <div className="absolute bottom-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
+            {index === 0 ? 'Portada' : 'Contenido'}
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="text-center p-4">
+      <div className="w-24 h-24 mx-auto border-2 border-gray-400 rounded-full flex items-center justify-center">
+        <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+      </div>
+      <p className="mt-2 text-gray-500">Haga clic para agregar imagen</p>
+    </div>
+  )}
+  
+  {/* File input hidden but triggered when clicking the empty box */}
+  {bookImages.length === 0 && (
+    <input 
+      type="file" 
+      accept="image/*" 
+      className="hidden" 
+      onChange={handleImageUpload}
+      multiple
+    />
+  )}
+  
+  {/* Botones de navegación */}
+  {bookImages.length > 1 && (
+    <>
+      <button 
+        type="button"
+        className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-gray-100"
+        onClick={handlePrevImage}
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <button 
+        type="button"
+        className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-gray-100"
+        onClick={handleNextImage}
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </>
+  )}
+    </label>
             
             {/* Miniaturas */}
             <div className="flex space-x-2 mb-4">
@@ -1080,18 +1150,32 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
                 />
               </div>
               
-              <div className="form-group">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Autor</label>
-                <input
-                  type="text"
-                  name="autor"
-                  placeholder="Escriba el autor"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.autor}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
+              {/* Replace the single author field with two fields */}
+<div className="form-group">
+  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Autor</label>
+  <input
+    type="text"
+    name="autor_nombre"
+    placeholder="Escriba el nombre"
+    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+    value={formData.autor_nombre}
+    onChange={handleChange}
+    required
+  />
+</div>
+
+<div className="form-group">
+  <label className="block text-sm font-medium text-gray-700 mb-1">Apellidos del Autor</label>
+  <input
+    type="text"
+    name="autor_apellidos"
+    placeholder="Escriba los apellidos"
+    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+    value={formData.autor_apellidos}
+    onChange={handleChange}
+    required
+  />
+</div>
               
               {/* Nueva campo Editorial */}
               <div className="form-group">
@@ -1118,16 +1202,100 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
                 />
               </div>
               
-              <div className="form-group">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Género</label>
-                <input
-                  type="text"
-                  name="genero"
-                  placeholder="Escriba el género del libro"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.genero}
-                  onChange={handleChange}
-                />
+              <div className="form-group relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Géneros</label>
+                <div className="relative">
+                  <div 
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-text min-h-[42px] flex flex-wrap gap-1"
+                    onClick={() => setShowGenreDropdown(true)}
+                  >
+                    {selectedGenres.length > 0 ? (
+                      selectedGenres.map((genre, idx) => (
+                        <span 
+                          key={idx} 
+                          className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm flex items-center"
+                        >
+                          {genre}
+                          <button 
+                            type="button"
+                            className="ml-1 text-blue-600 hover:text-blue-800"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedGenres(selectedGenres.filter(g => g !== genre));
+                              setFormData({
+                                ...formData,
+                                genero: selectedGenres.filter(g => g !== genre).join(', ')
+                              });
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-gray-500">Seleccione los géneros</span>
+                    )}
+                  </div>
+                  
+                  {showGenreDropdown && (
+                      <div className="absolute z-10 w-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg genres-dropdown">                       <div className="sticky top-0 bg-white p-2 border-b">
+                        <input 
+                          type="text"
+                          className="w-full px-2 py-1 border border-gray-300 rounded"
+                          placeholder="Buscar géneros..."
+                          value={genreSearch}
+                          onChange={(e) => setGenreSearch(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          autoFocus
+                        />
+                      </div>
+                      
+                      <div>
+                      {availableGenres
+  .filter(genre => genre.toLowerCase().includes(genreSearch.toLowerCase()))
+  .map((genre, idx) => (
+    <div
+      key={idx}
+      className={`px-3 py-2 cursor-pointer flex items-center ${
+        selectedGenres.includes(genre) ? 'bg-blue-50' : 'hover:bg-gray-100'
+      }`}
+      onClick={(e) => {
+        e.stopPropagation();
+        
+        // Toggle selection
+        let newSelected;
+        if (selectedGenres.includes(genre)) {
+          newSelected = selectedGenres.filter(g => g !== genre);
+        } else {
+          newSelected = [...selectedGenres, genre];
+        }
+        
+        setSelectedGenres(newSelected);
+        setFormData({
+          ...formData,
+          genero: newSelected.join(', ')
+        });
+      }}
+    >
+      <input 
+        type="checkbox"
+        checked={selectedGenres.includes(genre)}
+        onChange={() => {}}
+        className="mr-2"
+      />
+      {genre}
+    </div>
+  ))}
+                        
+                        {availableGenres.filter(genre => genre.toLowerCase().includes(genreSearch.toLowerCase())).length === 0 && (
+                          <div className="px-3 py-2 text-gray-500 text-center">
+                            No se encontraron géneros
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               
               {/* Campo Páginas modificado */}
@@ -1323,6 +1491,12 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
                 rows="4"
               />
             </div>
+
+            {formMessage.text && (
+              <div className={`mt-3 p-3 rounded ${formMessage.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                {formMessage.text}
+              </div>
+            )}
             
             <div className="mt-6 flex justify-between">
               <button
@@ -1334,9 +1508,17 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center"
+                disabled={isSubmitting}
               >
-                {isEditMode ? 'Actualizar' : 'Agregar'}
+                {isSubmitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Guardando...
+                  </>
+                ) : (
+                  isEditMode ? 'Actualizar' : 'Agregar'
+                )}
               </button>
             </div>
           </form>

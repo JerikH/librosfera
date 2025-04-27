@@ -500,7 +500,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
             <div className="w-full bg-gray-100 p-4 rounded-lg">
               <div className="mb-2">
                 <span className="text-gray-600 font-semibold">Tipo de usuario:</span>
-                <span className="ml-2">{userType === 'admin' ? 'Administrador' : 'Cliente'}</span>
+                <span className="ml-2">{userType === 'administrador' ? 'Administrador' : 'Cliente'}</span>
               </div>
               
               <div className="mb-2">

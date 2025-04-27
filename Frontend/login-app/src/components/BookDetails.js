@@ -11,9 +11,14 @@ const BookDetails = () => {
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('description');
   const navigate = useNavigate();
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [displayedImageIndex, setDisplayedImageIndex] = useState(0);
+  const [validImageUrls, setValidImageUrls] = useState([]);
+  const [imagesVerified, setImagesVerified] = useState(false);
 
   useEffect(() => {
-    const fetchBookDetails = async () => {
+    const fetchBookDetails = async () => { 
       try {
         // Realizar la llamada a la API con axios
         const response = await axios.get(`http://localhost:5000/api/v1/libros/${bookId}`);
@@ -100,6 +105,91 @@ const BookDetails = () => {
     setIsLoading(true);
     fetchBookDetails();
   }, [bookId]);
+
+  useEffect(() => {
+    if (book && book.images && book.images.length > 0 && !imagesVerified) {
+      const verifyImages = async () => {
+        const validImages = [];
+        
+        for (const imageUrl of book.images) {
+          try {
+            // Check if image exists by making a HEAD request with axios
+            const response = await axios.head(imageUrl);
+            if (response.status === 200) {
+              validImages.push(imageUrl);
+            }
+          } catch (error) {
+            console.log(`Failed to verify image: ${imageUrl}`);
+          }
+        }
+        
+        setValidImageUrls(validImages.length > 0 ? validImages : ["http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg"]);
+        setImagesVerified(true);
+      };
+      
+      verifyImages();
+    } else if (book && !book.images && book.image && !imagesVerified) {
+      // If there's only a single image, verify it
+      const verifySingleImage = async () => {
+        try {
+          const response = await axios.head(book.image);
+          if (response.status === 200) {
+            setValidImageUrls([book.image]);
+          } else {
+            setValidImageUrls(["http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg"]);
+          }
+        } catch (error) {
+          console.log(`Failed to verify image: ${book.image}`);
+          setValidImageUrls(["http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg"]);
+        }
+        setImagesVerified(true);
+      };
+      
+      verifySingleImage();
+    } else if (book && !imagesVerified) {
+      // No images at all - set default image
+      setValidImageUrls(["http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg"]);
+      setImagesVerified(true);
+    }
+  }, [book, imagesVerified]);
+
+  useEffect(() => {
+    if (book && book.images && book.images.length > 0) {
+      setDisplayedImageIndex(currentImageIndex);
+    }
+  }, [book, currentImageIndex]);
+
+  const handlePrevImage = (e) => {
+    e.stopPropagation();
+    if (book.images && book.images.length > 0 && !isTransitioning) {
+      setIsTransitioning(true);
+      const newIndex = currentImageIndex === 0 ? book.images.length - 1 : currentImageIndex - 1;
+      setCurrentImageIndex(newIndex);
+      
+      // After a short delay, update the displayed image
+      setTimeout(() => {
+        setDisplayedImageIndex(newIndex);
+        setIsTransitioning(false);
+      }, 300); // Match this with the CSS transition duration
+    }
+  };
+  
+  const handleNextImage = (e) => {
+    e.stopPropagation();
+    if (book.images && book.images.length > 0 && !isTransitioning) {
+      setIsTransitioning(true);
+      const newIndex = currentImageIndex === book.images.length - 1 ? 0 : currentImageIndex + 1;
+      setCurrentImageIndex(newIndex);
+      
+      // After a short delay, update the displayed image
+      setTimeout(() => {
+        setDisplayedImageIndex(newIndex);
+        setIsTransitioning(false);
+      }, 300); // Match this with the CSS transition duration
+    }
+  };
+
+
 
   const handleQuantityChange = (e) => {
     const value = parseInt(e.target.value);
@@ -311,37 +401,67 @@ const BookDetails = () => {
             {/* Columna izquierda - Imágenes */}
             <div className="md:w-2/5 mb-6 md:mb-0 md:pr-8">
               <div className="sticky top-6">
-                <div className="aspect-w-3 aspect-h-4 bg-gray-100 rounded-lg overflow-hidden mb-4 flex items-center justify-center">
-                  {book.image ? (
-                    <CachedImage 
-                      src={book.image} 
-                      alt={book.title}
-                      className="max-w-full max-h-full object-contain"
-                      fallbackSrc="/placeholder-book.png"
-                    />
-                  ) : (
-                    getBookIcon(book.id)
-                  )}
-                </div>
+              <div className="aspect-w-3 aspect-h-4 bg-gray-100 rounded-lg overflow-hidden mb-4 flex items-center justify-center relative">
+  {/* Showing the image */
+  
+  
+  }
+  <div className="aspect-w-3 aspect-h-4 bg-gray-100 rounded-lg overflow-hidden mb-4 flex items-center justify-center relative"></div>
+  {validImageUrls && validImageUrls.length > 0 ? (
+    <CachedImage 
+      src={validImageUrls[currentImageIndex]} 
+      alt={`${book.title} - Vista ${currentImageIndex + 1}`}
+      className="max-w-full max-h-full object-contain"
+      fallbackSrc="/placeholder-book.jpg"
+    />
+  ) : (
+    getBookIcon(book.id)
+  )}
+  
+  {/* Navigation buttons - only if there are multiple images */}
+  {validImageUrls && validImageUrls.length > 1 && (
+    <>
+      <button 
+        type="button"
+        className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-white z-10"
+        onClick={handlePrevImage}
+      >
+        <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <button 
+        type="button"
+        className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-white z-10"
+        onClick={handleNextImage}
+      >
+        <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </>
+  )}
+</div>
 
                 {/* Miniaturas */}
                 {book.images && book.images.length > 1 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {book.images.map((img, idx) => (
-                      <div
-                        key={idx}
-                        className="aspect-w-1 aspect-h-1 bg-gray-100 rounded border overflow-hidden cursor-pointer flex items-center justify-center"
-                      >
-                        <CachedImage 
-                          src={img} 
-                          alt={`${book.title} - Vista ${idx + 1}`}
-                          className="max-w-full max-h-full object-contain"
-                          fallbackSrc="/placeholder-book.png"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
+  <div className="grid grid-cols-4 gap-2">
+    {validImageUrls.map((img, idx) => (
+      <div
+        key={idx}
+        className={`aspect-w-1 aspect-h-1 bg-gray-100 rounded overflow-hidden cursor-pointer flex items-center justify-center ${idx === currentImageIndex ? 'border-2 border-blue-500' : 'border'}`}
+        onClick={() => setCurrentImageIndex(idx)}
+      >
+        <CachedImage 
+          src={img} 
+          alt={`${book.title} - Vista ${idx + 1}`}
+          className="max-w-full max-h-full object-contain"
+          fallbackSrc="/placeholder-book.png"
+        />
+      </div>
+    ))}
+  </div>
+)}
               </div>
             </div>
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import ManageBooks from './ManageBooks';
 
-const Dashboard = ({ userData }) => {
+const Dashboard = ({ userData, setActiveTab }) => {
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalUsers: 0,
@@ -98,9 +99,19 @@ const Dashboard = ({ userData }) => {
     fetchStats();
   }, []);
 
+  
+
   // Componente para mostrar una estadística con iconos SVG
-  const StatCard = ({ title, value, icon, color }) => (
-    <div className="bg-white p-4 rounded-lg shadow">
+  const StatCard = ({ title, value, icon, color, tabId }) => (
+    <div 
+      className={`bg-white p-4 rounded-lg shadow cursor-pointer hover:bg-gray-50`}
+      onClick={() => {
+        console.log("Clicked card with tabId:", tabId); // Add logging for debugging
+        if (tabId && typeof setActiveTab === 'function') {
+          setActiveTab(tabId);
+        }
+      }}
+    >
       <div className="flex items-center">
         <div className={`w-12 h-12 rounded-full ${color} flex items-center justify-center`}>
           {icon}
@@ -112,6 +123,7 @@ const Dashboard = ({ userData }) => {
       </div>
     </div>
   );
+
 
   // Iconos SVG para las tarjetas de estadísticas
   const icons = {
@@ -215,26 +227,27 @@ const Dashboard = ({ userData }) => {
               value={stats.totalBooks} 
               icon={icons.book} 
               color="bg-blue-500" 
+              tabId="administrar-libro"
             />
             <StatCard 
               title="Usuarios" 
               value={stats.totalUsers} 
               icon={icons.people} 
               color="bg-green-500" 
+              tabId="gestionar-usuarios"
             />
             <StatCard 
               title="Ventas" 
-              //value={stats.totalSales} 
               value={0} 
               icon={icons.shopping_cart} 
               color="bg-purple-500" 
             />
             <StatCard 
               title="Mensajes Pendientes" 
-              //value={stats.pendingMessages} 
               value={0} 
               icon={icons.mail} 
               color="bg-amber-500" 
+              tabId="gestionar-mensajes"
             />
           </div>
 
