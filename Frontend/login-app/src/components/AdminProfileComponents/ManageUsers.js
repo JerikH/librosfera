@@ -47,8 +47,9 @@ const ManageUsers = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [pagination.pagina, filterType]);
+  }, [pagination.pagina, filterType, searchTerm]);
 
+  // Function to fetch users from API
   // Function to fetch users from API
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -62,9 +63,10 @@ const ManageUsers = () => {
       
       // Add search term if present
       if (searchTerm.trim()) {
-        url += `&usuario=${searchTerm.trim()}&email=${searchTerm.trim()}`;
+        url += `&search=${searchTerm.trim()}`;  // Changed from separate usuario and email params
       }
       
+      console.log("url:", url);
       const response = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -73,6 +75,7 @@ const ManageUsers = () => {
       });
       
       if (response.data.status === 'success') {
+        console.log("Users got: ", response);
         setUsers(response.data.data);
         setPagination(response.data.paginacion);
       } else {
@@ -348,12 +351,14 @@ const ManageUsers = () => {
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg w-full max-w-3xl p-6 relative max-h-[90vh] overflow-y-auto">
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            >
-              <span className="material-icons-outlined">close</span>
-            </button>
+          <button 
+            onClick={() => setIsModalOpen(false)}
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
             
             <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
               Detalles del Usuario
@@ -520,12 +525,15 @@ const ManageUsers = () => {
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg w-full max-w-3xl p-6 relative max-h-[90vh] overflow-y-auto">
+            
             <button 
               onClick={() => setIsModalOpen(false)}
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
               disabled={isSubmitting}
             >
-              <span className="material-icons-outlined">close</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
             
             <h2 className="text-2xl font-bold text-gray-800 mb-6">
@@ -694,7 +702,9 @@ const ManageUsers = () => {
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
               disabled={isSubmitting}
             >
-              <span className="material-icons-outlined">close</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
             
             <div className="text-center py-4">
@@ -822,7 +832,9 @@ const ManageUsers = () => {
               type="submit" 
               className="absolute right-2 top-2 text-blue-600 hover:text-blue-800"
             >
-              <span className="material-icons-outlined text-sm">search</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </button>
           </form>
         </div>

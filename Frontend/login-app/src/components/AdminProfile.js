@@ -108,8 +108,8 @@ const AdminProfile = () => {
   };
 
   // Función para ir al perfil de usuario
-  const goToProfile = () => {
-    navigate('/Profile');
+  const goToHome = () => {
+    navigate('/Home');
   };
   
   // Render loading state if no userData yet
@@ -136,10 +136,10 @@ const AdminProfile = () => {
             </div>
             <div className="flex items-center space-x-4">
               <button 
-                onClick={goToProfile}
+                onClick={goToHome}
                 className="text-sm hover:underline cursor-pointer"
               >
-                Mi Cuenta
+                Home
               </button>
               <button 
                 onClick={handleLogout}

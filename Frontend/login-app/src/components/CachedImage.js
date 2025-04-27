@@ -6,7 +6,7 @@ const CachedImage = ({
   src, 
   alt, 
   className, 
-  fallbackSrc = '/placeholder-book.png',
+  fallbackSrc = 'http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg',
   onClick 
 }) => {
   const [imageSrc, setImageSrc] = useState(null);

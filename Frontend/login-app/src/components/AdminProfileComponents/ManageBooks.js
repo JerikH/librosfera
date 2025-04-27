@@ -20,12 +20,13 @@ const ManageBooks = () => {
     totalPaginas: 0
   });
 
-  // Obtener los libros de la API y formatearlos para mantener la estructura original
+  // Obtener todos los libros de la API sin paginación
   const fetchBooks = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get('http://localhost:5000/api/v1/libros');
-      console.log(response);
+      // Solicitar todos los libros sin ningún parámetro de paginación
+      const response = await axios.get(`http://localhost:5000/api/v1/libros`);
+      
       if (response.data && response.data.status === 'success') {
         // Formatear los datos para mantener la estructura original
         const formattedBooks = response.data.data.map(book => {
@@ -70,11 +71,6 @@ const ManageBooks = () => {
         });
         
         setBooks(formattedBooks);
-        
-        // Guardar información de paginación si existe
-        if (response.data.paginacion) {
-          setPagination(response.data.paginacion);
-        }
       } else {
         console.error('Error en la respuesta de la API:', response.data);
       }
@@ -89,12 +85,34 @@ const ManageBooks = () => {
     fetchBooks();
   }, []);
 
+  // Manejar el cambio de página
+  const handlePageChange = (newPage) => {
+    console.log(`Cambiando a página ${newPage}`);
+    if (newPage >= 1 && newPage <= pagination.totalPaginas) {
+      // Actualizar el estado de la página actual
+      setPagination(prevPag => ({
+        ...prevPag,
+        pagina: newPage
+      }));
+      
+      // Restablece la búsqueda al cambiar de página
+      if (searchTerm) {
+        setSearchTerm('');
+      }
+      
+      // No es necesario llamar a fetchBooks aquí ya que el useEffect
+      // reaccionará al cambio de pagination.pagina
+    }
+  };
+
   // Filtrar libros por búsqueda
-  const filteredBooks = books.filter(book => 
-    book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    book.genre.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredBooks = searchTerm 
+    ? books.filter(book => 
+        book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        book.genre.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : books;
 
   // Manejar apertura del modal
   const openModal = (mode, book = null) => {
@@ -116,7 +134,7 @@ const ManageBooks = () => {
     setShowEditor(false);
     setSelectedBook(null);
     // Refrescar la lista de libros después de cerrar el editor
-    fetchBooks();
+    fetchBooks(pagination.pagina);
   };
 
   // Guardar cambios del libro (esta función será pasada al componente BookEditor)
@@ -147,7 +165,7 @@ const ManageBooks = () => {
       });
       
       // Actualizar la lista de libros
-      fetchBooks();
+      fetchBooks(pagination.pagina);
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error al eliminar el libro:', error);
@@ -247,7 +265,7 @@ const ManageBooks = () => {
             year: selectedBook.originalData?.anio_publicacion,
             genre: selectedBook.genre,
             pages: selectedBook.originalData?.numero_paginas,
-            issn: selectedBook.originalData?.issn,
+            issn: selectedBook.originalData?.ISBN,
             language: selectedBook.originalData?.idioma,
             publicationDate: selectedBook.originalData?.fecha_publicacion,
             condition: selectedBook.originalData?.estado,
@@ -273,7 +291,7 @@ const ManageBooks = () => {
                 onClick={() => openEditor('add')}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700"
               >
-                <span className="material-icons-outlined mr-1">Añadir Libro</span>
+                Añadir Libro
                 
               </button>
               
@@ -352,12 +370,18 @@ const ManageBooks = () => {
                       {book.genre}
                     </div>
                     <div className="flex justify-center items-center">
-                      <div className="w-24 h-6 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="w-24 h-6 bg-gray-200 rounded-full overflow-hidden relative">
+                        {/* This div shows the colored portion based on discount percentage */}
                         <div 
-                          className={`h-full ${getDiscountColor(book.discount)} text-xs flex items-center justify-center text-white`}
+                          className={`h-full ${getDiscountColor(book.discount)}`}
                           style={{ width: `${book.discount}%` }}
                         >
-                          {book.discount}%
+                        </div>
+                        {/* This div is positioned absolutely to always show the text in the center */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-xs font-medium text-gray-800 drop-shadow-sm">
+                            {book.discount}%
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -381,27 +405,10 @@ const ManageBooks = () => {
             )}
           </div>
           
-          {/* Paginación (opcional) */}
-          {pagination.totalPaginas > 1 && (
-            <div className="flex justify-center mt-4">
-              <div className="flex space-x-2">
-                {Array.from({ length: pagination.totalPaginas }).map((_, index) => (
-                  <button
-                    key={index}
-                    className={`px-3 py-1 rounded ${
-                      pagination.pagina === index + 1
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-700 hover:bg-gray-200'
-                    }`}
-                    onClick={() => {
-                      // Aquí se implementaría la paginación
-                      console.log(`Cambiar a página ${index + 1}`);
-                    }}
-                  >
-                    {index + 1}
-                  </button>
-                ))}
-              </div>
+          {/* Eliminamos la paginación y mostramos la cantidad total de libros */}
+          {books.length > 0 && (
+            <div className="text-sm text-gray-600 text-center mt-4">
+              Mostrando {books.length} libros en total
             </div>
           )}
           

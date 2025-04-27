@@ -113,46 +113,27 @@ const UserLayout = ({ children }) => {
         
         {/* Navigation links - modificados para estar distribuidos uniformemente */}
         <nav className="bg-gray-100">
-          <div className="container mx-auto">
-            <ul className="flex justify-between items-center px-4 py-3 text-sm">
-              <li className="px-4">
-                <Link to="/novedades" className="text-gray-700 hover:text-blue-600 whitespace-nowrap font-medium">
-                  Novedades
-                </Link>
-              </li>
-              <li className="px-4">
-                <Link to="/mas-vendidos" className="text-gray-700 hover:text-blue-600 whitespace-nowrap font-medium">
-                  Más Vendidos
-                </Link>
-              </li>
-              <li className="px-4">
-                <Link to="/recomendados" className="text-gray-700 hover:text-blue-600 whitespace-nowrap font-medium">
-                  Recomendados
-                </Link>
-              </li>
-              <li className="px-4">
-                <Link to="/ofertas" className="text-gray-700 hover:text-blue-600 whitespace-nowrap font-medium">
-                  Ofertas
-                </Link>
-              </li>
-              <li className="px-4">
-                <Link to="/preventas" className="text-gray-700 hover:text-blue-600 whitespace-nowrap font-medium">
-                  Preventas
-                </Link>
-              </li>
-              <li className="px-4">
-                <Link to="/libros-digitales" className="text-gray-700 hover:text-blue-600 whitespace-nowrap font-medium">
-                  Libros Digitales
-                </Link>
-              </li>
-              <li className="px-4">
-                <Link to="/audiolibros" className="text-gray-700 hover:text-blue-600 whitespace-nowrap font-medium">
-                  Audiolibros
-                </Link>
-              </li>
-            </ul>
-          </div>
-        </nav>
+  <div className="container mx-auto">
+    <ul className="flex justify-between items-center px-4 py-3 text-sm">
+      {[
+        { to: "/novedades", label: "Novedades" },
+        { to: "/mas-vendidos", label: "Más Vendidos" },
+        { to: "/recomendados", label: "Recomendados" },
+        { to: "/ofertas", label: "Ofertas" },
+        { to: "/preventas", label: "Preventas" },
+        { to: "/libros-digitales", label: "Libros Digitales" },
+        { to: "/audiolibros", label: "Audiolibros" },
+      ].map((link, index) => (
+        <li key={index} className="px-4">
+          <span className="text-gray-400 cursor-not-allowed whitespace-nowrap font-medium">
+            {link.label}
+          </span>
+        </li>
+      ))}
+    </ul>
+  </div>
+</nav>
+
       </header>
       
       {/* Main content */}

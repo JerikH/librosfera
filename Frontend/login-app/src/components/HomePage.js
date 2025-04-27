@@ -20,6 +20,11 @@ const HomePage = () => {
     totalPages: 0
   });
   const navigate = useNavigate();
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [validImageUrls, setValidImageUrls] = useState([]);
+
+  
+
 
   useEffect(() => {
     // Función para cargar todos los datos necesarios
@@ -41,6 +46,8 @@ const HomePage = () => {
 
     fetchAllData();
   }, []);
+
+  
 
   // Función para obtener todos los libros
   const fetchAllBooks = async (page = 1, limit = 8) => {
@@ -144,6 +151,19 @@ const HomePage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const getBookIcon = (id) => {
+    // Always use the placeholder image instead of SVG icons
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <img 
+          src="/placeholder-book.png" 
+          alt="Imagen no disponible" 
+          className="max-w-full max-h-full object-contain"
+        />
+      </div>
+    );
+  };
+  
   // Función para renderizar estrellas de calificación
   const renderStars = (rating) => {
     const calculatedRating = rating || 0;
@@ -161,147 +181,228 @@ const HomePage = () => {
     return stars;
   };
 
-  // Componente para mostrar un libro
-  const BookCard = ({ book }) => {
-    const navigateToDetail = () => {
-      navigate(`/libros/${book._id}`);
-    };
 
-    // Calcular precio con y sin descuento
-    const precioBase = book.precio_info?.precio_base || book.precio;
-    const tieneDescuento = book.precio_info?.descuentos?.some(d => d.activo);
-    const porcentajeDescuento = tieneDescuento 
-      ? book.precio_info.descuentos.find(d => d.activo && d.tipo === 'porcentaje')?.valor || 0 
-      : 0;
+ 
+// Componente para mostrar un libro
+// Componente para mostrar un libro
+// Componente para mostrar un libro
+const BookCard = ({ book }) => {
+  const navigate = useNavigate();
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [validImageUrls, setValidImageUrls] = useState([]);
+  const [imagesVerified, setImagesVerified] = useState(false);
+  
+  useEffect(() => {
+    // Only run image verification once
+    if (!imagesVerified && book.imagenes && book.imagenes.length > 0) {
+      const verifyImages = async () => {
+        const validImages = [];
+        
+        for (const image of book.imagenes) {
+          try {
+            // Check if image exists by making a HEAD request with axios
+            const response = await axios.head(image.url);
+            if (response.status === 200) {
+              validImages.push(image);
+            }
+          } catch (error) {
+            console.log(`Failed to verify image: ${image.url}`);
+          }
+        }
+        
+        setValidImageUrls(validImages.length > 0 ? validImages : [{ 
+          url: "http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg",
+          alt_text: "Default book image"
+        }]);
+        
+        // Mark images as verified to prevent re-verification
+        setImagesVerified(true);
+      };
+      
+      verifyImages();
+    } else if (!imagesVerified) {
+      // No images or empty array - set default and mark as verified
+      setValidImageUrls([{ 
+        url: "http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg",
+        alt_text: "Default book image"
+      }]);
+      setImagesVerified(true);
+    }
+  }, [book.imagenes, imagesVerified]);
+
+  const navigateToDetail = () => {
+    navigate(`/libros/${book._id}`);
+  };
+
+  // Calcular precio con y sin descuento
+  const precioBase = book.precio_info?.precio_base || book.precio;
+  const tieneDescuento = book.precio_info?.descuentos?.some(d => d.activo);
+  const porcentajeDescuento = tieneDescuento 
+    ? book.precio_info.descuentos.find(d => d.activo && d.tipo === 'porcentaje')?.valor || 0 
+    : 0;
+  
+  // Formatear el stock
+  const stockDisponible = book.stock || 0;
+
+  // Función para navegar entre imágenes
+  const navigateImages = (e, direction) => {
+    // Detener la propagación para evitar navegación a detalles
+    e.stopPropagation();
     
-    // Formatear el stock
-    const stockDisponible = book.stock || 0;
+    if (!validImageUrls || validImageUrls.length <= 1) return;
+    
+    if (direction === 'next') {
+      setCurrentImageIndex((prev) => 
+        prev === validImageUrls.length - 1 ? 0 : prev + 1
+      );
+    } else {
+      setCurrentImageIndex((prev) => 
+        prev === 0 ? validImageUrls.length - 1 : prev - 1
+      );
+    }
+  };
 
-    // Convertir URL absoluta a relativa si es necesario
-    const getImageUrl = (url) => {
-      if (!url) return '/placeholder-book.png';
-      
-      // Si es una URL absoluta que comienza con http://localhost:5000, 
-      // la convertimos a una ruta relativa
-      if (url.startsWith('http://localhost:5000')) {
-        return url.replace('http://localhost:5000', '');
-      }
-      
-      return url;
-    };
-
-    return (
-      <div className="book-card flex flex-col h-full border bg-white rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
-        {/* Imagen del libro - Ahora explícitamente clickable */}
+  return (
+    <div 
+      className="book-card flex flex-col h-full border bg-white rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+      onClick={navigateToDetail}
+    >
+      {/* Imagen del libro con flechas de navegación */}
+      <div className="relative h-48 overflow-hidden bg-gray-100">
         <div 
-          className="relative h-48 overflow-hidden bg-gray-100 cursor-pointer"
-          onClick={navigateToDetail}
+          className="flex transition-transform duration-300 ease-in-out w-full h-full"
+          style={{ transform: `translateX(-${currentImageIndex * 100}%)` }}
         >
-          {book.imagenes && book.imagenes.length > 0 ? (
-            <CachedImage 
-              src={book.imagenes[0].url} 
-              alt={book.imagenes[0].alt_text || book.titulo} 
-              className="w-full h-full object-contain" 
-              fallbackSrc="/placeholder-book.png"
-              onClick={navigateToDetail}
-            />
+          {validImageUrls.length > 0 ? (
+            validImageUrls.map((image, index) => (
+              <div key={index} className="min-w-full h-full flex-shrink-0">
+                <CachedImage 
+                  src={image.url} 
+                  alt={image.alt_text || "Imagen de libro"} 
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            ))
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gray-200 text-gray-500">
+            <div className="min-w-full h-full flex items-center justify-center bg-gray-200 text-gray-500">
               <span className="material-icons-outlined text-6xl">book</span>
-            </div>
-          )}
-          
-          {/* Etiqueta de descuento si aplica */}
-          {porcentajeDescuento > 0 && (
-            <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
-              {porcentajeDescuento}% DCTO
             </div>
           )}
         </div>
         
-        {/* Información del libro */}
-        <div className="p-4 flex-grow flex flex-col">
-          {/* Título clickable */}
-          <h3 
-            className="font-bold text-sm line-clamp-2 mb-1 cursor-pointer hover:text-blue-600"
-            onClick={navigateToDetail}
-          >
-            {book.titulo}
-          </h3>
-          <p className="text-gray-600 text-sm mb-2">{book.autor_nombre_completo}</p>
-          
-          {/* Estrellas de calificación si están disponibles */}
-          {book.calificaciones && (
-            <div className="flex mb-1">
-              {renderStars(book.calificaciones.promedio)}
-              {book.calificaciones.cantidad > 0 && (
-                <span className="text-xs text-gray-500 ml-1">({book.calificaciones.cantidad})</span>
-              )}
-            </div>
-          )}
-          
-          {/* Editorial e información de edición */}
-          {book.editorial && (
-            <p className="text-xs text-gray-500 mb-3">
-              {book.editorial}, {book.estado === 'nuevo' ? 'Nuevo' : 'Usado'}
-              {book.anio_publicacion ? `, ${book.anio_publicacion}` : ''}
-            </p>
-          )}
-          
-          {/* Disponibilidad */}
-          <p className={`text-xs ${stockDisponible > 0 ? 'text-green-600' : 'text-red-600'} mb-2`}>
-            {stockDisponible > 0 
-              ? `Quedan ${stockDisponible} ${stockDisponible === 1 ? 'unidad' : 'unidades'}`
-              : 'Agotado'}
-          </p>
-          
-          {/* Precio */}
-          <div className="mt-auto">
-            {tieneDescuento ? (
-              <div>
-                <span className="text-xs line-through text-gray-500">
-                  ${precioBase.toLocaleString('es-CO')}
-                </span>
-                <div className="text-lg font-bold text-red-600">
-                  ${book.precio.toLocaleString('es-CO')}
-                </div>
-              </div>
-            ) : (
-              <div className="text-lg font-bold">
-                ${book.precio.toLocaleString('es-CO')}
-              </div>
+        {/* Etiqueta de descuento si aplica */}
+        {porcentajeDescuento > 0 && (
+          <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
+            {porcentajeDescuento}% DCTO
+          </div>
+        )}
+        
+        {/* Flechas de navegación de imágenes - solo si hay más de una imagen */}
+        {validImageUrls && validImageUrls.length > 1 && (
+          <>
+            <button 
+              className="absolute left-1 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full p-1 hover:bg-opacity-100 z-10"
+              onClick={(e) => navigateImages(e, 'prev')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <button 
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full p-1 hover:bg-opacity-100 z-10"
+              onClick={(e) => navigateImages(e, 'next')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </>
+        )}
+      </div>
+      
+      {/* Información del libro */}
+      <div className="p-4 flex-grow flex flex-col">
+        {/* Título aún marcado como clickable para mantener el estilo hover */}
+        <h3 className="font-bold text-sm line-clamp-2 mb-1 hover:text-blue-600">
+          {book.titulo}
+        </h3>
+        <p className="text-gray-600 text-sm mb-2">{book.autor_nombre_completo}</p>
+        
+        {/* Estrellas de calificación si están disponibles */}
+        {book.calificaciones && (
+          <div className="flex mb-1">
+            {renderStars(book.calificaciones.promedio)}
+            {book.calificaciones.cantidad > 0 && (
+              <span className="text-xs text-gray-500 ml-1">({book.calificaciones.cantidad})</span>
             )}
           </div>
-          
-          {/* Botón Rápido para compra */}
-          {tieneDescuento && (
-            <div className="mt-2 flex">
-              <button 
-                className="flex items-center justify-center bg-red-600 text-white px-3 py-1 rounded-full text-sm hover:bg-red-700 transition-colors w-full"
-                onClick={(e) => {
-                  // Implementar función de compra rápida
-                  console.log('Compra rápida de:', book.titulo);
-                }}
-              >
-                <span className="material-icons-outlined text-sm mr-1">flash_on</span>
-                Rápido
-              </button>
+        )}
+        
+        {/* Editorial e información de edición */}
+        {book.editorial && (
+          <p className="text-xs text-gray-500 mb-3">
+            {book.editorial}, {book.estado === 'nuevo' ? 'Nuevo' : 'Usado'}
+            {book.anio_publicacion ? `, ${book.anio_publicacion}` : ''}
+          </p>
+        )}
+        
+        {/* Disponibilidad */}
+        <p className={`text-xs ${stockDisponible > 0 ? 'text-green-600' : 'text-red-600'} mb-2`}>
+          {stockDisponible > 0 
+            ? `Quedan ${stockDisponible} ${stockDisponible === 1 ? 'unidad' : 'unidades'}`
+            : 'Agotado'}
+        </p>
+        
+        {/* Precio */}
+        <div className="mt-auto">
+          {tieneDescuento ? (
+            <div>
+              <span className="text-xs line-through text-gray-500">
+                ${precioBase.toLocaleString('es-CO')}
+              </span>
+              <div className="text-lg font-bold text-red-600">
+                ${book.precio.toLocaleString('es-CO')}
+              </div>
+            </div>
+          ) : (
+            <div className="text-lg font-bold">
+              ${book.precio.toLocaleString('es-CO')}
             </div>
           )}
+        </div>
+        
+        {/* Botón Agregar al carrito (antes "Rápido") - ahora aparece en todas las tarjetas */}
+        <div className="mt-2 flex">
+          <button 
+            className="flex items-center justify-center bg-red-600 text-white px-3 py-1 rounded-full text-sm hover:bg-red-700 transition-colors w-full opacity-50 cursor-not-allowed"
+            onClick={(e) => {
+              e.stopPropagation(); // Prevenir que el click se propague a la tarjeta completa
+            }}
+            disabled
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            Agregar al carrito
+          </button>
+        </div>
 
-          {/* Botón Ver detalles */}
-          <div className="mt-2">
-            <button 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-1 rounded text-sm transition-colors"
-              onClick={navigateToDetail}
-            >
-              Ver detalles
-            </button>
-          </div>
+        {/* Botón Ver detalles */}
+        <div className="mt-2">
+          <button 
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-1 rounded text-sm transition-colors"
+            onClick={(e) => {
+              e.stopPropagation(); // Este es redundante ya que igualmente va a la página de detalles
+              navigateToDetail();
+            }}
+          >
+            Ver detalles
+          </button>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   // Banner promocional
   const PromoBanner = () => (
@@ -350,7 +451,7 @@ const HomePage = () => {
             categories.map((category, index) => (
               <li key={index}>
                 <a 
-                  href={`/libros?genero=${encodeURIComponent(category)}`}
+                  //href={`/libros?genero=${encodeURIComponent(category)}`}
                   className="block py-2 text-sm hover:text-blue-600 transition-colors"
                 >
                   {category}
