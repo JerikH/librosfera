@@ -21,13 +21,21 @@ const ManageBooks = () => {
   });
 
   // Obtener todos los libros de la API sin paginación
-  const fetchBooks = async () => {
+  const fetchBooks = async (page = 1) => {
     setIsLoading(true);
     try {
       // Solicitar todos los libros sin ningún parámetro de paginación
-      const response = await axios.get(`http://localhost:5000/api/v1/libros`);
+      const response = await axios.get(`http://localhost:5000/api/v1/libros?page=${page}`);
       
       if (response.data && response.data.status === 'success') {
+
+        setPagination({
+          total: response.data.paginacion.total,
+          pagina: response.data.paginacion.pagina,
+          limite: response.data.paginacion.limite,
+          totalPaginas: response.data.paginacion.totalPaginas
+        });
+        
         // Formatear los datos para mantener la estructura original
         const formattedBooks = response.data.data.map(book => {
           // Determinar la URL de la imagen
@@ -82,8 +90,8 @@ const ManageBooks = () => {
   };
 
   useEffect(() => {
-    fetchBooks();
-  }, []);
+    fetchBooks(pagination.pagina);
+  }, [pagination.pagina]);
 
   // Manejar el cambio de página
   const handlePageChange = (newPage) => {
@@ -102,6 +110,64 @@ const ManageBooks = () => {
       
       // No es necesario llamar a fetchBooks aquí ya que el useEffect
       // reaccionará al cambio de pagination.pagina
+    }
+  };
+
+  const handleSearch = async (term) => {
+    setSearchTerm(term);
+    
+    // If searching, fetch all books
+    if (term) {
+      setIsLoading(true);
+      try {
+        // Request all books without pagination when searching
+        const response = await axios.get(`http://localhost:5000/api/v1/libros?limite=100`);
+        
+        if (response.data && response.data.status === 'success') {
+          const formattedBooks = response.data.data.map(book => {
+            // Reuse your existing formatting code from fetchBooks
+            let imageUrl = null;
+            
+            if (book.imagenes && book.imagenes.length > 0) {
+              const portada = book.imagenes.find(img => img.orden === 0);
+              if (portada) {
+                imageUrl = portada.url;
+              } else {
+                imageUrl = book.imagenes[0].url;
+              }
+            } 
+            else if (book.imagenes_legacy && book.imagenes_legacy.portada) {
+              imageUrl = book.imagenes_legacy.portada;
+            }
+            
+            let discount = 0;
+            if (book.precio_info && book.precio_info.descuentos && book.precio_info.descuentos.length > 0) {
+              discount = book.precio_info.descuentos[0].valor || 0;
+            }
+            
+            return {
+              id: book._id,
+              title: book.titulo || 'Sin título',
+              author: book.autor_nombre_completo || 'Autor desconocido',
+              genre: book.genero || 'Sin categoría',
+              price: book.precio || 0,
+              stock: book.stock || 0,
+              discount: discount,
+              image: imageUrl,
+              originalData: book
+            };
+          });
+          
+          setBooks(formattedBooks);
+        } 
+      } catch (error) {
+        console.error('Error al buscar libros:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // If search is cleared, go back to paginated results
+      fetchBooks(1);
     }
   };
 
@@ -297,13 +363,13 @@ const ManageBooks = () => {
               
               {/* Caja de búsqueda */}
               <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Buscar Libro"
-                  className="px-4 py-2 pr-10 border border-gray-300 rounded"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              <input
+                type="text"
+                placeholder="Buscar Libro"
+                className="px-4 py-2 pr-10 border border-gray-300 rounded"
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
                 <button className="absolute right-2 top-1/2 transform -translate-y-1/2">
                   <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd"></path>
@@ -405,13 +471,90 @@ const ManageBooks = () => {
             )}
           </div>
           
-          {/* Eliminamos la paginación y mostramos la cantidad total de libros */}
-          {books.length > 0 && (
+          {!searchTerm && books.length > 0 && (
             <div className="text-sm text-gray-600 text-center mt-4">
-              Mostrando {books.length} libros en total
+              Mostrando {books.length} de {pagination.total} libros (Página {pagination.pagina} de {pagination.totalPaginas})
             </div>
           )}
-          
+
+          {/* Show total when filtering */}
+          {searchTerm && filteredBooks.length > 0 && (
+            <div className="text-sm text-gray-600 text-center mt-4">
+              Mostrando {filteredBooks.length} libros que coinciden con "{searchTerm}"
+            </div>
+          )}
+                    
+                    {/* Pagination controls */}
+          {!searchTerm && books.length > 0 && (
+            <div className="flex justify-center mt-6">
+              <nav className="flex items-center space-x-2">
+                <button 
+                  onClick={() => handlePageChange(1)}
+                  disabled={pagination.pagina === 1}
+                  className={`px-3 py-1 rounded ${pagination.pagina === 1 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                >
+                  «
+                </button>
+                <button 
+                  onClick={() => handlePageChange(pagination.pagina - 1)}
+                  disabled={pagination.pagina === 1}
+                  className={`px-3 py-1 rounded ${pagination.pagina === 1 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                >
+                  ‹
+                </button>
+                
+                {/* Page number buttons */}
+                {[...Array(pagination.totalPaginas).keys()].map(i => {
+                  const pageNum = i + 1;
+                  // Show current page and a few pages before/after
+                  if (
+                    pageNum === 1 || 
+                    pageNum === pagination.totalPaginas || 
+                    (pageNum >= pagination.pagina - 1 && pageNum <= pagination.pagina + 1)
+                  ) {
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => handlePageChange(pageNum)}
+                        className={`px-3 py-1 rounded ${
+                          pagination.pagina === pageNum 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  }
+                  
+                  // Show ellipsis for gaps
+                  if (
+                    (pageNum === pagination.pagina - 2 && pageNum > 2) || 
+                    (pageNum === pagination.pagina + 2 && pageNum < pagination.totalPaginas - 1)
+                  ) {
+                    return <span key={pageNum} className="px-1">...</span>;
+                  }
+                  
+                  return null;
+                })}
+                
+                <button 
+                  onClick={() => handlePageChange(pagination.pagina + 1)}
+                  disabled={pagination.pagina === pagination.totalPaginas}
+                  className={`px-3 py-1 rounded ${pagination.pagina === pagination.totalPaginas ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                >
+                  ›
+                </button>
+                <button 
+                  onClick={() => handlePageChange(pagination.totalPaginas)}
+                  disabled={pagination.pagina === pagination.totalPaginas}
+                  className={`px-3 py-1 rounded ${pagination.pagina === pagination.totalPaginas ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                >
+                  »
+                </button>
+              </nav>
+            </div>
+          )}
           {/* Modal de confirmación de eliminación */}
           {isModalOpen && modalMode === 'delete' && <DeleteConfirmationModal />}
         </>
