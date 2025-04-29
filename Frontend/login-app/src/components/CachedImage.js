@@ -9,9 +9,14 @@ const CachedImage = ({
   fallbackSrc = 'http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg',
   onClick 
 }) => {
+  // Always use the default fallback if none provided explicitly
+  const defaultFallback = 'http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg';
+  const actualFallbackSrc = fallbackSrc || defaultFallback;
+  
   const [imageSrc, setImageSrc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   useEffect(() => {
     if (!src) {
@@ -23,24 +28,53 @@ const CachedImage = ({
     let mounted = true;
     const loadCachedImage = async () => {
       try {
+        // If we're already using the fallback, don't try to load again
+        if (usingFallback) return;
+        
+        // Determine which URL to use (original or fallback)
+        const urlToLoad = error ? defaultFallback : src;
+        
+        console.log("Attempting to load image:", urlToLoad);
+        
         // Intenta cargar la imagen desde el servicio de caché
-        const cachedImageUrl = await imageCacheService.loadImage(src);
+        const cachedImageUrl = await imageCacheService.loadImage(urlToLoad);
         
         if (mounted) {
           if (cachedImageUrl) {
             setImageSrc(cachedImageUrl);
             setLoading(false);
+            if (urlToLoad === defaultFallback) {
+              setUsingFallback(true);
+            }
           } else {
-            // Si no se pudo cargar desde la caché, marcamos como error
-            setError(true);
-            setLoading(false);
+            // Si no se pudo cargar desde la caché, intentamos con el fallback
+            if (urlToLoad !== defaultFallback && !usingFallback) {
+              console.log("Original image failed, trying default fallback:", defaultFallback);
+              setError(true);
+              // We'll let the effect run again with error=true
+            } else {
+              // Even the fallback failed
+              console.error("Both original and fallback images failed to load");
+              setError(true);
+              setLoading(false);
+              setUsingFallback(true); // Prevent further retries
+            }
           }
         }
       } catch (err) {
         console.error('Error loading cached image:', err);
         if (mounted) {
-          setError(true);
-          setLoading(false);
+          if (!usingFallback && src !== defaultFallback) {
+            console.log("Error with original image, trying default fallback:", defaultFallback);
+            setError(true);
+            // Let the effect run again with error=true
+          } else {
+            // Even the fallback failed or we were already using fallback
+            console.error("Failed to load fallback image too");
+            setError(true);
+            setLoading(false);
+            setUsingFallback(true); // Prevent further retries
+          }
         }
       }
     };
@@ -55,8 +89,9 @@ const CachedImage = ({
         URL.revokeObjectURL(imageSrc);
       }
     };
-  }, [src]);
+  }, [src, error, defaultFallback, usingFallback]);
 
+  // If we're loading, show loading indicator
   if (loading) {
     return (
       <div className={`${className} flex items-center justify-center bg-gray-100`}>
@@ -65,10 +100,12 @@ const CachedImage = ({
     );
   }
 
-  if (error || !imageSrc) {
+  // If no image is available despite all retries, render the fallback directly
+  if ((error || !imageSrc) && !usingFallback) {
+    // For direct rendering of fallback without going through the cache
     return (
       <img 
-        src={fallbackSrc} 
+        src={defaultFallback} 
         alt={alt || 'Image not available'} 
         className={className}
         onClick={onClick}
@@ -76,6 +113,7 @@ const CachedImage = ({
     );
   }
 
+  // Otherwise, render the successfully loaded image
   return (
     <img 
       src={imageSrc} 
@@ -84,7 +122,14 @@ const CachedImage = ({
       onClick={onClick}
       onError={(e) => {
         console.error(`Error displaying cached image: ${src}`);
-        setError(true);
+        if (!usingFallback) {
+          setError(true); // This will trigger the effect to run again with the fallback
+        } else {
+          // If we're already using the fallback and still got an error,
+          // there's not much more we can do
+          console.error("Even fallback image failed to display");
+        }
+        
         // Limpiar el URL del objeto si es un blob
         if (imageSrc && imageSrc.startsWith('blob:')) {
           URL.revokeObjectURL(imageSrc);

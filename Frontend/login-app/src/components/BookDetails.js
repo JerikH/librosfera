@@ -44,6 +44,10 @@ const BookDetails = () => {
             (apiBook.autor && apiBook.autor.length > 0 ? 
               `${apiBook.autor[0].nombre} ${apiBook.autor[0].apellidos}` : 
               'Autor desconocido');
+
+          const ratingAvg = apiBook.calificaciones ? apiBook.calificaciones.promedio || 0 : 0;
+          const reviewCount = apiBook.calificaciones ? apiBook.calificaciones.cantidad || 0 : 0;
+              
           
           // Determinar la URL de la imagen
           let imageUrl = null;
@@ -80,8 +84,8 @@ const BookDetails = () => {
             price: apiBook.precio || apiBook.precio_info.precio_base,
             originalPrice: originalPrice,
             discount: discountPercentage,
-            rating: 0, // No hay campo equivalente en la API
-            reviews: 0, // No hay campo equivalente en la API
+            rating: ratingAvg, // Use the rating from calificaciones
+            reviews: reviewCount, // No hay campo equivalente en la API
             stock: apiBook.stock || 0,
             format: apiBook.estado || "No especificado",
             edition: "", // No hay campo equivalente en la API
@@ -254,11 +258,9 @@ const BookDetails = () => {
             )}
           </svg>
         ))}
-        {book?.reviews && (
-          <span className="ml-2 text-gray-600 text-sm">
-            ({book.reviews} reseñas)
-          </span>
-        )}
+        <span className="ml-2 text-gray-600 text-sm">
+          ({book.reviews} reseñas)
+        </span>
       </div>
     );
   };
@@ -486,7 +488,7 @@ const BookDetails = () => {
 
               {/* Calificación */}
               <div className="mb-4">
-                {book.rating && renderRating(book.rating)}
+                {renderRating(book.rating)}
               </div>
 
               {/* Información adicional */}

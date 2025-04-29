@@ -414,18 +414,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
           Editar Perfil
         </h1>
         
-        {/* Success or error messages */}
-        {successMessage && (
-          <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
-            <p>{successMessage}</p>
-          </div>
-        )}
         
-        {errorMessage && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-            <p>{errorMessage}</p>
-          </div>
-        )}
       </div>
 
       <div className="flex flex-col md:flex-row">
@@ -841,6 +830,19 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
                 />
               </div>
             </div>
+
+            {/* Success or error messages */}
+        {successMessage && (
+          <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
+            <p>{successMessage}</p>
+          </div>
+        )}
+        
+        {errorMessage && (
+          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+            <p>{errorMessage}</p>
+          </div>
+        )}
             
             {/* Submit Buttons */}
             <div className="mt-6 flex justify-between">

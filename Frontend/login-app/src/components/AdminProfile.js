@@ -8,11 +8,6 @@ import ManageUsers from './AdminProfileComponents/ManageUsers';
 import ProfilePage from './UserProfilePageComponents/ProfilePage';
 import EditProfile from './EditProfile';
 
-// Helper function to check if a user is admin
-const isAdmin = (userData) => {
-  return userData && userData.tipo_usuario === 'administrador';
-};
-
 // Helper function to get cookie data
 const getCookie = (name) => {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -49,16 +44,31 @@ const AdminProfile = () => {
           return;
         }
         
-        // Check if user is specifically 'administrador' (not 'root')
-        if (!isAdmin(parsedData.Data)) {
-          console.log("User is not a standard administrator, redirecting to regular profile");
-          navigate('/Profile');
+        const userType = parsedData.Data.tipo_usuario?.toLowerCase();
+        console.log("User type detected:", userType);
+        
+        // Route users to the appropriate profile page
+        if (!userType) {
+          console.log("No user type found, redirecting to login");
+          window.location.replace('/Login');
+          return;
+        } else if (userType === 'root') {
+          console.log("Root user detected, redirecting to RootProfile");
+          window.location.replace('/RootProfile');
+          return;
+        } else if (userType === 'cliente') {
+          console.log("Regular user detected, redirecting to Profile");
+          window.location.replace('/Profile');
+          return;
+        } else if (userType !== 'administrador') {
+          console.log("Unknown user type, redirecting to login");
+          window.location.replace('/Login');
           return;
         }
         
-        // Set user data and stop loading
+        // Only proceed if we are definitely an admin user
+        console.log("Admin user confirmed, loading admin panel");
         setUserData(parsedData.Data);
-        console.log("Admin data loaded from cookie:", parsedData.Data);
         setIsLoading(false);
       } catch (error) {
         console.error("Error in AdminProfile auth check:", error);
@@ -67,7 +77,7 @@ const AdminProfile = () => {
     };
     
     checkAuth();
-  }, [navigate]);
+  }, []);
   
   // Handler para editar perfil
   const handleEditProfile = () => {

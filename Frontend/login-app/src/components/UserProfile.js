@@ -18,44 +18,67 @@ const UserProfile = () => {
   const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
   
-  // Check authentication on mount and redirect immediately if needed
+  // Helper function to get cookie data
+  const getCookie = (name) => {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  };
+
+  // Check authentication and user type immediately on mount
   useEffect(() => {
-    // Check if the token exists in cookies
-    const token = document.cookie.match(new RegExp('(^| )data=([^;]+)'));
-    
-    // Redirect immediately if no token found
-    if (!token) {
-      window.location.replace('/Login');
-      return;
-    }
-    
-    // We have a token, now fetch the user data
-    const getUserData = async () => {
+    const checkUserTypeAndRedirect = async () => {
+      // Check if the token exists in cookies
+      const dataCookie = getCookie("data");
+      
+      // Redirect immediately if no token found
+      if (!dataCookie) {
+        console.log("No data cookie found, redirecting to login");
+        window.location.replace('/Login');
+        return;
+      }
+      
       try {
-        const result = await fetchUserData();
-        if (result.data.tipo_usuario === 'administrador') {
-          console.log("Admin user detected, redirecting to AdminProfile");
-          window.location.replace('/AdminProfile');
-        }
+        // First try to parse data directly from cookie to avoid unnecessary API calls
+        const parsedData = JSON.parse(dataCookie);
+        console.log("Parsed cookie data in UserProfile:", parsedData);
         
-        // If user data fetch fails, redirect to login
-        if (!result.success) {
-          window.location.replace('/Login');
+        if (!parsedData || !parsedData.Data) {
+          console.log("Invalid data structure in cookie, redirecting to login");
+          navigate('/Login');
           return;
         }
         
-        // We have valid data, set it and stop loading
-        setUserData(result.data);
-        console.log("User data loaded:", result.data); // Debug user data
+        // Check user type and redirect immediately if needed
+        if (parsedData.Data && parsedData.Data.tipo_usuario) {
+          const userType = parsedData.Data.tipo_usuario.toLowerCase();
+          
+          if (userType === 'administrador') {
+            console.log("Admin user detected, redirecting to AdminProfile");
+            window.location.replace('/AdminProfile');
+            return;
+          } else if (userType === 'root') {
+            console.log("Root user detected, redirecting to RootProfile");
+            window.location.replace('/RootProfile');
+            return;
+          } else if (userType !== 'usuario' && userType !== 'cliente') {
+            console.log("Unknown user type, redirecting to login");
+            window.location.replace('/Login');
+            return;
+          }
+        }
+        
+        // We have valid data for a regular user, set it and stop loading
+        console.log("Regular user confirmed, loading profile");
+        setUserData(parsedData.Data);
         setIsLoading(false);
       } catch (error) {
-        console.error("Error loading user data:", error);
+        console.error("Error checking user type:", error);
         window.location.replace('/Login');
       }
     };
     
-    getUserData();
-  }, []);
+    checkUserTypeAndRedirect();
+  }, [navigate]);
   
   // Fetch user data when active tab changes
   useEffect(() => {
@@ -93,8 +116,6 @@ const UserProfile = () => {
     refreshData();
   };
 
-
-
   // Función para cerrar sesión
   const handleLogout = () => {
     // Limpiar las cookies
@@ -113,10 +134,16 @@ const UserProfile = () => {
     navigate('/Profile');
   };
   
-  // Render content only if we have userData
-  // If not, nothing is rendered while the redirect happens
-  if (!userData) {
-    return null;
+  // Render nothing until we confirm this is a regular user
+  if (isLoading || !userData) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-700">Verificando información de usuario...</p>
+        </div>
+      </div>
+    );
   }
   
   return (
@@ -172,22 +199,13 @@ const UserProfile = () => {
               />
             </div>
           ) : (
-            isLoading ? (
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-gray-700">Cargando información...</p>
-                </div>
-              </div>
-            ) : (
-              <div className="h-full">
-                {activeTab === 'home' && <Dashboard userData={userData} onEditProfile={handleEditProfile} />}
-                {activeTab === 'profile' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
-                {activeTab === 'compras' && <PurchasesPage />}
-                {activeTab === 'carrito' && <CartPage />}
-                {activeTab === 'tarjeta' && <CardPage />}
-              </div>
-            )
+            <div className="h-full">
+              {activeTab === 'home' && <Dashboard userData={userData} onEditProfile={handleEditProfile} />}
+              {activeTab === 'profile' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
+              {activeTab === 'compras' && <PurchasesPage />}
+              {activeTab === 'carrito' && <CartPage />}
+              {activeTab === 'tarjeta' && <CardPage />}
+            </div>
           )}
         </div>
       </div>
