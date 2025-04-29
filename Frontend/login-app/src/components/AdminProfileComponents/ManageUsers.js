@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import CachedImage from '../CachedImage'; // Assuming this component exists in your project
+import CachedImage from '../CachedImage';
+import UserModal from './UserModal';
+import CreateAdminModal from './CreateAdminModal';
 
 const ManageUsers = () => {
+  // State declarations
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -20,19 +23,22 @@ const ManageUsers = () => {
   const [formErrors, setFormErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
+  const [isUploadingProfilePic, setIsUploadingProfilePic] = useState(false);
+  const [currentUserType, setCurrentUserType] = useState(null);
+  const [isCreateAdminModalOpen, setIsCreateAdminModalOpen] = useState(false);
 
-  // Define profile image URLs
+  // Constants
   const API_BASE_URL = 'http://localhost:5000';
   const DEFAULT_PROFILE_PIC = `${API_BASE_URL}/uploads/profiles/default.jpg`;
 
-  // API token from localStorage
-  
+  // Utility - Get cookie
   const getCookie = (name) => {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : null;
   };
 
-  const getAuthToken = () => {
+  // Utility - Get auth token from cookie
+  const getAuthToken = useCallback(() => {
     const dataCookie = getCookie("data");
     if (!dataCookie) return '';
     
@@ -43,30 +49,44 @@ const ManageUsers = () => {
       console.error('Error parsing auth token:', e);
       return '';
     }
-  };
+  }, []);
 
+  // Get current user type
+  const getCurrentUserType = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/v1/auth/verify-token`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (response.status === 200 && response.data.user) {
+        setCurrentUserType(response.data.user.tipo_usuario);
+      }
+    } catch (error) {
+      console.error('Error fetching current user type:', error);
+    }
+  }, [API_BASE_URL, getAuthToken]);
+
+  // Initial data loading
   useEffect(() => {
+    getCurrentUserType();
     fetchUsers();
   }, [pagination.pagina, filterType, searchTerm]);
 
-  // Function to fetch users from API
-  // Function to fetch users from API
-  const fetchUsers = async () => {
+  // Fetch users from API
+  const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      let url = `${API_BASE_URL}/api/v1/users?page=${pagination.pagina}&limit=${pagination.limite}`;
+      // Base URL with pagination and filter
+      let url = `${API_BASE_URL}/api/v1/users?page=1&limit=100`; // Get more records for client-side filtering
       
       // Add filter type if not 'all'
       if (filterType !== 'all') {
-        url += `&tipo_usuario=${filterType}`;
+        url += `&tipo=${filterType}`;
       }
       
-      // Add search term if present
-      if (searchTerm.trim()) {
-        url += `&search=${searchTerm.trim()}`;  // Changed from separate usuario and email params
-      }
-      
-      console.log("url:", url);
       const response = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -75,9 +95,35 @@ const ManageUsers = () => {
       });
       
       if (response.data.status === 'success') {
-        console.log("Users got: ", response);
-        setUsers(response.data.data);
-        setPagination(response.data.paginacion);
+        let filteredUsers = response.data.data;
+        
+        // Apply client-side search if search term exists
+        if (searchTerm.trim()) {
+          const term = searchTerm.trim().toLowerCase();
+          filteredUsers = filteredUsers.filter(user => 
+            (user.usuario && user.usuario.toLowerCase().includes(term)) || 
+            (user.email && user.email.toLowerCase().includes(term)) ||
+            (user.nombres && user.nombres.toLowerCase().includes(term)) ||
+            (user.apellidos && user.apellidos.toLowerCase().includes(term))
+          );
+        }
+        
+        // Update total count for pagination
+        const totalCount = filteredUsers.length;
+        const pageSize = pagination.limite;
+        const currentPage = pagination.pagina;
+        
+        // Calculate slice of data for current page
+        const startIndex = (currentPage - 1) * pageSize;
+        const paginatedUsers = filteredUsers.slice(startIndex, startIndex + pageSize);
+        
+        // Set users and update pagination
+        setUsers(paginatedUsers);
+        setPagination({
+          ...pagination,
+          total: totalCount,
+          totalPaginas: Math.ceil(totalCount / pageSize)
+        });
       } else {
         throw new Error('Error al obtener usuarios');
       }
@@ -90,10 +136,10 @@ const ManageUsers = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [API_BASE_URL, filterType, getAuthToken, pagination.limite, pagination.pagina, searchTerm]);
 
-  // Function to fetch user details
-  const fetchUserDetails = async (userId) => {
+  // Fetch user details
+  const fetchUserDetails = useCallback(async (userId) => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/v1/users/${userId}`, {
         headers: {
@@ -115,7 +161,7 @@ const ManageUsers = () => {
       });
       return null;
     }
-  };
+  }, [API_BASE_URL, getAuthToken]);
 
   // Handle search action
   const handleSearch = (e) => {
@@ -131,7 +177,7 @@ const ManageUsers = () => {
   };
 
   // Determine profile image source
-  const getProfileImageSrc = (user) => {
+  const getProfileImageSrc = useCallback((user) => {
     if (!user) return DEFAULT_PROFILE_PIC;
     
     if (user.foto_perfil) {
@@ -142,10 +188,146 @@ const ManageUsers = () => {
     }
     
     return DEFAULT_PROFILE_PIC;
-  };
+  }, [API_BASE_URL, DEFAULT_PROFILE_PIC]);
 
-  // Formatear fecha
-  const formatDate = (dateString) => {
+  // Prepare user for editing
+  const prepareUserForEdit = useCallback((user) => {
+    if (!user) return;
+    
+    setEditFormData({
+      nombres: user.nombres || '',
+      apellidos: user.apellidos || '',
+      DNI: user.DNI || '',
+      telefono: user.telefono || '',
+      email: user.email || '',
+      activo: user.activo || false,
+      cargo: user.cargo || '',
+    });
+  }, []);
+
+  // Handle profile picture upload
+  const uploadProfilePic = useCallback(async (file) => {
+    if (!file || !selectedUser) return;
+    
+    setIsUploadingProfilePic(true);
+    setActionMessage({ type: '', text: '' });
+    
+    try {
+      const formData = new FormData();
+      formData.append('foto_perfil', file);
+      
+      const response = await axios.post(
+        `${API_BASE_URL}/api/v1/users/${selectedUser._id}/foto`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Accept': 'application/json'
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        setActionMessage({
+          type: 'success',
+          text: 'Foto de perfil actualizada correctamente'
+        });
+        
+        const newProfilePic = response.data.data.foto_perfil;
+        
+        // Update the user in the list
+        setUsers(prev => prev.map(user => 
+          user._id === selectedUser._id 
+            ? { ...user, foto_perfil: newProfilePic } 
+            : user
+        ));
+        
+        // Update selected user
+        setSelectedUser(prev => ({
+          ...prev,
+          foto_perfil: newProfilePic
+        }));
+      } else {
+        throw new Error('Error al actualizar la foto de perfil');
+      }
+    } catch (error) {
+      console.error('Error uploading profile pic:', error);
+      setActionMessage({
+        type: 'error',
+        text: 'Error al subir la foto de perfil: ' + 
+          (error.response?.data?.message || error.message || 'Error desconocido')
+      });
+    } finally {
+      setIsUploadingProfilePic(false);
+    }
+  }, [API_BASE_URL, getAuthToken, selectedUser]);
+
+  // Handle profile picture input change
+  const handleProfilePicChange = useCallback((e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedUser) return;
+    
+    uploadProfilePic(file);
+  }, [selectedUser, uploadProfilePic]);
+
+  // Handle profile picture deletion
+  const handleDeleteProfilePic = useCallback(async () => {
+    if (!selectedUser) return;
+    
+    if (!window.confirm('¿Está seguro que desea eliminar la foto de perfil?')) {
+      return;
+    }
+    
+    setIsUploadingProfilePic(true);
+    setActionMessage({ type: '', text: '' });
+    
+    try {
+      const response = await axios.delete(
+        `${API_BASE_URL}/api/v1/users/${selectedUser._id}/foto`,
+        {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Accept': 'application/json'
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        setActionMessage({
+          type: 'success',
+          text: 'Foto de perfil eliminada correctamente'
+        });
+        
+        const defaultPic = response.data.data.foto_perfil || 'default.jpg';
+        
+        // Update the user in the list and selected user
+        setUsers(prev => prev.map(user => 
+          user._id === selectedUser._id 
+            ? { ...user, foto_perfil: defaultPic } 
+            : user
+        ));
+        
+        setSelectedUser(prev => ({
+          ...prev,
+          foto_perfil: defaultPic
+        }));
+      } else {
+        throw new Error('Error al eliminar la foto de perfil');
+      }
+    } catch (error) {
+      console.error('Error deleting profile pic:', error);
+      setActionMessage({
+        type: 'error',
+        text: 'Error al eliminar la foto de perfil: ' + 
+          (error.response?.data?.message || error.message || 'Error desconocido')
+      });
+    } finally {
+      setIsUploadingProfilePic(false);
+    }
+  }, [API_BASE_URL, getAuthToken, selectedUser]);
+
+  // Format date
+  const formatDate = useCallback((dateString) => {
     if (!dateString) return 'N/A';
     
     try {
@@ -160,10 +342,10 @@ const ManageUsers = () => {
     } catch (e) {
       return dateString;
     }
-  };
+  }, []);
 
-  // Obtener etiqueta de tipo de usuario
-  const getUserTypeLabel = (type) => {
+  // Get user type label
+  const getUserTypeLabel = useCallback((type) => {
     switch(type) {
       case 'cliente':
         return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Cliente</span>;
@@ -174,32 +356,29 @@ const ManageUsers = () => {
       default:
         return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">{type}</span>;
     }
-  };
+  }, []);
 
-  // Check if user can be modified or deactivated
-  const canModifyUser = (user) => {
+  // Check if user can be modified
+  const canModifyUser = useCallback((user) => {
+    // Root users can modify both clients and administrators, but not other root users
+    if (currentUserType === 'root') {
+      return user && (user.tipo_usuario === 'cliente' || user.tipo_usuario === 'administrador');
+    }
+    
+    // Administrators can only modify clients
     return user && user.tipo_usuario === 'cliente';
-  };
+  }, [currentUserType]);
 
-  // Manejar apertura del modal
-  const openModal = async (mode, user = null) => {
+  // Open user modal
+  const openModal = useCallback(async (mode, user = null) => {
     if (user) {
-      // For detailed view and actions, fetch complete user details
       if (mode === 'view' || mode === 'edit' || mode === 'delete') {
         setIsLoading(true);
         const userDetails = await fetchUserDetails(user._id);
         setSelectedUser(userDetails);
         
         if (mode === 'edit') {
-          setEditFormData({
-            nombres: userDetails.nombres || '',
-            apellidos: userDetails.apellidos || '',
-            DNI: userDetails.DNI || '',
-            telefono: userDetails.telefono || '',
-            email: userDetails.email || '',
-            activo: userDetails.activo || false,
-            cargo: userDetails.cargo || '',
-          });
+          prepareUserForEdit(userDetails);
         }
         
         setIsLoading(false);
@@ -210,19 +389,19 @@ const ManageUsers = () => {
     
     setModalMode(mode);
     setIsModalOpen(true);
-  };
+  }, [fetchUserDetails, prepareUserForEdit]);
 
   // Handle form input change
-  const handleInputChange = (e) => {
+  const handleInputChange = useCallback((e) => {
     const { name, value, type, checked } = e.target;
     setEditFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
-  };
+  }, []);
 
   // Handle form submission
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setFormErrors({});
@@ -264,10 +443,10 @@ const ManageUsers = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [API_BASE_URL, editFormData, fetchUsers, getAuthToken, selectedUser]);
 
   // Handle user activation/deactivation
-  const handleToggleUserStatus = async () => {
+  const handleToggleUserStatus = useCallback(async () => {
     setIsSubmitting(true);
     
     try {
@@ -297,7 +476,7 @@ const ManageUsers = () => {
           throw new Error('Error al desactivar usuario');
         }
       } else {
-        // Activate user (using PUT to update the user's active status)
+        // Activate user
         const response = await axios.put(
           `${API_BASE_URL}/api/v1/users/${selectedUser._id}`,
           { activo: true },
@@ -338,452 +517,35 @@ const ManageUsers = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [API_BASE_URL, fetchUsers, getAuthToken, selectedUser]);
 
-  // Modal Content Component
-  const UserModal = () => {
-    if (!selectedUser) return null;
-
-    const isRestrictedUser = selectedUser.tipo_usuario === 'administrador' || selectedUser.tipo_usuario === 'root';
-
-    // View User Details Modal
-    if (modalMode === 'view') {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-3xl p-6 relative max-h-[90vh] overflow-y-auto">
-          <button 
-            onClick={() => setIsModalOpen(false)}
-            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-            
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-              Detalles del Usuario
-              <div className="ml-3">
-                {getUserTypeLabel(selectedUser.tipo_usuario)}
-              </div>
-              <div className="ml-auto">
-                {selectedUser.activo ? (
-                  <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">Activo</span>
-                ) : (
-                  <span className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded-full">Inactivo</span>
-                )}
-              </div>
-            </h2>
-            
-            <div className="flex items-center mb-6">
-              <div className="h-16 w-16 rounded-full overflow-hidden bg-gray-200 mr-4">
-                <CachedImage 
-                  src={getProfileImageSrc(selectedUser)}
-                  alt={selectedUser.usuario || 'Usuario'} 
-                  className="w-full h-full object-cover"
-                  fallbackSrc={DEFAULT_PROFILE_PIC}
-                  fallbackComponent={
-                    <div className="w-full h-full flex items-center justify-center bg-yellow-200">
-                      <span className="text-2xl font-bold text-yellow-500">
-                        {selectedUser.usuario?.charAt(0)?.toUpperCase() || 'U'}
-                      </span>
-                    </div>
-                  }
-                />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold">{selectedUser.usuario}</h3>
-                <p className="text-gray-600">{selectedUser.email}</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-500 mb-2">INFORMACIÓN BÁSICA</h3>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-gray-500">Nombre completo</p>
-                    <p className="font-medium">{selectedUser.nombres} {selectedUser.apellidos}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">DNI</p>
-                    <p className="font-medium">{selectedUser.DNI || 'No disponible'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Teléfono</p>
-                    <p className="font-medium">{selectedUser.telefono || 'No disponible'}</p>
-                  </div>
-                  {selectedUser.telefono_alternativo && (
-                    <div>
-                      <p className="text-sm text-gray-500">Teléfono alternativo</p>
-                      <p className="font-medium">{selectedUser.telefono_alternativo}</p>
-                    </div>
-                  )}
-                  {selectedUser.cargo && (
-                    <div>
-                      <p className="text-sm text-gray-500">Cargo</p>
-                      <p className="font-medium">{selectedUser.cargo}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div>
-                {selectedUser.direcciones && selectedUser.direcciones.length > 0 && (
-                  <>
-                    <h3 className="text-sm font-semibold text-gray-500 mb-2">DIRECCIÓN</h3>
-                    <div className="space-y-3">
-                      {selectedUser.direcciones.map((dir, index) => (
-                        <div key={index} className="p-3 bg-gray-50 rounded-md">
-                          <p className="text-sm font-medium">{dir.tipo || 'Principal'}</p>
-                          <p className="text-sm">{dir.calle}</p>
-                          <p className="text-sm">{dir.codigo_postal}, {dir.ciudad}</p>
-                          <p className="text-sm">{dir.pais}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-                
-                <h3 className="text-sm font-semibold text-gray-500 mt-6 mb-2">INFORMACIÓN DE CUENTA</h3>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-gray-500">Fecha de registro</p>
-                    <p className="font-medium">{formatDate(selectedUser.fecha_registro)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Última actualización</p>
-                    <p className="font-medium">{formatDate(selectedUser.fecha_actualizacion)}</p>
-                  </div>
-                </div>
-                
-                {selectedUser.preferencias && (
-                  <div className="mt-4">
-                    <h3 className="text-sm font-semibold text-gray-500 mb-2">PREFERENCIAS</h3>
-                    <div className="bg-gray-50 p-3 rounded-md">
-                      {selectedUser.preferencias.temas && selectedUser.preferencias.temas.length > 0 && (
-                        <div className="mb-2">
-                          <p className="text-sm text-gray-500">Temas de interés</p>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {selectedUser.preferencias.temas.map((tema, idx) => (
-                              <span key={idx} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                                {tema}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {selectedUser.preferencias.autores && selectedUser.preferencias.autores.length > 0 && (
-                        <div>
-                          <p className="text-sm text-gray-500">Autores favoritos</p>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {selectedUser.preferencias.autores.map((autor, idx) => (
-                              <span key={idx} className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                                {autor}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="mt-8 flex justify-end space-x-3">
-              {!isRestrictedUser && (
-                <>
-                  <button
-                    onClick={() => openModal('edit', selectedUser)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded"
-                  >
-                    Editar Usuario
-                  </button>
-                  <button
-                    onClick={() => openModal('delete', selectedUser)}
-                    className="px-4 py-2 bg-red-600 text-white rounded"
-                  >
-                    {selectedUser.activo ? 'Desactivar' : 'Activar'} Usuario
-                  </button>
-                </>
-              )}
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      );
+  // Handle Create Admin Modal
+  const handleCreateAdminModal = (shouldRefresh = false) => {
+    setIsCreateAdminModalOpen(false);
+    if (shouldRefresh) {
+      fetchUsers();
     }
-    
-    // Edit User Form Modal
-    if (modalMode === 'edit') {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-3xl p-6 relative max-h-[90vh] overflow-y-auto">
-            
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              disabled={isSubmitting}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">
-              Editar Usuario
-            </h2>
-            
-            {actionMessage.text && (
-              <div className={`p-4 mb-4 rounded ${
-                actionMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-              }`}>
-                {actionMessage.text}
-              </div>
-            )}
-            
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombres
-                  </label>
-                  <input
-                    type="text"
-                    name="nombres"
-                    value={editFormData.nombres || ''}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Apellidos
-                  </label>
-                  <input
-                    type="text"
-                    name="apellidos"
-                    value={editFormData.apellidos || ''}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    DNI
-                  </label>
-                  <input
-                    type="text"
-                    name="DNI"
-                    value={editFormData.DNI || ''}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Teléfono
-                  </label>
-                  <input
-                    type="text"
-                    name="telefono"
-                    value={editFormData.telefono || ''}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={editFormData.email || ''}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Cargo / Rol
-                  </label>
-                  <input
-                    type="text"
-                    name="cargo"
-                    value={editFormData.cargo || ''}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                
-                <div className="md:col-span-2">
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      name="activo"
-                      checked={editFormData.activo || false}
-                      onChange={handleInputChange}
-                      className="h-4 w-4 text-blue-600"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Usuario activo</span>
-                  </label>
-                </div>
-                
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contraseña (Dejar en blanco para mantener la actual)
-                  </label>
-                  <input
-                    type="password"
-                    name="password"
-                    //value={editFormData.password || ''}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-gray-300 rounded"
-                    placeholder="Nueva contraseña"
-                  />
-                </div>
-              </div>
-              
-              {formErrors.general && (
-                <div className="text-red-600 text-sm">
-                  {formErrors.general}
-                </div>
-              )}
-              
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded"
-                  disabled={isSubmitting}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded flex items-center"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
-                      Guardando...
-                    </>
-                  ) : (
-                    'Guardar Cambios'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      );
-    }
-    
-    // Delete/Deactivate User Confirmation Modal
-    if (modalMode === 'delete') {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-lg p-6 relative">
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              disabled={isSubmitting}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            
-            <div className="text-center py-4">
-              <div className="h-20 w-20 mx-auto mb-4 rounded-full overflow-hidden">
-                <CachedImage 
-                  src={getProfileImageSrc(selectedUser)}
-                  alt={selectedUser.usuario || 'Usuario'} 
-                  className="w-full h-full object-cover"
-                  fallbackSrc={DEFAULT_PROFILE_PIC}
-                  fallbackComponent={
-                    <div className="w-full h-full flex items-center justify-center bg-yellow-200">
-                      <span className="text-4xl font-bold text-yellow-500">
-                        {selectedUser.usuario?.charAt(0)?.toUpperCase() || 'U'}
-                      </span>
-                    </div>
-                  }
-                />
-              </div>
-              
-              <h2 className="text-xl font-bold text-gray-800 mb-4">
-                {selectedUser.activo ? 'Desactivar' : 'Activar'} Usuario
-              </h2>
-              
-              {actionMessage.text && (
-                <div className={`p-4 mb-4 rounded ${
-                  actionMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}>
-                  {actionMessage.text}
-                </div>
-              )}
-              
-              <p className="text-gray-600 mb-8">
-                ¿Está seguro que desea {selectedUser.activo ? 'desactivar' : 'activar'} al usuario <strong>{selectedUser.usuario}</strong>?
-                {selectedUser.activo && (
-                  <span className="block mt-2 text-sm text-gray-500">
-                    El usuario perderá acceso a la plataforma pero sus datos se conservarán.
-                  </span>
-                )}
-              </p>
-              
-              <div className="flex justify-center space-x-4">
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded"
-                  disabled={isSubmitting}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleToggleUserStatus}
-                  className={`px-4 py-2 ${
-                    selectedUser.activo ? 'bg-red-600' : 'bg-green-600'
-                  } text-white rounded flex items-center justify-center`}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
-                      Procesando...
-                    </>
-                  ) : (
-                    selectedUser.activo ? 'Sí, desactivar' : 'Sí, activar'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    
-    return null;
   };
 
   return (
     <div className="flex-1 p-6 overflow-y-auto bg-gray-100">
-      {/* Header and search */}
+      {/* Header with Create Admin button */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-gray-800">Gestionar Usuarios</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-gray-800">Gestionar Usuarios</h1>
+          {/* Show Create Admin button only for root users */}
+          {currentUserType === 'root' && (
+            <button
+              onClick={() => setIsCreateAdminModalOpen(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Crear Administrador
+            </button>
+          )}
+        </div>
         
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
           {/* Filtros de tipo de usuario */}
@@ -840,7 +602,7 @@ const ManageUsers = () => {
         </div>
       </div>
 
-      {/* Mensajes de estado */}
+      {/* Status Messages */}
       {actionMessage.text && !isModalOpen && (
         <div className={`p-4 mb-6 rounded ${
           actionMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
@@ -849,7 +611,7 @@ const ManageUsers = () => {
         </div>
       )}
 
-      {/* Tabla de usuarios */}
+      {/* Users Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-6 text-center">
@@ -896,7 +658,7 @@ const ManageUsers = () => {
                             fallbackComponent={
                               <div className="w-full h-full flex items-center justify-center bg-yellow-200">
                                 <span className="text-lg font-bold text-yellow-500">
-                                  {user.nombres ? user.nombres.charAt(0) : user.usuario.charAt(0).toUpperCase()}
+                                  {user.nombres ? user.nombres.charAt(0) : user.usuario?.charAt(0).toUpperCase() || 'U'}
                                 </span>
                               </div>
                             }
@@ -935,17 +697,14 @@ const ManageUsers = () => {
                       {canModifyUser(user) && (
                         <>
                           <button
-                            //onClick={() => openModal('edit', user)}
-                            //className="text-indigo-600 hover:text-indigo-900 mr-3"
-                            className="text-gray mr-3"
-                            disabled={true}
+                            onClick={() => openModal('edit', user)}
+                            className="text-indigo-600 hover:text-indigo-900 mr-3"
                           >
                             Editar
                           </button>
                           <button
                             onClick={() => openModal('delete', user)}
                             className="text-red-600 hover:text-red-900"
-                            
                           >
                             {user.activo ? 'Desactivar' : 'Activar'}
                           </button>
@@ -960,7 +719,7 @@ const ManageUsers = () => {
         )}
       </div>
       
-      {/* Paginación */}
+      {/* Pagination */}
       {!isLoading && pagination.totalPaginas > 1 && (
         <div className="flex justify-between items-center mt-6">
           <div className="text-sm text-gray-600">
@@ -980,7 +739,7 @@ const ManageUsers = () => {
             </button>
             
             {Array.from({ length: Math.min(5, pagination.totalPaginas) }, (_, i) => {
-              // Lógica para mostrar 5 páginas alrededor de la página actual
+              // Logic for showing 5 pages around the current page
               const totalPages = pagination.totalPaginas;
               const currentPage = pagination.pagina;
               
@@ -994,7 +753,7 @@ const ManageUsers = () => {
               } else {
                 pageNum = currentPage - 2 + i;
               }
-              
+
               return (
                 <button
                   key={pageNum}
@@ -1025,8 +784,40 @@ const ManageUsers = () => {
         </div>
       )}
       
-      {/* Modal */}
-      {isModalOpen && <UserModal />}
+      {/* User Modal */}
+      {isModalOpen && (
+        <UserModal
+          modalMode={modalMode}
+          selectedUser={selectedUser}
+          editFormData={editFormData}
+          handleInputChange={handleInputChange}
+          handleSubmit={handleSubmit}
+          setIsModalOpen={setIsModalOpen}
+          isSubmitting={isSubmitting}
+          formErrors={formErrors}
+          actionMessage={actionMessage}
+          handleToggleUserStatus={handleToggleUserStatus}
+          getProfileImageSrc={getProfileImageSrc}
+          formatDate={formatDate}
+          getUserTypeLabel={getUserTypeLabel}
+          DEFAULT_PROFILE_PIC={DEFAULT_PROFILE_PIC}
+          handleProfilePicChange={handleProfilePicChange}
+          handleDeleteProfilePic={handleDeleteProfilePic}
+          isUploadingProfilePic={isUploadingProfilePic}
+          setModalMode={setModalMode}
+          prepareUserForEdit={prepareUserForEdit}
+        />
+      )}
+      
+      {/* Create Admin Modal */}
+      {isCreateAdminModalOpen && (
+        <CreateAdminModal
+          isOpen={isCreateAdminModalOpen}
+          onClose={handleCreateAdminModal}
+          getAuthToken={getAuthToken}
+          API_BASE_URL={API_BASE_URL}
+        />
+      )}
     </div>
   );
 };
