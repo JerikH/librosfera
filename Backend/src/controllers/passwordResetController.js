@@ -75,6 +75,13 @@ const requestPasswordReset = catchAsync(async (req, res, next) => {
     // Enviar email con link de recuperación y código
     await emailService.sendPasswordResetEmail(usuario.email, resetLink, verificationCode);
 
+    await req.logActivity('usuario', 'solicitud_recuperacion_password', {
+      detalles: {
+        email: email
+      },
+      nivel_importancia: 'medio'
+    });
+
     // Responder al cliente
     res.status(200).json({
       status: 'success',
@@ -171,6 +178,13 @@ const resetPassword = catchAsync(async (req, res, next) => {
   
     // Eliminar todos los tokens de reseteo para este usuario
     await PasswordReset.deleteMany({ userId: passwordReset.userId });
+
+    await req.logActivity('usuario', 'recuperacion_password_completada', {
+      detalles: {
+        email: passwordReset.email
+      },
+      nivel_importancia: 'medio'
+    });
   
     // Responder al cliente PRIMERO antes de enviar el correo
     res.status(200).json({
