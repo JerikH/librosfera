@@ -174,7 +174,7 @@ const AdminProfile = () => {
                 onClick={goToHome}
                 className="text-sm hover:underline cursor-pointer"
               >
-                Home
+                Inicio
               </button>
               <button 
                 onClick={handleLogout}
