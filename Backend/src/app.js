@@ -8,7 +8,8 @@ const path = require('path');
 
 // Importar configuraciones
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
-const debugMiddleware = require('./middleware/debugMiddleware'); // Añadido
+const debugMiddleware = require('./middleware/debugMiddleware');
+const activityLogger = require('./middleware/activityLogMiddleware');
 
 // Importar rutas
 // const productRoutes = require('./routes/productRoutes');
@@ -16,7 +17,8 @@ const debugMiddleware = require('./middleware/debugMiddleware'); // Añadido
 const userRoutes = require('./routes/userRoutes');
 const passwordResetRoutes = require('./routes/passwordResetRoutes');
 const authRoutes = require('./routes/authRoutes');
-const libroRoutes = require('./routes/libroRoutes'); // Nueva importación
+const libroRoutes = require('./routes/libroRoutes');
+const activityLogRoutes = require('./routes/activityLogRoutes');
 // const orderRoutes = require('./routes/orderRoutes');
 // const cartRoutes = require('./routes/cartRoutes');
 // const reservationRoutes = require('./routes/reservationRoutes');
@@ -34,6 +36,9 @@ app.use(express.json()); // Parsear JSON
 app.use(express.urlencoded({ extended: false }));
 app.use(morgan('dev')); // Logging
 
+// middleware de activity logger a nivel global
+app.use(activityLogger);
+
 // Añadir middleware de depuración en ambiente de desarrollo
 if (process.env.NODE_ENV === 'development' && process.env.DEBUG === 'true') {
   app.use(debugMiddleware);
@@ -43,7 +48,7 @@ if (process.env.NODE_ENV === 'development' && process.env.DEBUG === 'true') {
 // Rate limiting
 // const limiter = rateLimit({
 //   windowMs: 15 * 60 * 1000, // 15 minutos
-//   max: 100, // Límite de 100 peticiones por ventana
+//   max: 1000, // Límite de 100 peticiones por ventana
 //   standardHeaders: true,
 //   legacyHeaders: false,
 // });
@@ -81,7 +86,8 @@ try {
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/users', passwordResetRoutes);
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/libros', libroRoutes); // Nueva ruta para libros
+app.use('/api/v1/libros', libroRoutes);
+app.use('/api/v1/activities', activityLogRoutes);
 // app.use('/api/v1/orders', orderRoutes);
 // app.use('/api/v1/cart', cartRoutes);
 // app.use('/api/v1/reservations', reservationRoutes);

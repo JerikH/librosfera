@@ -10,7 +10,8 @@ import AdminProfile from './components/AdminProfile';
 import RootProfile from './components/RootProfile';
 import HomePage from './components/HomePage';
 import SearchResults from './components/SearchResults';
-import BookDetails from './components/BookDetails'; // Importar el componente de detalles del libro
+import BookDetails from './components/BookDetails';
+import BookListPage from './components/BookListPage'; // Nuevo componente para listar libros por categoría
 
 const App = () => {
   return (
@@ -32,7 +33,13 @@ const App = () => {
         {/* Página principal, búsqueda y detalles de libro */}
         <Route path="/Home" element={<HomePage />} />
         <Route path="/search" element={<SearchResults />} />
-        <Route path="/libros/:bookId" element={<BookDetails />} />
+        <Route path="/libro/:bookId" element={<BookDetails />} />
+        
+        {/* Nuevas rutas para categorías de libros */}
+        <Route path="/libros/destacados" element={<BookListPage category="destacados" />} />
+        <Route path="/libros/descuentos" element={<BookListPage category="descuentos" />} />
+        <Route path="/libros" element={<BookListPage category="todos" />} />
+        <Route path="/libros/categoria/:categoryName" element={<BookListPage category="categoria" />} />
         
         {/* Rutas de perfil de usuario y administrador */}
         <Route path="/Profile" element={<UserProfile />} />

@@ -54,6 +54,8 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
     suscrito_noticias: false
   });
 
+  console.log("User: ", userType);
+
   // Utility function to get cookie
   const getCookie = (name) => {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -490,7 +492,8 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
               <div className="mb-2">
                 <span className="text-gray-600 font-semibold">Tipo de usuario:</span>
                 <span className="ml-2">
-                  {userType === 'admin' ? 'Administrador' : userType === 'cliente' ? 'Cliente' : userType === 'root' ? 'Root' : ''}
+                  
+                  {userType === 'administrador' ? 'Administrador' : userType === 'admin' ? 'Administrador': userType === 'cliente' ? 'Cliente' : userType === 'root' ? 'Root' : ''}
                 </span>
               </div>
               

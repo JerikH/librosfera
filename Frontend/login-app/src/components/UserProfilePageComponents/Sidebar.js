@@ -68,6 +68,10 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
   // Handle tab click - now just using the data passed from parent
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
+    // Close the EditProfile when navigating to other sections
+    if (window.isEditingProfile) {
+      onEditProfile(false);
+    }
   };
 
   // Determine profile image source
@@ -83,7 +87,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
 
   // Handle edit profile - no refresh needed here since EditProfile will handle it
   const handleEditProfile = () => {
-    onEditProfile();
+    onEditProfile(true);
   };
 
   return (

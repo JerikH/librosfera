@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link,  useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import CachedImage from './CachedImage';
@@ -50,7 +50,7 @@ const HomePage = () => {
   
 
   // Función para obtener todos los libros
-  const fetchAllBooks = async (page = 1, limit = 8) => {
+  const fetchAllBooks = async (page = 1, limit = 50) => {
     try {
       const response = await axios.get(`${API_BASE_URL}/libros`, {
         params: {
@@ -65,6 +65,7 @@ const HomePage = () => {
       if (response.data.status === 'success') {
         setAllBooks(response.data.data);
         setPagination(response.data.paginacion);
+        console.log(response.data.data);
         return response.data.data;
       }
     } catch (error) {
@@ -117,24 +118,7 @@ const HomePage = () => {
   const fetchCategories = async () => {
     // Usamos las categorías originales del código anterior
     const originalCategories = [
-      'Ciencias De La Tierra, Geografía, Medioambiente, Planificación',
-      'Computación Y Tecnología De La Información',
-      'Consulta, Información Y Materias Interdisciplinares',
-      'Deportes Y Actividades De Ocio Al Aire Libre',
-      'Derecho',
-      'Economía, Finanzas, Empresa Y Gestión',
-      'Estilos De Vida, Aficiones Y Ocio',
-      'Ficción Y Temas Afines',
-      'Filosofía Y Religión',
-      'Historia Y Arqueología',
-      'Infantiles, Juveniles Y Didácticos',
-      'Lenguaje Y Lingüística',
-      'Matemáticas Y Ciencias',
-      'Medicina, Enfermería, Veterinaria',
-      'Novela Gráfica, Libros De Cómics, Dibujos Animados',
-      'Salud, Relaciones Y Desarrollo Personal',
-      'Sociedad Y Ciencias Sociales',
-      'Tecnología, Ingeniería, Agricultura, Procesos Industriales'
+      'Ficción', 'No Ficción', 'Ciencia Ficción', 'Fantasía', 'Romance', 'Biografía', 'Historia', 'Ciencia', 'Filosofía', 'Arte', 'Tecnología'
     ];
     
     setCategories(originalCategories);
@@ -231,7 +215,7 @@ const BookCard = ({ book }) => {
   }, [book.imagenes, imagesVerified]);
 
   const navigateToDetail = () => {
-    navigate(`/libros/${book._id}`);
+    navigate(`/libro/${book._id}`);
   };
 
   // Calcular precio con y sin descuento
@@ -361,7 +345,7 @@ const BookCard = ({ book }) => {
                 ${precioBase.toLocaleString('es-CO')}
               </span>
               <div className="text-lg font-bold text-red-600">
-                ${book.precio.toLocaleString('es-CO')}
+                ${(book.precio - (book.precio * (porcentajeDescuento / 100))).toLocaleString('es-CO')}
               </div>
             </div>
           ) : (
@@ -451,7 +435,7 @@ const BookCard = ({ book }) => {
             categories.map((category, index) => (
               <li key={index}>
                 <a 
-                  //href={`/libros?genero=${encodeURIComponent(category)}`}
+                  href={`/libros/categoria/${encodeURIComponent(category)}`}
                   className="block py-2 text-sm hover:text-blue-600 transition-colors"
                 >
                   {category}
@@ -474,7 +458,7 @@ const BookCard = ({ book }) => {
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">Libros Destacados</h2>
-          <a href="/libros/destacados" className="text-blue-600 text-sm hover:underline">Ver todos</a>
+          <Link to="/libros/destacados" className="text-blue-600 text-sm hover:underline">Ver todos</Link>
         </div>
         
         <div className="border-t-4 border-blue-600 mb-4"></div>
@@ -496,7 +480,7 @@ const BookCard = ({ book }) => {
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">CyberBooks - Hasta 60% dcto</h2>
-          <a href="/libros/descuentos" className="text-blue-600 text-sm hover:underline">Ver todos</a>
+          <Link to="/libros/descuentos" className="text-blue-600 text-sm hover:underline">Ver todos</Link>
         </div>
         
         <div className="border-t-4 border-red-600 mb-4"></div>
@@ -523,7 +507,7 @@ const BookCard = ({ book }) => {
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">Catálogo Completo</h2>
-          <a href="/libros" className="text-blue-600 text-sm hover:underline">Ver catálogo</a>
+          <Link to="/libros" className="text-blue-600 text-sm hover:underline">Ver catálogo</Link>
         </div>
         
         <div className="border-t-4 border-gray-600 mb-4"></div>

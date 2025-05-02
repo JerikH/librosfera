@@ -374,12 +374,12 @@ const BookDetails = () => {
                   clipRule="evenodd"
                 />
               </svg>
-              {/* {book.categories && book.categories.length > 0 && (
-                <a href={`/category/${book.categories[0]}`} className="text-blue-600 hover:underline">
+              {book.categories && book.categories.length > 0 && (
+                <a href={`http://localhost:3000/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
                   {book.categories[0]}
                 </a>
-              )} */}
-              {book.categories[0]}
+              )}
+              
             </li>
             <li className="flex items-center">
               <svg

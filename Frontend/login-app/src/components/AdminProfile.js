@@ -78,10 +78,35 @@ const AdminProfile = () => {
     
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    window.isEditingProfile = isEditingProfile;
+  }, [isEditingProfile]);
   
   // Handler para editar perfil
-  const handleEditProfile = () => {
-    setIsEditingProfile(true);
+  const handleEditProfile = (value) => {
+    if (value === false) {
+      setIsEditingProfile(false);
+      // Refrescar datos del usuario
+      const refreshData = async () => {
+        try {
+          // Get data directly from cookie
+          const dataCookie = getCookie("data");
+          if (dataCookie) {
+            const parsedData = JSON.parse(dataCookie);
+            if (parsedData && parsedData.Data) {
+              setUserData(parsedData.Data);
+            }
+          }
+        } catch (error) {
+          console.error("Error refreshing user data:", error);
+        }
+      };
+      refreshData();
+    } else {
+      console.log("handle opt: ", value);
+      setIsEditingProfile(true);
+    }
   };
   
   // Handler para regresar de la edición de perfil
@@ -197,12 +222,12 @@ const AdminProfile = () => {
             
             {/* Main content area */}
             <div className="flex-1 flex h-full">
-              {activeTab === 'inicio' && <Dashboard userData={userData} />}
-              {activeTab === 'administrar-libro' && <ManageBooks />}
-              {activeTab === 'gestionar-usuarios' && <ManageUsers />}
-              {activeTab === 'gestionar-mensajes' && <ManageMessages />}
-              {activeTab === 'mi-perfil' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
-            </div>
+            {activeTab === 'inicio' && <Dashboard userData={userData} setActiveTab={setActiveTab} />}
+            {activeTab === 'administrar-libro' && <ManageBooks />}
+            {activeTab === 'gestionar-usuarios' && <ManageUsers />}
+            {activeTab === 'gestionar-mensajes' && <ManageMessages />}
+            {activeTab === 'mi-perfil' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
+          </div>
           </>
         )}
       </div>
