@@ -79,7 +79,7 @@ const SearchResults = () => {
     // Registrar la interacción
     registerInteraction(bookId);
     // Navegar a la página de detalles
-    navigate(`/libros/${bookId}`);
+    navigate(`/libro/${bookId}`);
   };
   
   // Función para renderizar estrellas de calificación
@@ -225,7 +225,7 @@ const SearchResults = () => {
                               ${precioBase.toLocaleString('es-CO')}
                             </div>
                             <div className="text-xl font-bold text-red-600">
-                              ${book.precio.toLocaleString('es-CO')}
+                              ${(book.precio - (book.precio * (porcentajeDescuento / 100))).toLocaleString('es-CO')}
                             </div>
                             <div className="bg-green-500 text-white text-xs px-2 py-1 rounded mt-1">
                               {porcentajeDescuento}% DCTO
@@ -241,11 +241,12 @@ const SearchResults = () => {
                       {/* Botones */}
                       <div className="space-y-2 w-full">
                         <button 
-                          className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+                          className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors text-sm opacity-50 cursor-not-allowed"
                           onClick={() => {
                             console.log('Agregar al carrito:', book.titulo);
                             // Aquí iría la lógica para agregar al carrito
                           }}
+                          disabled
                         >
                           Agregar al carrito
                         </button>

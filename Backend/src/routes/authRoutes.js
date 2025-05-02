@@ -12,7 +12,7 @@ const { verifyToken } = require('../controllers/authController');
 
 /**
  * @swagger
- * /auth/verify-token:
+ * /api/v1/auth/verify-token:
  *   get:
  *     summary: Verificar si un token es válido y obtener información del usuario
  *     tags: [Autenticación]

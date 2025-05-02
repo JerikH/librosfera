@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import ManageBooks from './ManageBooks';
 
 const Dashboard = ({ userData, setActiveTab }) => {
   const [stats, setStats] = useState({
@@ -36,6 +35,30 @@ const Dashboard = ({ userData, setActiveTab }) => {
     }
   };
 
+  // Format date for display
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('es-ES', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Map API activity type to UI activity type
+  const mapActivityType = (apiType) => {
+    const typeMap = {
+      'usuario': 'user',
+      'libro': 'book',
+      'venta': 'sale',
+      'mensaje': 'message',
+      'system': 'system'
+    };
+    return typeMap[apiType] || 'system';
+  };
+
   useEffect(() => {
     // Fetch dashboard statistics
     const fetchStats = async () => {
@@ -43,10 +66,13 @@ const Dashboard = ({ userData, setActiveTab }) => {
       setError(null);
       
       try {
+        // Get auth token for API requests
+        const authToken = getAuthToken();
+        
         // Fetch books count (we only need the pagination data, not the actual books)
         const booksResponse = await axios.get(`${API_BASE_URL}/api/v1/libros?limite=1`, {
           headers: {
-            'Authorization': `Bearer ${getAuthToken()}`,
+            'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'
           }
         });
@@ -54,21 +80,48 @@ const Dashboard = ({ userData, setActiveTab }) => {
         // Fetch users count (we only need the pagination data, not the actual users)
         const usersResponse = await axios.get(`${API_BASE_URL}/api/v1/users?limite=1`, {
           headers: {
-            'Authorization': `Bearer ${getAuthToken()}`,
+            'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'
           }
         });
         
-        // Check if both requests were successful
-        if (booksResponse.data.status === 'success' && usersResponse.data.status === 'success') {
+        // Fetch recent activities
+        const activitiesResponse = await axios.get(`${API_BASE_URL}/api/v1/activities/recent?limite=5`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        // Check if requests were successful
+        if (booksResponse.data.status === 'success' && 
+            usersResponse.data.status === 'success') {
+          
+          // Process activities data if it exists
+          let activitiesData = [];
+          if (activitiesResponse.data && activitiesResponse.data.status === 'success') {
+            activitiesData = activitiesResponse.data.data.map(activity => ({
+              id: activity._id,
+              type: mapActivityType(activity.tipo_actividad),
+              action: activity.accion.charAt(0).toUpperCase() + activity.accion.slice(1).replace(/_/g, ' '),
+              timestamp: formatDate(activity.fecha),
+              user: activity.usuario_info?.usuario || '',
+              book: activity.entidad_afectada?.tipo === 'libro' ? activity.entidad_afectada.nombre : '',
+              amount: activity.detalles?.monto ? `$${activity.detalles.monto}` : '',
+              from: activity.usuario_info?.usuario || '',
+            }));
+          } else {
+            console.warn('No activities data available or request failed');
+          }
+          
           // Set the stats with real data from API
           setStats({
             totalBooks: booksResponse.data.paginacion.total,
             totalUsers: usersResponse.data.paginacion.total,
             // Keep the dummy data for other stats that are not provided by API yet
-            totalSales: 856,
-            pendingMessages: 12,
-            recentActivity: [
+            totalSales: 0,
+            pendingMessages: 0,
+            recentActivity: activitiesData.length > 0 ? activitiesData : [
               { id: 1, type: 'user', action: 'Nuevo usuario registrado', timestamp: '2023-11-10 14:25', user: 'maria_lopez' },
               { id: 2, type: 'book', action: 'Nuevo libro añadido', timestamp: '2023-11-10 13:15', book: 'Historia de la Literatura' },
               { id: 3, type: 'sale', action: 'Nueva venta completada', timestamp: '2023-11-10 12:40', amount: '$45.99' },
@@ -99,8 +152,6 @@ const Dashboard = ({ userData, setActiveTab }) => {
     fetchStats();
   }, []);
 
-  
-
   // Componente para mostrar una estadística con iconos SVG
   const StatCard = ({ title, value, icon, color, tabId }) => (
     <div 
@@ -124,6 +175,14 @@ const Dashboard = ({ userData, setActiveTab }) => {
     </div>
   );
 
+  // Helper to get activity details display
+  const getActivityDetail = (activity) => {
+    if (activity.user) return `Usuario: ${activity.user}`;
+    if (activity.book) return `Libro: ${activity.book}`;
+    if (activity.amount) return `Monto: ${activity.amount}`;
+    if (activity.from) return `De: ${activity.from}`;
+    return '';
+  };
 
   // Iconos SVG para las tarjetas de estadísticas
   const icons = {
@@ -177,6 +236,13 @@ const Dashboard = ({ userData, setActiveTab }) => {
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
         <polyline points="22,6 12,13 2,6"></polyline>
+      </svg>
+    ),
+    system_small: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
       </svg>
     ),
     arrow_forward: (
@@ -236,56 +302,78 @@ const Dashboard = ({ userData, setActiveTab }) => {
               color="bg-green-500" 
               tabId="gestionar-usuarios"
             />
-            <StatCard 
-              title="Ventas" 
-              value={0} 
-              icon={icons.shopping_cart} 
-              color="bg-purple-500" 
-            />
-            <StatCard 
-              title="Mensajes Pendientes" 
-              value={0} 
-              icon={icons.mail} 
-              color="bg-amber-500" 
-              tabId="gestionar-mensajes"
-            />
+            {/* Ventas card - without tabId to make it not clickable */}
+            <div className="bg-white p-4 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center">
+                  {icons.shopping_cart}
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-gray-500 text-sm font-medium">Ventas</h3>
+                  <p className="text-2xl font-bold">{stats.totalSales}</p>
+                </div>
+              </div>
+            </div>
+            {/* Mensajes card - without tabId to make it not clickable */}
+            <div className="bg-white p-4 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-12 h-12 rounded-full bg-amber-500 flex items-center justify-center">
+                  {icons.mail}
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-gray-500 text-sm font-medium">Mensajes Pendientes</h3>
+                  <p className="text-2xl font-bold">{stats.pendingMessages}</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Recent Activity */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Actividad Reciente</h2>
             <div className="divide-y divide-gray-200">
-              {stats.recentActivity.map((activity) => (
-                <div key={activity.id} className="py-3 flex items-start">
-                  <div className={`
-                    w-8 h-8 rounded-full flex items-center justify-center mt-1
-                    ${activity.type === 'user' ? 'bg-green-100 text-green-600' : ''}
-                    ${activity.type === 'book' ? 'bg-blue-100 text-blue-600' : ''}
-                    ${activity.type === 'sale' ? 'bg-purple-100 text-purple-600' : ''}
-                    ${activity.type === 'message' ? 'bg-amber-100 text-amber-600' : ''}
-                  `}>
-                    {activity.type === 'user' && icons.person}
-                    {activity.type === 'book' && icons.book_small}
-                    {activity.type === 'sale' && icons.shopping_cart_small}
-                    {activity.type === 'message' && icons.mail_small}
-                  </div>
-                  <div className="ml-3 flex-1">
-                    <p className="text-sm font-medium text-gray-800">{activity.action}</p>
-                    <div className="flex justify-between">
-                      <p className="text-xs text-gray-500">
-                        {activity.user && `Usuario: ${activity.user}`}
-                        {activity.book && `Libro: ${activity.book}`}
-                        {activity.amount && `Monto: ${activity.amount}`}
-                        {activity.from && `De: ${activity.from}`}
-                      </p>
-                      <p className="text-xs text-gray-500">{activity.timestamp}</p>
+              {stats.recentActivity.length > 0 ? (
+                stats.recentActivity.map((activity) => (
+                  <div key={activity.id} className="py-3 flex items-start">
+                    <div className={`
+                      w-8 h-8 rounded-full flex items-center justify-center mt-1
+                      ${activity.type === 'user' ? 'bg-green-100 text-green-600' : ''}
+                      ${activity.type === 'book' ? 'bg-blue-100 text-blue-600' : ''}
+                      ${activity.type === 'sale' ? 'bg-purple-100 text-purple-600' : ''}
+                      ${activity.type === 'message' ? 'bg-amber-100 text-amber-600' : ''}
+                      ${activity.type === 'system' ? 'bg-gray-100 text-gray-600' : ''}
+                    `}>
+                      {activity.type === 'user' && icons.person}
+                      {activity.type === 'book' && icons.book_small}
+                      {activity.type === 'sale' && icons.shopping_cart_small}
+                      {activity.type === 'message' && icons.mail_small}
+                      {activity.type === 'system' && icons.system_small}
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <p className="text-sm font-medium text-gray-800">{activity.action}</p>
+                      <div className="flex justify-between">
+                        <p className="text-xs text-gray-500">
+                          {getActivityDetail(activity)}
+                        </p>
+                        <p className="text-xs text-gray-500">{activity.timestamp}</p>
+                      </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="py-6 text-center text-gray-500">
+                  No hay actividades recientes para mostrar
                 </div>
-              ))}
+              )}
             </div>
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <button className="text-blue-600 text-sm hover:text-blue-800 font-medium flex items-center">
+              <button 
+                className="text-blue-600 text-sm hover:text-blue-800 font-medium flex items-center"
+                onClick={() => {
+                  console.log("View all activities button clicked");
+                  // Add functionality to show more activities here
+                }}
+              >
                 Ver todas las actividades
                 <span className="ml-1">{icons.arrow_forward}</span>
               </button>

@@ -79,6 +79,10 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
 
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
+    // Close the EditProfile when navigating to other sections
+    if (window.isEditingProfile) {
+      onEditProfile(false);
+    }
   };
 
   const getProfileImageSrc = () => {
@@ -169,7 +173,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
           {filteredNavItems.map((item) => (
             <li key={item.id}>
               <button
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleTabClick(item.id)}
                 className={`w-full flex items-center py-3 px-6 text-left ${
                   activeTab === item.id
                     ? 'bg-gray-800 text-white border-l-4 border-blue-500'

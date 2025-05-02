@@ -17,6 +17,8 @@ const UserProfile = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
+
+  
   
   // Helper function to get cookie data
   const getCookie = (name) => {
@@ -97,10 +99,26 @@ const UserProfile = () => {
       refreshData();
     }
   }, [activeTab, isLoading, isEditingProfile]);
+
+  useEffect(() => {
+    window.isEditingProfile = isEditingProfile;
+  }, [isEditingProfile]);
   
   // Handler para editar perfil
-  const handleEditProfile = () => {
-    setIsEditingProfile(true);
+  const handleEditProfile = (value) => {
+    if (value === false) {
+      setIsEditingProfile(false);
+      // Refrescar datos del usuario
+      const refreshData = async () => {
+        const result = await fetchUserData();
+        if (result.success) {
+          setUserData(result.data);
+        }
+      };
+      refreshData();
+    } else {
+      setIsEditingProfile(true);
+    }
   };
   
   // Handler para regresar de la edición de perfil

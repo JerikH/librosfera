@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import RegistrationPage from './RegistrationPage';
 import PasswordResetPage from './PasswordRequestRecuperation';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const clearCookies = () => {
   document.cookie.split(";").forEach((cookie) => {
@@ -189,12 +189,14 @@ const LoginPage = () => {
       {/* Left Side - Black Background with Logo */}
       <div className="hidden md:flex md:w-1/2 bg-black text-white flex-col items-center justify-center">
         <div className="mb-6 w-2/5">
+        <Link to="/home" className="hidden md:block">
           <img 
             src="/l2.png" 
             alt="Librosfera Logo" 
             className="w-full h-auto"
           />
-        </div>
+          </Link>
+        </div>      
         <h1 className="text-5xl font-bold mb-2">Librosfera</h1>
         <p className="text-xl">Tu librería de confianza</p>
       </div>

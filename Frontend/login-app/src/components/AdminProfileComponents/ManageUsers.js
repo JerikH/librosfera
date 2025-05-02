@@ -26,11 +26,21 @@ const ManageUsers = () => {
   const [isUploadingProfilePic, setIsUploadingProfilePic] = useState(false);
   const [currentUserType, setCurrentUserType] = useState(null);
   const [isCreateAdminModalOpen, setIsCreateAdminModalOpen] = useState(false);
+  const [isMessageVisible, setIsMessageVisible] = useState(true);
 
   // Constants
   const API_BASE_URL = 'http://localhost:5000';
   const DEFAULT_PROFILE_PIC = `${API_BASE_URL}/uploads/profiles/default.jpg`;
 
+  useEffect(() => {
+    if (actionMessage.text && !isModalOpen) {
+      const timer = setTimeout(() => {
+        setIsMessageVisible(false);  // Hide the message after 5 seconds
+      }, 5000);
+
+      return () => clearTimeout(timer);  // Clean up the timeout if the component unmounts or the actionMessage changes
+    }
+  }, [actionMessage.text, isModalOpen]);
   // Utility - Get cookie
   const getCookie = (name) => {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -603,7 +613,7 @@ const ManageUsers = () => {
       </div>
 
       {/* Status Messages */}
-      {actionMessage.text && !isModalOpen && (
+      {isMessageVisible && actionMessage.text && !isModalOpen && (
         <div className={`p-4 mb-6 rounded ${
           actionMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
         }`}>

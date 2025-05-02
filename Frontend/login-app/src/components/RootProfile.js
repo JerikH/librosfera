@@ -79,11 +79,36 @@ const RootProfile = () => {
     checkAuth();
   }, [navigate]);
   
+  useEffect(() => {
+    window.isEditingProfile = isEditingProfile;
+  }, [isEditingProfile]);
+
+
   // Handler para editar perfil
-  const handleEditProfile = () => {
-    setIsEditingProfile(true);
+   const handleEditProfile = (value) => {
+    if (value === false) {
+      setIsEditingProfile(false);
+      // Refrescar datos del usuario
+      const refreshData = async () => {
+        try {
+          // Get data directly from cookie
+          const dataCookie = getCookie("data");
+          if (dataCookie) {
+            const parsedData = JSON.parse(dataCookie);
+            if (parsedData && parsedData.Data) {
+              setUserData(parsedData.Data);
+            }
+          }
+        } catch (error) {
+          console.error("Error refreshing user data:", error);
+        }
+      };
+      refreshData();
+    } else {
+      console.log("handle opt: ", value);
+      setIsEditingProfile(true);
+    }
   };
-  
   // Handler para regresar de la edición de perfil
   const handleGoBack = () => {
     setIsEditingProfile(false);
