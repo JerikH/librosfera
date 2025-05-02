@@ -174,7 +174,7 @@ const RootProfile = () => {
                 onClick={goToHome}
                 className="text-sm hover:underline cursor-pointer"
               >
-                Home
+                Inicio
               </button>
               <button 
                 onClick={handleLogout}

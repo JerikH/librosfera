@@ -295,7 +295,7 @@ const BookListPage = ({ category }) => {
           }
           
           setValidImageUrls(validImages.length > 0 ? validImages : [{ 
-            url: "http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg",
+            url: "http://localhost:5000/uploads/libros/Default.png",
             alt_text: "Default book image"
           }]);
           
@@ -307,7 +307,7 @@ const BookListPage = ({ category }) => {
       } else if (!imagesVerified) {
         // No images or empty array - set default and mark as verified
         setValidImageUrls([{ 
-          url: "http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg",
+          url: "http://localhost:5000/uploads/libros/Default.png",
           alt_text: "Default book image"
         }]);
         setImagesVerified(true);

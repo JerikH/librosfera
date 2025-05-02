@@ -127,7 +127,7 @@ const BookDetails = () => {
           }
         }
         
-        setValidImageUrls(validImages.length > 0 ? validImages : ["http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg"]);
+        setValidImageUrls(validImages.length > 0 ? validImages : ["http://localhost:5000/uploads/libros/Default.png"]);
         setImagesVerified(true);
       };
       
@@ -140,11 +140,11 @@ const BookDetails = () => {
           if (response.status === 200) {
             setValidImageUrls([book.image]);
           } else {
-            setValidImageUrls(["http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg"]);
+            setValidImageUrls(["http://localhost:5000/uploads/libros/Default.png"]);
           }
         } catch (error) {
           console.log(`Failed to verify image: ${book.image}`);
-          setValidImageUrls(["http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg"]);
+          setValidImageUrls(["http://localhost:5000/uploads/libros/Default.png"]);
         }
         setImagesVerified(true);
       };
@@ -152,7 +152,7 @@ const BookDetails = () => {
       verifySingleImage();
     } else if (book && !imagesVerified) {
       // No images at all - set default image
-      setValidImageUrls(["http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg"]);
+      setValidImageUrls(["http://localhost:5000/uploads/libros/Default.png"]);
       setImagesVerified(true);
     }
   }, [book, imagesVerified]);

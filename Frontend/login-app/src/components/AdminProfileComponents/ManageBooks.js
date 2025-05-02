@@ -456,13 +456,13 @@ const ManageBooks = () => {
                         onClick={() => openEditor('edit', book)}
                         className="text-blue-600 hover:text-blue-900 mr-3"
                       >
-                        <span className="material-icons-outlined">edit</span>
+                        <span className="material-icons-outlined">Editar</span>
                       </button>
                       <button 
                         onClick={() => openModal('delete', book)}
                         className="text-red-600 hover:text-red-900"
                       >
-                        <span className="material-icons-outlined">delete</span>
+                        <span className="material-icons-outlined">Eliminar</span>
                       </button>
                     </div>
                   </div>

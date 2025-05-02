@@ -6,11 +6,11 @@ const CachedImage = ({
   src, 
   alt, 
   className, 
-  fallbackSrc = 'http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg',
+  fallbackSrc = 'http://localhost:5000/uploads/libros/Default.png',
   onClick 
 }) => {
   // Always use the default fallback if none provided explicitly
-  const defaultFallback = 'http://localhost:5000/uploads/libros/680bae3000046269b93458d0_1745726348391.jpg';
+  const defaultFallback = 'http://localhost:5000/uploads/libros/Default.png';
   const actualFallbackSrc = fallbackSrc || defaultFallback;
   
   const [imageSrc, setImageSrc] = useState(null);

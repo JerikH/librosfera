@@ -354,6 +354,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
                       <div className="flex justify-between">
                         <p className="text-xs text-gray-500">
                           {getActivityDetail(activity)}
+                          {console.log(activity)}
                         </p>
                         <p className="text-xs text-gray-500">{activity.timestamp}</p>
                       </div>
@@ -367,7 +368,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
               )}
             </div>
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <button 
+              {/* <button 
                 className="text-blue-600 text-sm hover:text-blue-800 font-medium flex items-center"
                 onClick={() => {
                   console.log("View all activities button clicked");
@@ -376,7 +377,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
               >
                 Ver todas las actividades
                 <span className="ml-1">{icons.arrow_forward}</span>
-              </button>
+              </button> */}
             </div>
           </div>
         </>
