@@ -185,6 +185,18 @@ const crearLibro = catchAsync(async (req, res, next) => {
     // Crear libro con datos validados
     const nuevoLibro = await libroService.crearLibro(req.body);
 
+    await req.logActivity('libro', 'creacion', {
+      id_libro: nuevoLibro._id,
+      titulo_libro: nuevoLibro.titulo,
+      detalles: {
+        titulo: nuevoLibro.titulo,
+        autor: nuevoLibro.autor_nombre_completo,
+        editorial: nuevoLibro.editorial,
+        precio: nuevoLibro.precio
+      },
+      nivel_importancia: 'alto'
+    });
+
     return res.status(201).json({
       status: 'success',
       message: 'Libro creado exitosamente',
@@ -245,6 +257,7 @@ const actualizarLibro = catchAsync(async (req, res, next) => {
     console.log('Actualizando libro:', req.params.id);
     console.log('Datos de actualización:', JSON.stringify(req.body, null, 2));
     
+    const estadoAnterior = { ...libroExistente };
     // Actualizar libro con datos validados
     // Obtener versión para control de concurrencia
     const version = req.body.version || libroExistente.version;
@@ -254,6 +267,16 @@ const actualizarLibro = catchAsync(async (req, res, next) => {
       req.body, 
       version
     );
+
+    await req.logActivity('libro', 'actualizacion', {
+      id_libro: libroActualizado._id,
+      titulo_libro: libroActualizado.titulo,
+      estado_anterior: estadoAnterior,
+      estado_nuevo: libroActualizado,
+      detalles: {
+        campos_actualizados: Object.keys(req.body)
+      }
+    });
 
     return res.status(200).json({
       status: 'success',
@@ -292,6 +315,15 @@ const eliminarLibro = catchAsync(async (req, res, next) => {
     // Desactivar libro (eliminación lógica)
     await libroService.desactivarLibro(req.params.id);
 
+    await req.logActivity('libro', 'desactivacion_logica', {
+      id_libro: libroExistente._id,
+      titulo_libro: libroExistente.titulo,
+      detalles: {
+        eliminado_por: req.user.usuario
+      },
+      nivel_importancia: 'medio'
+    });
+
     return res.status(200).json({
       status: 'success',
       message: 'Libro desactivado correctamente'
@@ -324,6 +356,18 @@ const eliminarLibroPermanente = catchAsync(async (req, res, next) => {
     
     // Eliminar libro permanentemente
     await libroService.eliminarLibroPermanente(req.params.id);
+
+    await req.logActivity('libro', 'eliminacion_permanente', {
+      id_libro: libroExistente._id,
+      titulo_libro: libroExistente.titulo,
+      estado_anterior: libroExistente,
+      detalles: {
+        titulo: libroExistente.titulo,
+        autor: libroExistente.autor_nombre_completo,
+        eliminado_por: req.user.usuario
+      },
+      nivel_importancia: 'alto'
+    });
 
     return res.status(200).json({
       status: 'success',
@@ -678,6 +722,12 @@ const marcarComoHistorico = catchAsync(async (req, res, next) => {
     
     // Marcar como histórico
     const libroActualizado = await libroService.marcarComoHistoricoAgotado(req.params.id);
+    
+    await req.logActivity('libro', 'marcar_como_historico', {
+      id_libro: libroActualizado._id,
+      titulo_libro: libroActualizado.titulo,
+      nivel_importancia: 'medio'
+    });
 
     return res.status(200).json({
       status: 'success',
@@ -733,6 +783,15 @@ const agregarEjemplar = catchAsync(async (req, res, next) => {
       req.params.id, 
       req.body
     );
+
+    await req.logActivity('inventario', 'agregar_ejemplar', {
+      id_libro: libroActualizado._id,
+      titulo_libro: libroActualizado.titulo,
+      detalles: {
+        codigo: req.body.codigo,
+        estado_fisico: req.body.estado_fisico || 'excelente'
+      }
+    });
 
     return res.status(201).json({
       status: 'success',
@@ -802,6 +861,14 @@ const eliminarEjemplar = catchAsync(async (req, res, next) => {
       req.params.id,
       req.params.codigo
     );
+
+    await req.logActivity('inventario', 'eliminar_ejemplar', {
+      id_libro: libroActualizado._id,
+      titulo_libro: libroActualizado.titulo,
+      detalles: {
+        codigo: req.params.codigo
+      }
+    });
 
     return res.status(200).json({
       status: 'success',
@@ -996,6 +1063,16 @@ const subirImagenLibro = catchAsync(async (req, res, next) => {
       return next(new AppError('No se pudo actualizar el libro con la imagen', 500));
     }
 
+    await req.logActivity('libro', 'subir_imagen', {
+      id_libro: libroActualizado._id,
+      titulo_libro: libroActualizado.titulo,
+      detalles: {
+        tipo_imagen: metadatos.tipo,
+        orden: metadatos.orden
+      },
+      nivel_importancia: 'bajo'
+    });
+
     return res.status(201).json({
       status: 'success',
       message: 'Imagen subida exitosamente',
@@ -1121,6 +1198,15 @@ const reservarStockLibro = catchAsync(async (req, res, next) => {
       req.body.id_reserva
     );
 
+    await req.logActivity('inventario', 'reservar_stock', {
+      id_libro: req.params.id,
+      titulo_libro: libro.titulo,
+      detalles: {
+        cantidad: cantidad,
+        id_reserva: req.body.id_reserva
+      }
+    });
+
     return res.status(200).json({
       status: 'success',
       message: resultado.mensaje,
@@ -1216,6 +1302,16 @@ const confirmarCompraLibro = catchAsync(async (req, res, next) => {
       req.body.id_transaccion,
       req.body.id_reserva
     );
+
+    await req.logActivity('venta', 'compra_libro', {
+      id_libro: req.params.id,
+      titulo_libro: libro.titulo,
+      detalles: {
+        cantidad: cantidad,
+        id_transaccion: req.body.id_transaccion
+      },
+      nivel_importancia: 'alto'
+    });
 
     return res.status(200).json({
       status: 'success',
