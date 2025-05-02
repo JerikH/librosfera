@@ -391,6 +391,14 @@ const registerUser = catchAsync(async (req, res, next) => {
     delete nuevoUsuario.password;
   }
 
+  await req.logActivity('usuario', 'registro', {
+    detalles: {
+      tipo_usuario: tipo_usuario,
+      email: email,
+      usuario: usuario
+    }
+  });
+
   // Responder con información del usuario y token
   res.status(201).json({
     status: 'success',
@@ -456,6 +464,15 @@ const createAdmin = catchAsync(async (req, res, next) => {
     if (nuevoAdmin && nuevoAdmin.password) {
       delete nuevoAdmin.password;
     }
+
+    await req.logActivity('administracion', 'creacion_administrador', {
+      detalles: {
+        email: email,
+        usuario: nuevoAdmin.usuario,
+        perfil_completo: perfilCompleto
+      },
+      nivel_importancia: 'alto'
+    });
     
     // Verificar si el perfil está completo
     const perfilCompleto = nuevoAdmin.DNI && nuevoAdmin.nombres && nuevoAdmin.apellidos;
@@ -492,23 +509,52 @@ const loginUser = catchAsync(async (req, res, next) => {
   // Verificar email y obtener usuario completo
   const usuario = await userService.buscarUsuarioPorEmail(email);
   if (!usuario) {
+    await req.logActivity('seguridad', 'intento_login_fallido', {
+      detalles: {
+        email: email,
+        razon: 'Email no existe'
+      },
+      nivel_importancia: 'bajo'
+    });
     return next(new AppError('Credenciales inválidas', 401));
   }
 
   // Verificar si el usuario está activo
   if (!usuario.activo) {
+    await req.logActivity('seguridad', 'intento_login_fallido', {
+      detalles: {
+        email: email,
+        razon: 'Usuario desactivado'
+      },
+      nivel_importancia: 'bajo'
+    });
     return next(new AppError('Esta cuenta ha sido desactivada', 401));
   }
 
   // Verificar contraseña
   const isMatch = await bcrypt.compare(password, usuario.password);
   if (!isMatch) {
+    await req.logActivity('seguridad', 'intento_login_fallido', {
+      detalles: {
+        email: email,
+        razon: 'Contraseña incorrecta'
+      },
+      nivel_importancia: 'bajo'
+    });
     return next(new AppError('Credenciales inválidas', 401));
   }
 
   // Eliminar password de la respuesta
   delete usuario.password;
-
+  await req.logActivity('usuario', 'login', {
+    id_usuario: usuario._id,
+    usuario_info: {
+      usuario: usuario.usuario,
+      email: usuario.email,
+      tipo_usuario: usuario.tipo_usuario
+    },
+    nivel_importancia: 'bajo'
+  });
   // Responder con información del usuario y token
   res.status(200).json({
     status: 'success',
@@ -620,6 +666,12 @@ const updateUserProfile = catchAsync(async (req, res, next) => {
     delete usuarioActualizado.password;
   }
 
+  await req.logActivity('usuario', 'actualizacion_perfil', {
+    detalles: {
+      campos_actualizados: Object.keys(req.body)
+    }
+  });
+
   res.status(200).json({
     status: 'success',
     data: usuarioActualizado,
@@ -632,8 +684,23 @@ const updateUserProfile = catchAsync(async (req, res, next) => {
  * @access  Private
  */
 const deleteUser = catchAsync(async (req, res, next) => {
+  // Guardar información del usuario antes de desactivarlo (para el log)
+  const usuarioADesactivar = await Usuario.findById(req.user._id).lean();
+  
   // Desactivación lógica del usuario
   await userService.desactivarUsuario(req.user._id);
+
+  // Registrar la desactivación
+  await req.logActivity('usuario', 'desactivacion', {
+    id_usuario: req.user._id,
+    estado_anterior: { activo: true },
+    estado_nuevo: { activo: false },
+    detalles: {
+      tipo_usuario: usuarioADesactivar.tipo_usuario,
+      email: usuarioADesactivar.email
+    },
+    nivel_importancia: 'alto'
+  });
 
   res.status(200).json({
     status: 'success',
@@ -794,6 +861,18 @@ const updateUser = catchAsync(async (req, res, next) => {
     delete usuarioActualizado.password;
   }
 
+  await req.logActivity('administracion', 'actualizacion_usuario', {
+    entidad_afectada: {
+      tipo: 'usuario',
+      id: req.params.id,
+      nombre: usuarioActualizado.usuario
+    },
+    detalles: {
+      campos_actualizados: Object.keys(req.body)
+    },
+    nivel_importancia: 'medio'
+  });
+
   res.status(200).json({
     status: 'success',
     data: usuarioActualizado,
@@ -825,6 +904,15 @@ const deleteUserById = catchAsync(async (req, res, next) => {
 
   // Desactivación lógica del usuario
   await userService.desactivarUsuario(req.params.id);
+  
+  await req.logActivity('administracion', 'desactivacion_usuario', {
+    entidad_afectada: {
+      tipo: 'usuario',
+      id: req.params.id,
+      nombre: usuario.usuario
+    },
+    nivel_importancia: 'alto'
+  });
 
   res.status(200).json({
     status: 'success',

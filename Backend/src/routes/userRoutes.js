@@ -33,7 +33,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /api/v1//users/register:
+ * /api/v1/users/register:
  *   post:
  *     summary: Registrar un nuevo usuario cliente
  *     tags: [Usuarios]
@@ -146,7 +146,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /api/v1//users/login:
+ * /api/v1/users/login:
  *   post:
  *     summary: Iniciar sesión
  *     tags: [Usuarios]
@@ -195,7 +195,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /api/v1//users/profile:
+ * /api/v1/users/profile:
  *   get:
  *     summary: Obtener perfil de usuario
  *     tags: [Usuarios]
@@ -308,7 +308,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /api/v1//users:
+ * /api/v1/users:
  *   get:
  *     summary: Obtener lista de usuarios (solo admin y root)
  *     tags: [Usuarios]
@@ -387,7 +387,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /api/v1//users/{id}:
+ * /api/v1/users/{id}:
  *   get:
  *     summary: Obtener usuario por ID (solo admin y root)
  *     tags: [Usuarios]
