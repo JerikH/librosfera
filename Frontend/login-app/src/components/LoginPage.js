@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import RegistrationPage from './RegistrationPage'; // Import the registration component
-import PasswordResetPage from './PasswordRequestRecuperation'; // Import the password reset component
+import RegistrationPage from './RegistrationPage';
+import PasswordResetPage from './PasswordRequestRecuperation';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const clearCookies = () => {
   document.cookie.split(";").forEach((cookie) => {
     document.cookie = cookie
-      .replace(/^ +/, "") // Remove leading spaces
+      .replace(/^ +/, "")
       .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
   });
   console.log("Cookies cleared!");
@@ -64,8 +64,19 @@ const LoginPage = () => {
             const isValid = await verifyToken(parsedData.Data.token);
             
             if (isValid) {
-              console.log("Valid token found, redirecting to Welcome page");
-              navigate('/Welcome');
+              console.log("Valid token found, checking user type for redirect");
+              
+              // Check user type for proper redirection
+              if (parsedData.Data.tipo_usuario === 'administrador') {
+                console.log("Admin user detected, redirecting to AdminProfile");
+                navigate('/AdminProfile');
+              } else if (parsedData.Data.tipo_usuario === 'root') {
+                console.log("Root user detected, redirecting to Profile");
+                navigate('/Profile');
+              } else {
+                console.log("Regular user detected, redirecting to Home");
+                navigate('/Home'); // Redirección a nueva página principal
+              }
               return;
             } else {
               console.log("Token found but invalid or expired");
@@ -89,12 +100,22 @@ const LoginPage = () => {
   };
 
   const Redirect = (response) => {
-    // const token = response.data.data.token
-    const userData = { authToken: response.data.data.token , Data: response.data.data };
-    console.log(response.data.data.token);
-
-    // document.cookie = "authToken=${token}; path=/; max-age=3600; Secure;"
+    // Store user data in cookie
+    const userData = { authToken: response.data.data.token, Data: response.data.data };
+    console.log("User data being stored:", userData.Data);
     document.cookie = `data=${encodeURIComponent(JSON.stringify(userData))}; path=/; max-age=3600; Secure;`;
+    
+    // Determine redirect based on user type
+    if (userData.Data.tipo_usuario === 'administrador') {
+      console.log("Admin login detected, redirecting to AdminProfile");
+      navigate('/AdminProfile');
+    } else if (userData.Data.tipo_usuario === 'root') {
+      console.log("Root login detected, redirecting to Profile");
+      navigate('/Profile');
+    } else {
+      console.log("Regular user login detected, redirecting to Home");
+      navigate('/Home'); // Redirección a nueva página principal
+    }
   };
 
   const onSubmit = async e => {
@@ -106,12 +127,13 @@ const LoginPage = () => {
           'Content-Type': 'application/json'
         }
       };
-      console.log(formData);
+      console.log("Login attempt with:", formData);
+      
       // Make POST request to backend API
       const response = await axios.post('http://localhost:5000/api/v1/users/login', formData, config);
       
       // Print the response
-      console.log('Response received:', response.data);
+      console.log('Login response received:', response.data);
       
       // Clear form
       setFormData({
@@ -122,12 +144,11 @@ const LoginPage = () => {
       setSuccessMessage('Ingreso satisfactorio.');
       if(response){
         Redirect(response);
-        navigate('/Welcome');
       }
 
     } catch (err) {
       if(err.message == 'Request failed with status code 401'){
-        console.error('Error adding item:', err.response.data);
+        console.error('Login error:', err.response.data);
         setErrorMessage(err.response.data.message);
       }else{
         setErrorMessage("Error conectando con la base de datos");
@@ -168,12 +189,14 @@ const LoginPage = () => {
       {/* Left Side - Black Background with Logo */}
       <div className="hidden md:flex md:w-1/2 bg-black text-white flex-col items-center justify-center">
         <div className="mb-6 w-2/5">
+        <Link to="/home" className="hidden md:block">
           <img 
             src="/l2.png" 
             alt="Librosfera Logo" 
             className="w-full h-auto"
           />
-        </div>
+          </Link>
+        </div>      
         <h1 className="text-5xl font-bold mb-2">Librosfera</h1>
         <p className="text-xl">Tu librería de confianza</p>
       </div>
