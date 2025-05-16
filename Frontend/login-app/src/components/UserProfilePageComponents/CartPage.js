@@ -292,7 +292,7 @@ const CartPage = ({ updateCartCount }) => {
                           </div>
                           
                           <button 
-                            className="text-gray-400 hover:text-red-500"
+                            className="w-2 h-3 text-gray-400 hover:text-red-500"
                             onClick={() => removeItem(item.bookDetails?._id)}
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
