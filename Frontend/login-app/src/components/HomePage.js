@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Link,  useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import CachedImage from './CachedImage';
+import { getCartCount } from './cartUtils'; // Importar utilidad para obtener el contador del carrito
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
@@ -22,11 +23,19 @@ const HomePage = () => {
   const navigate = useNavigate();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [validImageUrls, setValidImageUrls] = useState([]);
-
   
+  // Estado para el contador del carrito
+  const [cartCount, setCartCount] = useState(0);
 
+  // Función para actualizar el contador del carrito
+  const updateCartCount = (count) => {
+    setCartCount(count);
+  };
 
   useEffect(() => {
+    // Cargar el contador inicial del carrito
+    setCartCount(getCartCount());
+    
     // Función para cargar todos los datos necesarios
     const fetchAllData = async () => {
       setIsLoading(true);
@@ -168,13 +177,12 @@ const HomePage = () => {
 
  
 // Componente para mostrar un libro
-// Componente para mostrar un libro
-// Componente para mostrar un libro
 const BookCard = ({ book }) => {
   const navigate = useNavigate();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [validImageUrls, setValidImageUrls] = useState([]);
   const [imagesVerified, setImagesVerified] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false); // Estado para animación al agregar al carrito
   
   useEffect(() => {
     // Only run image verification once
@@ -216,6 +224,60 @@ const BookCard = ({ book }) => {
 
   const navigateToDetail = () => {
     navigate(`/libro/${book._id}`);
+  };
+
+  // Función para agregar al carrito
+  const handleAddToCart = (e) => {
+    e.stopPropagation(); // Prevenir navegación a detalles
+      
+    // Comprobamos si hay stock disponible
+    if (!book.stock || book.stock <= 0) {
+      // Puedes mostrar un mensaje de error aquí
+      alert('Lo sentimos, este libro no está disponible en inventario.');
+      return;
+    }
+    
+    // Mostrar animación de carga
+    setAddingToCart(true);
+    
+    try {
+      // Obtener el carrito actual del localStorage
+      const currentCart = localStorage.getItem('shoppingCart') 
+        ? JSON.parse(localStorage.getItem('shoppingCart')) 
+        : [];
+      
+      // Comprobar si el libro ya está en el carrito
+      const existingItemIndex = currentCart.findIndex(item => item.bookId === book._id);
+      
+      if (existingItemIndex >= 0) {
+        // Incrementar la cantidad si el libro ya está en el carrito
+        currentCart[existingItemIndex].quantity += 1;
+      } else {
+        // Agregar el libro al carrito con cantidad 1
+        currentCart.push({
+          bookId: book._id,
+          quantity: 1
+        });
+      }
+      
+      // Guardar el carrito actualizado en localStorage
+      localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
+      
+      // Actualizar el contador del carrito
+      const newCount = currentCart.reduce((total, item) => total + item.quantity, 0);
+      updateCartCount(newCount);
+      
+      // Mostrar un mensaje de éxito
+      alert(`${book.titulo} agregado al carrito`);
+    } catch (error) {
+      console.error('Error al agregar al carrito:', error);
+      alert('Ocurrió un error al agregar el libro al carrito');
+    } finally {
+      // Desactivar la animación después de un breve periodo
+      setTimeout(() => {
+        setAddingToCart(false);
+      }, 500);
+    }
   };
 
   // Calcular precio con y sin descuento
@@ -355,19 +417,34 @@ const BookCard = ({ book }) => {
           )}
         </div>
         
-        {/* Botón Agregar al carrito (antes "Rápido") - ahora aparece en todas las tarjetas */}
+        {/* Botón Agregar al carrito */}
         <div className="mt-2 flex">
           <button 
-            className="flex items-center justify-center bg-red-600 text-white px-3 py-1 rounded-full text-sm hover:bg-red-700 transition-colors w-full opacity-50 cursor-not-allowed"
-            onClick={(e) => {
-              e.stopPropagation(); // Prevenir que el click se propague a la tarjeta completa
-            }}
-            disabled
+            className={`flex items-center justify-center px-3 py-1 rounded-full text-sm w-full transition-colors
+              ${stockDisponible > 0 
+                ? addingToCart 
+                  ? 'bg-gray-400 text-white cursor-wait' 
+                  : 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+            onClick={handleAddToCart}
+            disabled={stockDisponible <= 0 || addingToCart}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            Agregar al carrito
+            {addingToCart ? (
+              <span className="flex items-center">
+                <svg className="w-4 h-4 mr-2 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Agregando...
+              </span>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                Agregar al carrito
+              </>
+            )}
           </button>
         </div>
 
@@ -556,8 +633,6 @@ const BookCard = ({ book }) => {
     );
   };
 
-  // Eliminado el componente de búsqueda
-
   // Contenido principal que se mostrará dentro del layout
   const HomeContent = () => {
     if (isLoading) {
@@ -581,7 +656,6 @@ const BookCard = ({ book }) => {
           
           {/* Contenido principal (derecha) */}
           <div className="md:w-3/4 lg:w-4/5">
-
             <PromoBanner />
             <DiscountedBooksSection />
             <FeaturedBooksSection />
@@ -593,7 +667,7 @@ const BookCard = ({ book }) => {
   };
 
   return (
-    <UserLayout>
+    <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>
       <HomeContent />
     </UserLayout>
   );
