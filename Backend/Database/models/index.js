@@ -14,7 +14,12 @@ const Carrito = require('./carritoModel');
 const CarritoItem = require('./carritoItemsModel');
 const Devolucion = require('./devolucionModel');
 const Recomendacion = require('./recomendacionModel');
-
+const Ejemplar = require('./ejemplarModel');
+const Reserva = require('./reservaModel');
+const Envio = require('./envioModel');
+const RecogidaTienda = require('./recogidaTiendaModel');
+const Noticia = require('./noticiaModel');
+const Mensaje= require('./mensajeModel');
 module.exports = {
   // Exportar modelos de usuario
   Usuario: userModels.Usuario,
@@ -31,5 +36,12 @@ module.exports = {
   Carrito,
   CarritoItem,
   Devolucion,
-  Recomendacion
+  Recomendacion,
+  Ejemplar,
+  Reserva,
+  Envio,
+  RecogidaTienda, 
+  Noticia, 
+  Mensaje
+
 };
