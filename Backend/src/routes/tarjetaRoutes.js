@@ -712,7 +712,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
  *                   type: string
  *                   example: "No ha iniciado sesión. Por favor inicie sesión para obtener acceso."
  * 
- *  /api/v1/tarjetas/admin/{id}/saldo/absoluto:
+ * /api/v1/tarjetas/admin/{id}/saldo/absoluto:
  *   put:
  *     summary: Establecer saldo absoluto en cualquier tarjeta (Solo Administradores)
  *     description: Permite a los administradores establecer el saldo absoluto de cualquier tarjeta de débito, requiere motivo obligatorio para auditoría.
