@@ -83,8 +83,8 @@ const HomePage = () => {
       const currentCart = localStorage.getItem('shoppingCart') 
         ? JSON.parse(localStorage.getItem('shoppingCart')) 
         : [];
-      
       const bookIds = new Set(currentCart.map(item => item.bookId));
+      console.log("ids in cart:", bookIds);
       setBooksInCart(bookIds);
       return bookIds;
     } catch (error) {
@@ -281,7 +281,12 @@ const BookCard = ({ book }) => {
   const [addingToCart, setAddingToCart] = useState(false); // Estado para animación al agregar al carrito
   
   // Verificar si este libro está en el carrito
-  const isInCart = booksInCart.has(book._id);
+  const isInCart = [...booksInCart].some(cartBook => cartBook._id === book._id);
+
+  // console.log(booksInCart);
+  // console.log(book.titulo);
+  // console.log(book._id);
+  // console.log(isInCart);
   
   useEffect(() => {
     // Only run image verification once
@@ -367,12 +372,30 @@ const BookCard = ({ book }) => {
       });
 
       if (response.data.status === 'success') {
+        const currentCart = localStorage.getItem('shoppingCart') 
+        ? JSON.parse(localStorage.getItem('shoppingCart')) 
+        : [];
+        
+        currentCart.push({
+          bookId: book,
+          quantity: 1
+        });
+        
+        localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
+
+
         // Actualizar el contador del carrito basado en la respuesta del servidor
         const newCount = response.data.data.carrito.n_item;
         updateCartCount(newCount);
+
+        
+        
+        
         
         // Actualizar el estado de libros en carrito
         getBooksInCart();
+       
+        
         
         // Dispatch synchronization events
         console.log('HomePage: Dispatching synchronization events...');

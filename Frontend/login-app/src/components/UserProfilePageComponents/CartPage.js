@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import CachedImage from '../CachedImage'; // Importar el componente CachedImage
 import { getAuthToken } from './authUtils';
+import {UpdateQuantityBook} from '../cartUtils';
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
@@ -11,6 +12,7 @@ const CartPage = ({ updateCartCount }) => {
   const [cartItems, setCartItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [updatingQuantity, setUpdatingQuantity] = useState({});
   const navigate = useNavigate();
 
   // Cargar los elementos del carrito al montar el componente
@@ -18,7 +20,7 @@ const CartPage = ({ updateCartCount }) => {
     const fetchCartItems = async () => {
       setIsLoading(true);
       setError(null);
-     
+      localStorage.removeItem('shoppingCart');
       try {
         // Get cart data from API
        
@@ -118,30 +120,53 @@ const CartPage = ({ updateCartCount }) => {
   };
 
   // Función para actualizar la cantidad de un item
-  const updateQuantity = (itemId, newQuantity) => {
+  const updateQuantity = useCallback(async (itemId, newQuantity, item) => {
     if (newQuantity < 1) return;
     
-    const updatedCart = cartItems.map(item => 
-      item.bookDetails?._id === itemId 
-        ? { ...item, quantity: newQuantity }
-        : item
-    );
+    console.log("Edit quantity:");
+    console.log(itemId);
+    console.log(newQuantity);
+    console.log(item);
     
-    setCartItems(updatedCart);
+    // Set loading state for this specific item
+    setUpdatingQuantity(prev => ({ ...prev, [itemId]: true }));
     
-    // Actualizar localStorage
-    const simplifiedCart = updatedCart.map(item => ({
-      bookId: item.bookDetails?._id,
-      quantity: item.quantity
-    }));
-    
-    localStorage.setItem('shoppingCart', JSON.stringify(simplifiedCart));
-    
-    // Actualizar el contador del carrito en el componente padre si existe la función
-    if (updateCartCount) {
-      updateCartCount(simplifiedCart.reduce((total, item) => total + item.quantity, 0));
+    try {
+      const result = await UpdateQuantityBook(item.bookId._id, newQuantity);
+
+      if(result === "success"){
+        const updatedCart = cartItems.map(cartItem => 
+          cartItem.itemId === itemId 
+            ? { ...cartItem, quantity: newQuantity }
+            : cartItem
+        );
+        
+        setCartItems(updatedCart);
+        
+        // Update localStorage
+        const simplifiedCart = updatedCart.map(item => ({
+          bookId: item.bookId,
+          quantity: item.quantity
+        }));
+        
+        localStorage.setItem('shoppingCart', JSON.stringify(simplifiedCart));
+        
+        // Update cart count
+        if (updateCartCount) {
+          updateCartCount(simplifiedCart.reduce((total, item) => total + item.quantity, 0));
+        }
+      }
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+    } finally {
+      // Remove loading state
+      setUpdatingQuantity(prev => {
+        const newState = { ...prev };
+        delete newState[itemId];
+        return newState;
+      });
     }
-  };
+  }, [updateCartCount]);
 
   // Función para eliminar un item del carrito
   const removeItem = (itemId) => {
@@ -252,7 +277,18 @@ const CartPage = ({ updateCartCount }) => {
       scrollbar-width: thin;
       scrollbar-color: #c1c1c1 #f1f1f1;
     }
-  `;
+
+    /* Hide number input arrows */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+  `;  
 
   return (
     <div className="h-full bg-gray-50">
@@ -367,23 +403,39 @@ const CartPage = ({ updateCartCount }) => {
                             <span className="text-sm text-gray-600 mr-3">Cantidad:</span>
                             <div className="flex border border-gray-300 rounded">
                               <button 
-                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200"
-                                onClick={() => updateQuantity(item.bookDetails?._id, item.quantity - 1)}
+                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                                onClick={() => updateQuantity(item.itemId, item.quantity - 1, item)}
+                                disabled={updatingQuantity[item.itemId]}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                                 </svg>
                               </button>
-                              <input 
-                                type="number" 
-                                min="1" 
-                                value={item.quantity} 
-                                onChange={(e) => updateQuantity(item.bookDetails?._id, parseInt(e.target.value) || 1)}
-                                className="w-12 h-8 text-center border-x border-gray-300"
-                              />
+                              
+                              {updatingQuantity[item.itemId] ? (
+                                <div className="w-12 h-8 flex items-center justify-center border-x border-gray-300">
+                                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                </div>
+                              ) : (
+                                <input 
+                                  type="number" 
+                                  min="1" 
+                                  value={item.quantity} 
+                                  onChange={(e) => updateQuantity(item.bookId, parseInt(e.target.value) || 1, item)}
+                                  className="w-12 h-8 text-center border-x border-gray-300 appearance-none"
+                                  style={{
+                                    MozAppearance: 'textfield',
+                                    WebkitAppearance: 'none',
+                                    margin: 0
+                                  }}
+                                  disabled={updatingQuantity[item.itemId]}
+                                />
+                              )}
+                              
                               <button 
-                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200"
-                                onClick={() => updateQuantity(item.bookDetails?._id, item.quantity + 1)}
+                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                                onClick={() => updateQuantity(item.itemId, item.quantity + 1, item)}
+                                disabled={updatingQuantity[item.itemId]}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

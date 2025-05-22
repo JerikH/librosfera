@@ -4,6 +4,7 @@ import axios from 'axios';
 import UserLayout from './UserLayout';
 import CachedImage from './CachedImage';
 import { addToCart, getCartCount } from './cartUtils'; // Import cart utility functions
+import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 const BookDetails = () => {
   const { bookId } = useParams();
@@ -377,16 +378,16 @@ const BookDetails = () => {
   };
 
   // Enhanced addToCart function with better synchronization
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
+
+    if (isInCart) {
+      showToast('Este libro ya está en tu carrito', 'info');
+      return;
+    }
+
     // Check if there's stock available
     if (!book.stock || book.stock <= 0) {
       showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
-      return;
-    }
-    
-    // Prevent adding if already in cart
-    if (isInCart) {
-      showToast('Este libro ya está en tu carrito', 'info');
       return;
     }
     
@@ -397,7 +398,31 @@ const BookDetails = () => {
       console.log('BookDetails: Adding book to cart...', { bookId: book._id || book.id, title: book.title });
       
       // Use the imported utility function
-      const result = addToCart(book, quantity);
+      
+
+      // Obtener token de autenticación
+            const token = getAuthToken();
+            if (!token) {
+              showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
+              return;
+            }
+
+      const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
+        id_libro: book._id,
+        cantidad: 1
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.data.status === 'success') {
+        // Actualizar el contador del carrito basado en la respuesta del servidor
+        const newCount = response.data.data.carrito.n_item;
+
+        const result = addToCart(book, quantity);
       
       console.log('BookDetails: Cart update result:', result);
       
@@ -408,7 +433,6 @@ const BookDetails = () => {
       showToast(result.message, result.success ? 'success' : 'error');
       
       // If successful, update cart status and notify other components
-      if (result.success) {
         console.log('BookDetails: Successfully added to cart, updating states...');
         
         // 1. Update local state immediately
