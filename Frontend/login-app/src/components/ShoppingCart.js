@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import CachedImage from './CachedImage'; // Importamos el componente CachedImage
+import CachedImage from './CachedImage'; 
+import { clearCart as clearCartUtil } from './cartUtils'; // Importar utilidad para vaciar el carrito
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
@@ -129,11 +130,12 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
     updateCartCount(simplifiedCart.reduce((total, item) => total + item.quantity, 0));
   };
 
-  // Función para vaciar todo el carrito
+  // Función para vaciar todo el carrito utilizando la utilidad importada
   const clearCart = () => {
-    setCartItems([]);
-    localStorage.removeItem('shoppingCart');
-    updateCartCount(0);
+    if (clearCartUtil()) {
+      setCartItems([]);
+      updateCartCount(0);
+    }
   };
 
   // Función para ir al checkout
