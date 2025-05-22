@@ -8,6 +8,7 @@ import CartPage from './UserProfilePageComponents/CartPage';
 import CardPage from './UserProfilePageComponents/CardPage';
 import EditProfile from './EditProfile';
 import { fetchUserData, logoutUser } from './UserProfilePageComponents/authUtils';
+import { getCartCount } from './cartUtils'; // Importar utilidad para obtener el contador del carrito
 
 const UserProfile = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -15,10 +16,19 @@ const UserProfile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [cartCount, setCartCount] = useState(0);
+  const [cartCount, setCartCount] = useState(0); // Estado para el contador del carrito
   const navigate = useNavigate();
 
-  
+  // Cargar el contador del carrito al iniciar
+  useEffect(() => {
+    // Inicializar el contador del carrito desde localStorage
+    setCartCount(getCartCount());
+  }, []);
+
+  // Función para actualizar el contador del carrito
+  const updateCartCount = (count) => {
+    setCartCount(count);
+  };
   
   // Helper function to get cookie data
   const getCookie = (name) => {
@@ -192,18 +202,19 @@ const UserProfile = () => {
             </div>
           </div>
         </div>
-    
       </header>
 
       {/* Rest of the UserProfile component */}
       <div className="flex flex-1 bg-[#f9fafb]">
-        {/* Left sidebar */}
+        {/* Left sidebar - Pasamos el contador del carrito */}
         <Sidebar 
           activeTab={activeTab} 
           setActiveTab={setActiveTab} 
           userData={userData}
           isLoading={isLoading}
           onEditProfile={handleEditProfile}
+          onDataRefresh={null}
+          cartCount={cartCount}
         />
         
         {/* Main content area */}
@@ -221,7 +232,8 @@ const UserProfile = () => {
               {activeTab === 'home' && <Dashboard userData={userData} onEditProfile={handleEditProfile} />}
               {activeTab === 'profile' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
               {activeTab === 'compras' && <PurchasesPage />}
-              {activeTab === 'carrito' && <CartPage />}
+              {/* Pasamos la función updateCartCount al componente CartPage */}
+              {activeTab === 'carrito' && <CartPage updateCartCount={updateCartCount} />}
               {activeTab === 'tarjeta' && <CardPage />}
             </div>
           )}
