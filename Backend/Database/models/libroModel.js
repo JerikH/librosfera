@@ -277,29 +277,34 @@ libroSchema.index({
 // Actualizar fecha cada vez que se modifica el documento
 libroSchema.pre('save', function(next) {
   this.ultima_actualizacion = new Date();
-  
-  // Incrementar versión para control optimista
   this.version += 1;
   
   // Actualizar el campo autor_nombre_completo para búsquedas
   if (this.autor && Array.isArray(this.autor) && this.autor.length > 0) {
-    // Compilar nombres de todos los autores
     this.autor_nombre_completo = this.autor.map(a => 
       `${a.nombre} ${a.apellidos}`
     ).join(', ');
   }
   
-  // Actualizar el campo precio simple con el precio calculado
-  // if (this.precio_info) {
-  //   this.precio = this.precio_info.calcularPrecioFinal();
-  // }
+  // NUEVO: Sincronizar campo 'precio' con descuentos automáticos
+  if (this.precio_info && this.precio_info.calcularPrecioConDescuentosAutomaticos) {
+    const precioSincronizado = this.precio_info.calcularPrecioConDescuentosAutomaticos();
+    
+    // Solo actualizar si hay diferencia significativa (evitar bucles por redondeo)
+    if (Math.abs(this.precio - precioSincronizado) > 0.01) {
+      console.log(`Sincronizando precio del libro ${this.titulo}: ${this.precio} -> ${precioSincronizado}`);
+      this.precio = precioSincronizado;
+    }
+  }
   
   next();
 });
 
-// Middleware pre-update para asegurarse de incrementar la versión
+// También sincronizar en actualizaciones
 libroSchema.pre('findOneAndUpdate', function(next) {
   const update = this.getUpdate() || {};
+  
+  // Incrementar versión
   if (!update.$inc) {
     update.$inc = {};
   }
