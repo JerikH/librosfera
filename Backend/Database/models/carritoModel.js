@@ -1,3 +1,4 @@
+// Database/models/carritoModel.js
 const mongoose = require('mongoose');
 const addressSchema = require('./schemas/addressSchema');
 
@@ -21,11 +22,49 @@ const carritoSchema = new Schema({
     index: true
   },
   
-  // Total acumulado del carrito
-  total: {
-    type: Number,
-    default: 0,
-    min: 0
+  // Estructura de totales detallada
+  totales: {
+    // Subtotal sin descuentos (precio base × cantidad)
+    subtotal_base: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    
+    // Total de descuentos aplicados
+    total_descuentos: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    
+    // Subtotal con descuentos pero sin impuestos
+    subtotal_con_descuentos: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    
+    // Total de impuestos
+    total_impuestos: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    
+    // Costo de envío
+    costo_envio: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    
+    // Total final (con todo incluido)
+    total_final: {
+      type: Number,
+      default: 0,
+      min: 0
+    }
   },
   
   // Número total de items en el carrito
@@ -35,12 +74,29 @@ const carritoSchema = new Schema({
     min: 0
   },
   
+  // Número de libros diferentes
+  n_libros_diferentes: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  
   // Estado del carrito
   estado: {
     type: String,
-    enum: ['activo', 'en_proceso_compra', 'abandonado', 'convertido_a_compra'],
-    default: 'activo'
+    enum: ['activo', 'en_proceso_compra', 'abandonado', 'convertido_a_compra', 'expirado'],
+    default: 'activo',
+    index: true
   },
+  
+  // Códigos de descuento aplicados a nivel de carrito
+  codigos_carrito: [{
+    codigo: String,
+    fecha_aplicado: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   
   // Fechas relevantes
   fecha_creacion: {
@@ -53,24 +109,53 @@ const carritoSchema = new Schema({
     default: Date.now
   },
   
-  // Información de envío si ya se ha seleccionado
+  fecha_expiracion: {
+    type: Date,
+    default: function() {
+      const fecha = new Date();
+      fecha.setDate(fecha.getDate() + 30);
+      return fecha;
+    }
+  },
+  
+  // Información de envío
   info_envio: {
-    direccion: {
-      type: [addressSchema]
-    },
+    direccion: addressSchema,
     metodo_envio: {
       type: String,
       enum: ['domicilio', 'recogida_tienda']
     },
-    tienda_recogida: String, // ID o nombre de la tienda si aplica
+    tienda_recogida: String,
     notas_envio: String
   },
   
+  // Información de problemas en el carrito
+  problemas: [{
+    tipo: {
+      type: String,
+      enum: ['precio_cambiado', 'sin_stock', 'libro_no_disponible', 'codigo_expirado']
+    },
+    descripcion: String,
+    id_item: Schema.Types.ObjectId,
+    fecha: {
+      type: Date,
+      default: Date.now
+    },
+    resuelto: {
+      type: Boolean,
+      default: false
+    }
+  }],
+  
+  // Notas del carrito
+  notas: String
 });
 
 // Índices para operaciones comunes
 carritoSchema.index({ id_usuario: 1, estado: 1 });
 carritoSchema.index({ fecha_creacion: 1 });
+carritoSchema.index({ ultima_actualizacion: 1 });
+carritoSchema.index({ fecha_expiracion: 1 });
 
 // Middleware para actualizar fecha
 carritoSchema.pre('save', function(next) {
@@ -80,29 +165,138 @@ carritoSchema.pre('save', function(next) {
 
 // MÉTODOS DE INSTANCIA
 
-// Actualizar totales del carrito
+// Actualizar totales del carrito con estructura detallada
 carritoSchema.methods.actualizarTotales = async function() {
   try {
     const CarritoItem = mongoose.model('Carrito_Items');
     
-    // Calcular número de items
-    const nItems = await CarritoItem.aggregate([
-      { $match: { id_carrito: this._id } },
-      { $group: { _id: null, total: { $sum: '$cantidad' } } }
-    ]);
+    const stats = await CarritoItem.obtenerEstadisticasItems(this._id);
     
-    // Calcular suma total
-    const sumaTotal = await CarritoItem.aggregate([
-      { $match: { id_carrito: this._id } },
-      { $group: { _id: null, total: { $sum: '$subtotal' } } }
-    ]);
+    // Actualizar contadores de items
+    this.n_item = stats.total_items;
     
-    this.n_item = nItems.length > 0 ? nItems[0].total : 0;
-    this.total = sumaTotal.length > 0 ? sumaTotal[0].total : 0;
+    // Contar libros diferentes
+    const librosDiferentes = await CarritoItem.distinct('id_libro', { id_carrito: this._id });
+    this.n_libros_diferentes = librosDiferentes.length;
+    
+    // Actualizar estructura de totales detallada
+    this.totales.subtotal_base = stats.subtotal_sin_descuentos;
+    this.totales.total_descuentos = stats.total_descuentos;
+    this.totales.subtotal_con_descuentos = stats.subtotal_sin_impuestos;
+    this.totales.total_impuestos = stats.total_impuestos;
+    // this.totales.costo_envio se mantiene igual (se actualiza aparte)
+    
+    // Calcular total final
+    this.totales.total_final = this.totales.subtotal_con_descuentos + 
+                               this.totales.total_impuestos + 
+                               this.totales.costo_envio;
     
     return this.save();
   } catch (error) {
     throw new Error(`Error al actualizar totales: ${error.message}`);
+  }
+};
+
+// Aplicar código de descuento a items específicos
+carritoSchema.methods.aplicarCodigoDescuento = async function(codigoDescuento) {
+  try {
+    const CarritoItem = mongoose.model('Carrito_Items');
+    const items = await CarritoItem.find({ id_carrito: this._id });
+    
+    let itemsAfectados = 0;
+    let totalDescuentoAplicado = 0;
+    
+    for (const item of items) {
+      // Verificar si el código ya está aplicado a este item
+      const yaAplicado = item.codigos_aplicados.some(c => c.codigo === codigoDescuento);
+      if (yaAplicado) {
+        continue;
+      }
+      
+      const precioAnterior = item.precios.precio_con_impuestos;
+      const codigosActuales = item.codigos_aplicados.map(c => c.codigo);
+      codigosActuales.push(codigoDescuento);
+      
+      // Recalcular precios con el nuevo código
+      await item.calcularPrecios(codigosActuales);
+      
+      // Verificar si se aplicó algún descuento
+      if (item.precios.precio_con_impuestos < precioAnterior) {
+        itemsAfectados++;
+        totalDescuentoAplicado += (precioAnterior - item.precios.precio_con_impuestos) * item.cantidad;
+      } else {
+        // Si no se aplicó descuento, quitar el código de la lista
+        const index = item.codigos_aplicados.findIndex(c => c.codigo === codigoDescuento);
+        if (index > -1) {
+          item.codigos_aplicados.splice(index, 1);
+          await item.save();
+        }
+      }
+    }
+    
+    if (itemsAfectados === 0) {
+      throw new Error('El código de descuento no es válido para ningún producto en el carrito');
+    }
+    
+    // Registrar código aplicado a nivel de carrito
+    const codigoExiste = this.codigos_carrito.find(c => c.codigo === codigoDescuento);
+    if (!codigoExiste) {
+      this.codigos_carrito.push({
+        codigo: codigoDescuento,
+        fecha_aplicado: new Date()
+      });
+    }
+    
+    // Actualizar totales
+    await this.actualizarTotales();
+    
+    return {
+      items_afectados: itemsAfectados,
+      descuento_aplicado: totalDescuentoAplicado,
+      mensaje: `Código ${codigoDescuento} aplicado a ${itemsAfectados} producto(s)`
+    };
+  } catch (error) {
+    throw new Error(`Error aplicando código: ${error.message}`);
+  }
+};
+
+// Quitar código de descuento
+carritoSchema.methods.quitarCodigoDescuento = async function(codigoDescuento) {
+  try {
+    const CarritoItem = mongoose.model('Carrito_Items');
+    const items = await CarritoItem.find({ id_carrito: this._id });
+    
+    let itemsAfectados = 0;
+    
+    for (const item of items) {
+      const codigoIndex = item.codigos_aplicados.findIndex(c => c.codigo === codigoDescuento);
+      if (codigoIndex > -1) {
+        // Quitar el código de la lista
+        item.codigos_aplicados.splice(codigoIndex, 1);
+        
+        // Recalcular precios sin este código
+        const codigosRestantes = item.codigos_aplicados.map(c => c.codigo);
+        await item.calcularPrecios(codigosRestantes);
+        
+        itemsAfectados++;
+      }
+    }
+    
+    // Quitar código del carrito
+    const carritoIndex = this.codigos_carrito.findIndex(c => c.codigo === codigoDescuento);
+    if (carritoIndex > -1) {
+      this.codigos_carrito.splice(carritoIndex, 1);
+    }
+    
+    // Actualizar totales
+    await this.actualizarTotales();
+    
+    return {
+      items_afectados: itemsAfectados,
+      mensaje: `Código ${codigoDescuento} removido de ${itemsAfectados} producto(s)`
+    };
+  } catch (error) {
+    throw new Error(`Error quitando código: ${error.message}`);
   }
 };
 
@@ -112,8 +306,20 @@ carritoSchema.methods.vaciar = async function() {
     const CarritoItem = mongoose.model('Carrito_Items');
     await CarritoItem.deleteMany({ id_carrito: this._id });
     
-    this.total = 0;
+    // Resetear totales
+    this.totales = {
+      subtotal_base: 0,
+      total_descuentos: 0,
+      subtotal_con_descuentos: 0,
+      total_impuestos: 0,
+      costo_envio: 0,
+      total_final: 0
+    };
+    
     this.n_item = 0;
+    this.n_libros_diferentes = 0;
+    this.codigos_carrito = [];
+    this.problemas = [];
     
     return this.save();
   } catch (error) {
@@ -121,55 +327,42 @@ carritoSchema.methods.vaciar = async function() {
   }
 };
 
-// Agregar dirección de envío
-carritoSchema.methods.agregarDireccionEnvio = function(direccion, metodoEnvio, tiendaRecogida = null, notas = '') {
-  this.info_envio = {
-    direccion: direccion,
-    metodo_envio: metodoEnvio,
-    tienda_recogida: tiendaRecogida,
-    notas_envio: notas
-  };
-  
-  return this.save();
+// Verificar problemas en el carrito
+carritoSchema.methods.verificarProblemas = async function() {
+  try {
+    const CarritoItem = mongoose.model('Carrito_Items');
+    const items = await CarritoItem.find({ id_carrito: this._id });
+    
+    this.problemas = [];
+    
+    for (const item of items) {
+      await item.verificarPrecio();
+      
+      if (item.precio_cambiado || item.estado !== 'activo') {
+        this.problemas.push({
+          tipo: item.estado === 'sin_stock' ? 'sin_stock' : 'precio_cambiado',
+          descripcion: item.mensaje_precio,
+          id_item: item._id,
+          fecha: new Date(),
+          resuelto: false
+        });
+      }
+    }
+    
+    return this.save();
+  } catch (error) {
+    throw new Error(`Error verificando problemas: ${error.message}`);
+  }
 };
 
+// MÉTODOS ESTÁTICOS (iguales que antes)
 
-
-// Convertir a compra
-carritoSchema.methods.convertirACompra = async function() {
-  // Asegurarse de que el carrito tenga items
-  const CarritoItem = mongoose.model('Carrito_Items');
-  const itemsCount = await CarritoItem.countDocuments({ id_carrito: this._id });
-  
-  if (itemsCount === 0) {
-    throw new Error('No se puede convertir un carrito vacío a compra');
-  }
-  
-  // Verificar que tenga información de envío y método de pago
-  if (!this.info_envio || !this.info_envio.metodo_envio) {
-    throw new Error('Falta información de envío');
-  }
-  
-  if (!this.metodo_pago || !this.metodo_pago.tipo) {
-    throw new Error('Falta método de pago');
-  }
-  
-  // Cambiar estado del carrito
-  this.estado = 'convertido_a_compra';
-  return this.save();
-};
-
-// MÉTODOS ESTÁTICOS
-
-// Obtener carrito activo de un usuario
 carritoSchema.statics.obtenerCarritoActivo = async function(idUsuario) {
-  // Buscar carrito activo
   let carrito = await this.findOne({ 
     id_usuario: idUsuario, 
     estado: 'activo' 
   });
   
-  // Si no existe, crear uno nuevo
   if (!carrito) {
     carrito = new this({
       id_usuario: idUsuario,
@@ -181,7 +374,6 @@ carritoSchema.statics.obtenerCarritoActivo = async function(idUsuario) {
   return carrito;
 };
 
-// Obtener carritos abandonados para seguimiento
 carritoSchema.statics.obtenerCarritosAbandonados = function(diasInactividad = 3) {
   const fechaLimite = new Date();
   fechaLimite.setDate(fechaLimite.getDate() - diasInactividad);
@@ -191,6 +383,57 @@ carritoSchema.statics.obtenerCarritosAbandonados = function(diasInactividad = 3)
     ultima_actualizacion: { $lt: fechaLimite },
     n_item: { $gt: 0 }
   }).populate('id_usuario', 'email nombres');
+};
+
+carritoSchema.statics.obtenerEstadisticasAdmin = async function() {
+  const stats = await this.aggregate([
+    {
+      $group: {
+        _id: '$estado',
+        count: { $sum: 1 },
+        total_valor: { $sum: '$totales.total_final' },
+        promedio_items: { $avg: '$n_item' }
+      }
+    }
+  ]);
+  
+  const totalCarritos = await this.countDocuments();
+  const valorTotalCarritos = await this.aggregate([
+    { $group: { _id: null, total: { $sum: '$totales.total_final' } } }
+  ]);
+  
+  return {
+    por_estado: stats,
+    total_carritos: totalCarritos,
+    valor_total_carritos: valorTotalCarritos.length > 0 ? valorTotalCarritos[0].total : 0
+  };
+};
+
+carritoSchema.statics.obtenerLibroMasPopular = async function() {
+  const CarritoItem = mongoose.model('Carrito_Items');
+  
+  const resultado = await CarritoItem.aggregate([
+    { $match: { estado: 'activo' } },
+    {
+      $group: {
+        _id: '$id_libro',
+        total_en_carritos: { $sum: '$cantidad' },
+        carritos_diferentes: { $sum: 1 }
+      }
+    },
+    { $sort: { total_en_carritos: -1 } },
+    { $limit: 1 },
+    {
+      $lookup: {
+        from: 'libros',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'libro'
+      }
+    }
+  ]);
+  
+  return resultado.length > 0 ? resultado[0] : null;
 };
 
 const Carrito = mongoose.model('Carrito', carritoSchema);
