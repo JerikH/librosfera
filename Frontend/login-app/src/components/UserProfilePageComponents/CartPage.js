@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import CachedImage from '../CachedImage'; // Importar el componente CachedImage
+import { getAuthToken } from './authUtils';
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
@@ -17,53 +18,94 @@ const CartPage = ({ updateCartCount }) => {
     const fetchCartItems = async () => {
       setIsLoading(true);
       setError(null);
-      
+     
       try {
-        // Obtener carrito del localStorage
-        const storedCart = localStorage.getItem('shoppingCart');
-        if (!storedCart) {
-          setCartItems([]);
-          setIsLoading(false);
-          return;
-        }
-        
-        const parsedCart = JSON.parse(storedCart);
-        
-        // Obtener detalles adicionales de los libros
-        const cartWithDetails = await Promise.all(
-          parsedCart.map(async (item) => {
-            try {
-              const response = await axios.get(`${API_BASE_URL}/libros/${item.bookId}`);
-              if (response.data.status === 'success') {
-                return {
-                  ...item,
-                  bookDetails: response.data.data
-                };
-              }
-              return item;
-            } catch (error) {
-              console.error(`Error al obtener detalles del libro ${item.bookId}:`, error);
-              return item;
+        // Get cart data from API
+       
+        const response = await axios.get(`${API_BASE_URL}/carrito`, {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`
+          }
+        });
+       
+        if (response.data.status === 'success' && response.data.data) {
+          const { carrito, items } = response.data.data;
+         
+          // Transform API data to match component structure
+          const cartWithDetails = items.map(item => ({
+            bookId: item.id_libro,
+            quantity: item.cantidad,
+            bookDetails: {
+              id: item.id_libro,
+              titulo: item.metadatos.titulo_libro,
+              autor_nombre_completo: item.metadatos.autor_libro,
+              precio: item.precios.precio_base,
+              precio_info: {
+                descuentos: item.codigos_aplicados.map(codigo => ({
+                  activo: true,
+                  tipo: 'porcentaje',
+                  valor: codigo.tipo_descuento === 'porcentaje' ? (codigo.descuento_aplicado / item.precios.precio_base) * 100 : 0
+                }))
+              },
+              imagenes: item.metadatos.imagen_portada ? [{ url: item.metadatos.imagen_portada }] : [],
+              stock: item.metadatos.disponible ? 10 : 0, // API doesn't provide stock, using placeholder
+              editorial: '', // Not provided in API
+              estado: 'nuevo', // Not provided in API
+              anio_publicacion: '' // Not provided in API
+            },
+            itemId: item._id,
+            subtotal: item.subtotal
+          }));
+         
+          setCartItems(cartWithDetails);
+          
+          // Store cart data in localStorage
+          const localStorageCart = cartWithDetails.map(item => ({
+            bookId: item.bookId,
+            quantity: item.quantity
+          }));
+          
+          localStorage.setItem('shoppingCart', JSON.stringify(localStorageCart));
+          
+          // Update timestamp to force other components to check
+          localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+          
+          // Dispatch synchronization events
+          const cartChangeEvent = new CustomEvent('cartUpdated', {
+            bubbles: true,
+            detail: {
+              action: 'sync',
+              timestamp: Date.now()
             }
-          })
-        );
-        
-        setCartItems(cartWithDetails);
-        
-        // Actualizar el contador del carrito en el componente padre si existe la función
-        if (updateCartCount) {
-          updateCartCount(parsedCart.reduce((total, item) => total + item.quantity, 0));
+          });
+          window.dispatchEvent(cartChangeEvent);
+          
+          // Generic cart update event
+          window.dispatchEvent(new Event('globalCartUpdate'));
+         
+          // Update cart count
+          if (updateCartCount) {
+            updateCartCount(carrito.n_item);
+          }
+        } else {
+          setCartItems([]);
+          // Clear localStorage if no cart data
+          localStorage.removeItem('shoppingCart');
+          localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
         }
       } catch (error) {
-        console.error('Error al cargar elementos del carrito:', error);
-        setError('Ocurrió un error al cargar los elementos del carrito. Por favor, intenta de nuevo más tarde.');
+        console.error('Error al cargar carrito desde API:', error);
+        if (error.response?.status === 401) {
+          setError('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        } else {
+          setError('Ocurrió un error al cargar los elementos del carrito. Por favor, intenta de nuevo más tarde.');
+        }
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchCartItems();
-  }, [updateCartCount]);
+  fetchCartItems();
+}, [updateCartCount]);
 
   // Función para calcular el subtotal
   const calculateSubtotal = () => {

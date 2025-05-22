@@ -229,3 +229,16 @@ export const formatDate = (dateString) => {
     day: 'numeric'
   });
 };
+
+export const getAuthToken = () => {
+    const dataCookie = getCookie("data");
+    if (!dataCookie) return '';
+    
+    try {
+      const parsedData = JSON.parse(dataCookie);
+      return parsedData.authToken || '';
+    } catch (e) {
+      console.error('Error parsing auth token:', e);
+      return '';
+    }
+  };
