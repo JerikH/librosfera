@@ -277,35 +277,74 @@ libroSchema.index({
 // Actualizar fecha cada vez que se modifica el documento
 libroSchema.pre('save', function(next) {
   this.ultima_actualizacion = new Date();
-  
-  // Incrementar versión para control optimista
   this.version += 1;
   
   // Actualizar el campo autor_nombre_completo para búsquedas
   if (this.autor && Array.isArray(this.autor) && this.autor.length > 0) {
-    // Compilar nombres de todos los autores
     this.autor_nombre_completo = this.autor.map(a => 
       `${a.nombre} ${a.apellidos}`
     ).join(', ');
   }
   
-  // Actualizar el campo precio simple con el precio calculado
-  // if (this.precio_info) {
-  //   this.precio = this.precio_info.calcularPrecioFinal();
-  // }
+  // CORREGIDO: Sincronizar campo 'precio' con descuentos automáticos
+  if (this.precio_info && typeof this.precio_info.calcularPrecioConDescuentosAutomaticos === 'function') {
+    try {
+      const precioSincronizado = this.precio_info.calcularPrecioConDescuentosAutomaticos();
+      
+      // Solo actualizar si hay diferencia significativa (evitar bucles por redondeo)
+      if (Math.abs(this.precio - precioSincronizado) > 0.01) {
+        console.log(`Sincronizando precio del libro ${this.titulo}: ${this.precio} -> ${precioSincronizado}`);
+        this.precio = precioSincronizado;
+      }
+    } catch (error) {
+      console.warn('Error sincronizando precio automático:', error.message);
+      // No hacer nada, mantener precio actual
+    }
+  }
   
   next();
 });
 
-// Middleware pre-update para asegurarse de incrementar la versión
+// También sincronizar en actualizaciones
 libroSchema.pre('findOneAndUpdate', function(next) {
   const update = this.getUpdate() || {};
+  
+  // Incrementar versión
   if (!update.$inc) {
     update.$inc = {};
   }
   update.$inc.version = 1;
+  
+  // Actualizar fecha
+  if (!update.$set) {
+    update.$set = {};
+  }
+  update.$set.ultima_actualizacion = new Date();
+  
+  // Si se está actualizando precio_info, necesitamos recalcular precio
+  if (update.precio_info || update['precio_info.precio_base'] || update['precio_info.descuentos']) {
+    console.log('Actualización de precio_info detectada en findOneAndUpdate');
+    // Se manejará en el post-hook o manualmente
+  }
+  
   this.setUpdate(update);
   next();
+});
+
+libroSchema.post('findOneAndUpdate', async function(doc) {
+  if (doc && doc.precio_info && typeof doc.precio_info.calcularPrecioConDescuentosAutomaticos === 'function') {
+    try {
+      const precioSincronizado = doc.precio_info.calcularPrecioConDescuentosAutomaticos();
+      
+      if (Math.abs(doc.precio - precioSincronizado) > 0.01) {
+        console.log(`Post-update: Sincronizando precio del libro ${doc.titulo}: ${doc.precio} -> ${precioSincronizado}`);
+        doc.precio = precioSincronizado;
+        await doc.save();
+      }
+    } catch (error) {
+      console.warn('Error en post-update sincronizando precio:', error.message);
+    }
+  }
 });
 
 // MÉTODOS VIRTUALES
