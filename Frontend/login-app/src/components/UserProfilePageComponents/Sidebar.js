@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { logoutUser } from './authUtils';
 import CachedImage from '../CachedImage';
 
-const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, onDataRefresh }) => {
+const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, onDataRefresh, cartCount = 0 }) => {
   const [refreshing, setRefreshing] = useState(false);
   
   // Elementos de navegación con iconos SVG
@@ -47,7 +47,8 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
           <circle cx="20" cy="21" r="1" />
           <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
         </svg>
-      )
+      ),
+      badge: cartCount > 0 ? cartCount : null
     },
     { 
       id: 'tarjeta', 
@@ -147,6 +148,13 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
                     {item.icon}
                   </span>
                   <span className="text-sm">{item.name}</span>
+                  
+                  {/* Badge for cart count */}
+                  {item.badge && (
+                    <span className="ml-auto bg-red-600 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-xs px-1">
+                      {item.badge}
+                    </span>
+                  )}
                 </button>
               </li>
             ))}
