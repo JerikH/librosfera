@@ -1,21 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AddCardPage from './AddCardPage';
-import BuyPointsPage from './BuyPointsPage';
+import RechargeBalancePage from './RechargeBalancePage';
 
 const CardPage = () => {
   const [showAddCard, setShowAddCard] = useState(false);
-  const [showBuyPoints, setShowBuyPoints] = useState(false);
+  const [showRechargeBalance, setShowRechargeBalance] = useState(false);
   const [cards, setCards] = useState([]);
   const navigate = useNavigate();
 
-  // Puntos predeterminados
-  const pointsBalance = 0;
+  // Saldo predeterminado (en pesos)
+  const accountBalance = 0;
 
   // Función para manejar el clic en agregar tarjeta
   const handleAddCardClick = () => {
     setShowAddCard(true);
-    setShowBuyPoints(false);
+    setShowRechargeBalance(false);
   };
 
   // Función para cancelar la adición de tarjeta
@@ -36,26 +36,26 @@ const CardPage = () => {
     setCards(updatedCards);
   };
 
-  // Función para mostrar la página de compra de puntos
-  const handleBuyPointsClick = () => {
-    setShowBuyPoints(true);
+  // Función para mostrar la página de recarga de saldo
+  const handleRechargeBalanceClick = () => {
+    setShowRechargeBalance(true);
     setShowAddCard(false);
   };
 
-  // Función para cancelar la compra de puntos
-  const handleCancelBuyPoints = () => {
-    setShowBuyPoints(false);
+  // Función para cancelar la recarga de saldo
+  const handleCancelRecharge = () => {
+    setShowRechargeBalance(false);
   };
 
-  // Función para procesar la compra de puntos
-  const handlePurchasePoints = (amount, paymentMethod) => {
-    // Aquí iría la lógica para procesar la compra
-    console.log(`Compra de ${amount} puntos con método de pago:`, paymentMethod);
+  // Función para procesar la recarga de saldo
+  const handleRechargeBalance = (amount, paymentMethod) => {
+    // Aquí iría la lógica para procesar la recarga
+    console.log(`Recarga de ${amount} con método de pago:`, paymentMethod);
     
-    // Cerrar la página de compra de puntos
-    setShowBuyPoints(false);
+    // Cerrar la página de recarga de saldo
+    setShowRechargeBalance(false);
     
-    // En una implementación real, aquí actualizaríamos el saldo de puntos
+    // En una implementación real, aquí actualizaríamos el saldo
     // después de una respuesta exitosa del servidor
   };
 
@@ -63,10 +63,10 @@ const CardPage = () => {
     return <AddCardPage onSave={handleSaveCard} onCancel={handleCancelAddCard} />;
   }
 
-  if (showBuyPoints) {
-    return <BuyPointsPage 
-      onCancel={handleCancelBuyPoints} 
-      onPurchase={handlePurchasePoints}
+  if (showRechargeBalance) {
+    return <RechargeBalancePage 
+      onCancel={handleCancelRecharge} 
+      onRecharge={handleRechargeBalance}
       savedCards={cards}
     />;
   }
@@ -79,16 +79,17 @@ const CardPage = () => {
         <h3 className="text-lg font-medium text-gray-700 mb-3">Mis Tarjetas</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Tarjeta de Puntos (siempre visible) */}
+          {/* Tarjeta de Saldo (siempre visible) */}
           <div className="border border-gray-300 rounded-lg p-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md relative">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <p className="text-sm opacity-80">Tarjeta de</p>
-                <p className="font-bold text-lg">PUNTOS</p>
+                <p className="font-bold text-lg">SALDO</p>
               </div>
               <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+                  <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd" />
                 </svg>
               </div>
             </div>
@@ -96,8 +97,8 @@ const CardPage = () => {
             <div className="mb-8">
               <p className="text-sm opacity-80">Saldo disponible</p>
               <div className="font-bold text-2xl flex items-baseline">
-                {pointsBalance}
-                <span className="text-sm ml-1 opacity-90">puntos</span>
+                ${accountBalance.toLocaleString('es-CO')}
+                <span className="text-sm ml-1 opacity-90">COP</span>
               </div>
             </div>
             
@@ -105,12 +106,12 @@ const CardPage = () => {
               <p>Válida indefinidamente</p>
             </div>
             
-            {/* Botón para comprar puntos */}
+            {/* Botón para recargar saldo */}
             <button 
-              onClick={handleBuyPointsClick}
+              onClick={handleRechargeBalanceClick}
               className="w-full bg-white text-blue-600 font-medium py-2 px-4 rounded-md hover:bg-blue-50 transition-colors"
             >
-              Comprar puntos
+              Recargar saldo
             </button>
           </div>
           

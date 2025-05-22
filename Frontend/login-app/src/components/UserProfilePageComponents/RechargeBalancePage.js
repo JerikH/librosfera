@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 
-const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
+const RechargeBalancePage = ({ onCancel, onRecharge, savedCards = [] }) => {
   // Estado para el formulario
   const [formData, setFormData] = useState({
-    pointsAmount: 100, // Cantidad predeterminada
+    amount: 50000, // Cantidad predeterminada en COP
     paymentMethod: savedCards.length > 0 ? 'savedCard' : 'newCard',
     selectedCardIndex: savedCards.length > 0 ? 0 : null,
     // Datos para nueva tarjeta
@@ -21,12 +21,12 @@ const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
   // Estado para carga
   const [isLoading, setIsLoading] = useState(false);
   
-  // Paquetes de puntos predefinidos
-  const pointsPackages = [
-    { amount: 100, price: 10 },
-    { amount: 300, price: 25 },
-    { amount: 500, price: 40 },
-    { amount: 1000, price: 75 }
+  // Montos de recarga predefinidos (en pesos colombianos)
+  const rechargeAmounts = [
+    { amount: 50000, label: '$50,000' },
+    { amount: 100000, label: '$100,000' },
+    { amount: 200000, label: '$200,000' },
+    { amount: 500000, label: '$500,000' }
   ];
   
   // Detectar tipo de tarjeta basado en el número
@@ -53,7 +53,7 @@ const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
       // Formatear número de tarjeta para que solo tenga números
       const formattedValue = value.replace(/\D/g, '');
       setFormData({ ...formData, [name]: formattedValue });
-    } else if (type === 'radio' && name === 'pointsAmount') {
+    } else if (type === 'radio' && name === 'amount') {
       setFormData({ ...formData, [name]: parseInt(value) });
     } else {
       setFormData({ ...formData, [name]: value });
@@ -82,9 +82,9 @@ const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
   const validateForm = () => {
     const newErrors = {};
     
-    // Validar cantidad de puntos
-    if (!formData.pointsAmount || formData.pointsAmount <= 0) {
-      newErrors.pointsAmount = 'Debe seleccionar una cantidad de puntos válida';
+    // Validar cantidad de recarga
+    if (!formData.amount || formData.amount <= 0) {
+      newErrors.amount = 'Debe seleccionar un monto de recarga válido';
     }
     
     // Si se está usando tarjeta nueva, validar todos los campos
@@ -189,18 +189,15 @@ const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
     // En una aplicación real, aquí enviaríamos la solicitud al servidor
     // Simulamos una respuesta exitosa después de 1.5 segundos
     setTimeout(() => {
-      onPurchase(formData.pointsAmount, paymentData);
+      onRecharge(formData.amount, paymentData);
       setIsLoading(false);
     }, 1500);
   };
-  
-  // Encontrar el precio basado en la cantidad de puntos seleccionada
-  const selectedPackage = pointsPackages.find(pkg => pkg.amount === formData.pointsAmount) || pointsPackages[0];
 
   return (
     <div className="bg-white shadow rounded-lg p-6 h-full">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-semibold text-gray-800">Comprar Puntos</h2>
+        <h2 className="text-2xl font-semibold text-gray-800">Recargar Saldo</h2>
         <button
           onClick={onCancel}
           className="text-gray-500 hover:text-gray-700"
@@ -212,45 +209,44 @@ const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
       </div>
       
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Sección de paquetes de puntos */}
+        {/* Sección de montos de recarga */}
         <div className="mb-6">
-          <h3 className="text-lg font-medium text-gray-700 mb-3">Selecciona la cantidad de puntos</h3>
+          <h3 className="text-lg font-medium text-gray-700 mb-3">Selecciona el monto a recargar</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {pointsPackages.map((pkg) => (
+            {rechargeAmounts.map((option) => (
               <div 
-                key={pkg.amount}
+                key={option.amount}
                 className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                  formData.pointsAmount === pkg.amount 
+                  formData.amount === option.amount 
                     ? 'border-blue-500 bg-blue-50' 
                     : 'border-gray-300 hover:border-blue-300'
                 }`}
-                onClick={() => setFormData({...formData, pointsAmount: pkg.amount})}
+                onClick={() => setFormData({...formData, amount: option.amount})}
               >
                 <div className="flex items-center mb-2">
                   <input
                     type="radio"
-                    id={`pkg-${pkg.amount}`}
-                    name="pointsAmount"
-                    value={pkg.amount}
-                    checked={formData.pointsAmount === pkg.amount}
+                    id={`amount-${option.amount}`}
+                    name="amount"
+                    value={option.amount}
+                    checked={formData.amount === option.amount}
                     onChange={handleChange}
                     className="w-4 h-4 text-blue-600"
                   />
-                  <label htmlFor={`pkg-${pkg.amount}`} className="ml-2 font-medium">
-                    {pkg.amount} puntos
+                  <label htmlFor={`amount-${option.amount}`} className="ml-2 font-medium">
+                    {option.label}
                   </label>
                 </div>
-                <div className="text-lg font-bold text-blue-600">${pkg.price}</div>
                 <div className="text-xs text-gray-500 mt-1">
-                  ${(pkg.price / pkg.amount).toFixed(2)} por punto
+                  Al recargar {option.label} COP, tendrás ese saldo disponible inmediatamente
                 </div>
               </div>
             ))}
           </div>
           
-          {errors.pointsAmount && (
-            <p className="text-red-500 text-xs mt-2">{errors.pointsAmount}</p>
+          {errors.amount && (
+            <p className="text-red-500 text-xs mt-2">{errors.amount}</p>
           )}
         </div>
         
@@ -474,22 +470,18 @@ const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
           )}
         </div>
         
-        {/* Resumen de compra */}
+        {/* Resumen de recarga */}
         <div className="border-t pt-4 mb-6">
-          <h3 className="text-lg font-medium text-gray-700 mb-3">Resumen de compra</h3>
+          <h3 className="text-lg font-medium text-gray-700 mb-3">Resumen de recarga</h3>
           
           <div className="bg-gray-50 p-4 rounded-lg">
-            <div className="flex justify-between mb-2">
-              <span className="text-gray-600">{formData.pointsAmount} puntos</span>
-              <span className="font-medium">${selectedPackage.price}</span>
-            </div>
-            
-            <hr className="my-2 border-gray-300" />
-            
             <div className="flex justify-between text-lg font-bold">
               <span>Total a pagar</span>
-              <span className="text-blue-600">${selectedPackage.price}</span>
+              <span className="text-blue-600">${formData.amount.toLocaleString('es-CO')} COP</span>
             </div>
+            <p className="text-sm text-gray-500 mt-2">
+              El saldo se acreditará a tu cuenta inmediatamente después de realizar el pago.
+            </p>
           </div>
         </div>
         
@@ -517,7 +509,7 @@ const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
                 Procesando...
               </>
             ) : (
-              'Comprar puntos'
+              'Recargar saldo'
             )}
           </button>
         </div>
@@ -526,4 +518,4 @@ const BuyPointsPage = ({ onCancel, onPurchase, savedCards = [] }) => {
   );
 };
 
-export default BuyPointsPage;
+export default RechargeBalancePage;
