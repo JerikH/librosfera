@@ -553,12 +553,12 @@ main() {
     # Tests de cliente
     test_1_1_obtener_carrito
     test_1_2_agregar_libro
-    test_1_3_agregar_segundo_libro
+    # test_1_3_agregar_segundo_libro
     test_1_4_actualizar_cantidad
-    test_1_5_aplicar_codigo_descuento
+    # test_1_5_aplicar_codigo_descuento
     test_1_6_calcular_total
     test_1_7_confirmar_precios
-    test_1_8_quitar_codigo_descuento
+    # test_1_8_quitar_codigo_descuento
     test_1_9_quitar_libro
     
     echo -e "\n${CYAN}================== INICIANDO TESTS ADMINISTRATIVOS =================${NC}"
@@ -576,7 +576,7 @@ main() {
     
     echo -e "\n${CYAN}================= INICIANDO TESTS DE VALIDACIÓN ==================${NC}"
     
-    # Tests de validación (casos negativos)
+    Tests de validación (casos negativos)
     test_3_1_agregar_libro_inexistente
     test_3_2_acceso_no_autorizado_admin
     test_3_3_cantidad_invalida

@@ -165,34 +165,37 @@ carritoSchema.pre('save', function(next) {
 
 // MÉTODOS DE INSTANCIA
 
-// Actualizar totales del carrito con estructura detallada
+// CORREGIDO: Actualizar totales del carrito con estructura detallada
 carritoSchema.methods.actualizarTotales = async function() {
   try {
     const CarritoItem = mongoose.model('Carrito_Items');
     
-    const stats = await CarritoItem.obtenerEstadisticasItems(this._id);
+    // Usar el ID correctamente
+    const carritoId = this._id;
+    const stats = await CarritoItem.obtenerEstadisticasItems(carritoId);
     
     // Actualizar contadores de items
     this.n_item = stats.total_items;
     
     // Contar libros diferentes
-    const librosDiferentes = await CarritoItem.distinct('id_libro', { id_carrito: this._id });
+    const librosDiferentes = await CarritoItem.distinct('id_libro', { id_carrito: carritoId });
     this.n_libros_diferentes = librosDiferentes.length;
     
     // Actualizar estructura de totales detallada
-    this.totales.subtotal_base = stats.subtotal_sin_descuentos;
-    this.totales.total_descuentos = stats.total_descuentos;
-    this.totales.subtotal_con_descuentos = stats.subtotal_sin_impuestos;
-    this.totales.total_impuestos = stats.total_impuestos;
+    this.totales.subtotal_base = stats.subtotal_sin_descuentos || 0;
+    this.totales.total_descuentos = stats.total_descuentos || 0;
+    this.totales.subtotal_con_descuentos = stats.subtotal_sin_impuestos || 0;
+    this.totales.total_impuestos = stats.total_impuestos || 0;
     // this.totales.costo_envio se mantiene igual (se actualiza aparte)
     
     // Calcular total final
-    this.totales.total_final = this.totales.subtotal_con_descuentos + 
-                               this.totales.total_impuestos + 
-                               this.totales.costo_envio;
+    this.totales.total_final = (this.totales.subtotal_con_descuentos || 0) + 
+                               (this.totales.total_impuestos || 0) + 
+                               (this.totales.costo_envio || 0);
     
     return this.save();
   } catch (error) {
+    console.error('Error en actualizarTotales:', error);
     throw new Error(`Error al actualizar totales: ${error.message}`);
   }
 };
@@ -355,7 +358,7 @@ carritoSchema.methods.verificarProblemas = async function() {
   }
 };
 
-// MÉTODOS ESTÁTICOS (iguales que antes)
+// MÉTODOS ESTÁTICOS
 
 carritoSchema.statics.obtenerCarritoActivo = async function(idUsuario) {
   let carrito = await this.findOne({ 

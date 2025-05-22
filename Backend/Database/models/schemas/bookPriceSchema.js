@@ -160,14 +160,4 @@ bookPriceSchema.methods.desactivarDescuentos = function() {
   });
 };
 
-// MIDDLEWARE PRE-SAVE: Sincronizar el campo 'precio' del libro padre
-bookPriceSchema.pre('save', function(next) {
-  if (this.parent && this.parent.constructor.modelName === 'Libro') {
-    const precioConDescuentosAutomaticos = this.calcularPrecioConDescuentosAutomaticos();
-    this.parent.precio = precioConDescuentosAutomaticos;
-    console.log(`Sincronizando precio del libro: Base=${this.precio_base}, ConDescuentos=${precioConDescuentosAutomaticos}`);
-  }
-  next();
-});
-
 module.exports = bookPriceSchema;
