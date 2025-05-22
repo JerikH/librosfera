@@ -111,6 +111,64 @@ const tarjetaService = {
   },
 
   /**
+   * Establece un saldo absoluto en una tarjeta de débito (reemplaza el saldo actual)
+   * @param {String} tarjetaId - ID de la tarjeta
+   * @param {String} userId - ID del usuario propietario
+   * @param {Number} saldoNuevo - Nuevo saldo a establecer (debe ser positivo)
+   * @param {String} descripcion - Descripción de la operación
+   * @returns {Promise<Object>} Resultado de la operación
+   */
+  async establecerSaldoAbsoluto(tarjetaId, userId, saldoNuevo, descripcion = '') {
+    try {
+      // Validar que el saldo nuevo sea válido
+      if (typeof saldoNuevo !== 'number' || isNaN(saldoNuevo)) {
+        throw new Error('El saldo debe ser un número válido');
+      }
+      
+      if (saldoNuevo < 0) {
+        throw new Error('El saldo no puede ser negativo');
+      }
+      
+      // Buscar la tarjeta
+      const tarjeta = await Tarjeta.findOne({ 
+        id_tarjeta: tarjetaId, 
+        id_usuario: userId,
+        activa: true,
+        tipo: 'debito'
+      });
+      
+      if (!tarjeta) {
+        throw new Error('Tarjeta no encontrada, no está activa o no es de débito');
+      }
+      
+      // Guardar saldo anterior
+      const saldoAnterior = tarjeta.saldo;
+      
+      // Establecer el nuevo saldo (absoluto)
+      tarjeta.saldo = saldoNuevo;
+      tarjeta.ultima_actualizacion = new Date();
+      
+      await tarjeta.save();
+      
+      // Calcular la diferencia para propósitos informativos
+      const diferencia = saldoNuevo - saldoAnterior;
+      
+      return {
+        id_tarjeta: tarjeta.id_tarjeta,
+        saldo_anterior: saldoAnterior,
+        saldo_establecido: saldoNuevo,
+        diferencia: diferencia,
+        tipo_operacion: 'saldo_absoluto',
+        fecha_operacion: new Date(),
+        descripcion: descripcion || 'Establecimiento de saldo absoluto'
+      };
+    } catch (error) {
+      console.error('Error estableciendo saldo absoluto:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Actualiza los datos de una tarjeta
    * @param {String} tarjetaId - ID de la tarjeta
    * @param {String} userId - ID del usuario propietario

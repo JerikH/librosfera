@@ -78,6 +78,64 @@ const registrarTarjeta = catchAsync(async (req, res, next) => {
 });
 
 /**
+ * @desc    Establecer saldo absoluto en tarjeta de débito
+ * @route   PUT /api/v1/tarjetas/:id/saldo/absoluto
+ * @access  Private
+ */
+const establecerSaldoAbsoluto = catchAsync(async (req, res, next) => {
+  const { saldo, descripcion } = req.body;
+  
+  // Validar que se proporcione el saldo
+  if (saldo === undefined || saldo === null) {
+    return next(new AppError('El saldo es obligatorio', 400));
+  }
+  
+  // Convertir a número
+  const saldoNumerico = parseFloat(saldo);
+  
+  if (isNaN(saldoNumerico)) {
+    return next(new AppError('El saldo debe ser un número válido', 400));
+  }
+  
+  // Validar que no sea negativo
+  if (saldoNumerico < 0) {
+    return next(new AppError('El saldo no puede ser negativo', 400));
+  }
+  
+  // Validar límite máximo razonable (opcional - ajusta según tus necesidades)
+  const SALDO_MAXIMO = 1000000; // 1 millón como ejemplo
+  if (saldoNumerico > SALDO_MAXIMO) {
+    return next(new AppError(`El saldo no puede exceder ${SALDO_MAXIMO}`, 400));
+  }
+  
+  try {
+    const resultado = await tarjetaService.establecerSaldoAbsoluto(
+      req.params.id,
+      req.user._id,
+      saldoNumerico,
+      descripcion || 'Establecimiento de saldo absoluto'
+    );
+    
+    // Registrar actividad
+    await req.logActivity('usuario', 'establecimiento_saldo_absoluto', {
+      id_tarjeta: req.params.id,
+      saldo_anterior: resultado.saldo_anterior,
+      saldo_establecido: resultado.saldo_establecido,
+      diferencia: resultado.diferencia,
+      descripcion: resultado.descripcion
+    });
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Saldo establecido correctamente',
+      data: resultado
+    });
+  } catch (error) {
+    return next(new AppError(`Error al establecer saldo: ${error.message}`, 400));
+  }
+});
+
+/**
  * @desc    Obtener todas las tarjetas del usuario
  * @route   GET /api/v1/tarjetas
  * @access  Private
@@ -383,5 +441,6 @@ module.exports = {
   modificarSaldo,
   obtenerTarjetaPredeterminada,
   obtenerEstadisticasTarjetas,
-  obtenerEstadisticasTarjetasUsuario
+  obtenerEstadisticasTarjetasUsuario,
+  establecerSaldoAbsoluto
 };
