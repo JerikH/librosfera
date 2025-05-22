@@ -14,7 +14,8 @@ const {
   obtenerTarjetaPredeterminada,
   obtenerEstadisticasTarjetas,
   obtenerEstadisticasTarjetasUsuario,
-  establecerSaldoAbsoluto
+  establecerSaldoAbsoluto,
+  establecerSaldoAbsolutoAdmin
 } = require('../controllers/tarjetaController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
@@ -710,6 +711,53 @@ const { protect, authorize } = require('../middleware/authMiddleware');
  *                 message:
  *                   type: string
  *                   example: "No ha iniciado sesión. Por favor inicie sesión para obtener acceso."
+ * 
+ *  /api/v1/tarjetas/admin/{id}/saldo/absoluto:
+ *   put:
+ *     summary: Establecer saldo absoluto en cualquier tarjeta (Solo Administradores)
+ *     description: Permite a los administradores establecer el saldo absoluto de cualquier tarjeta de débito, requiere motivo obligatorio para auditoría.
+ *     tags: [Tarjetas, Administración]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID de la tarjeta
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - saldo
+ *               - motivo
+ *             properties:
+ *               saldo:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Nuevo saldo a establecer
+ *                 example: 1000
+ *               motivo:
+ *                 type: string
+ *                 description: Motivo obligatorio para la modificación administrativa
+ *                 example: "Corrección por error del sistema"
+ *               descripcion:
+ *                 type: string
+ *                 description: Descripción adicional opcional
+ *                 example: "Ajuste solicitado por soporte técnico"
+ *     responses:
+ *       200:
+ *         description: Saldo establecido correctamente por administrador
+ *       400:
+ *         description: Error en los datos o falta el motivo
+ *       403:
+ *         description: Sin permisos de administrador
+ *       404:
+ *         description: Tarjeta no encontrada
  */
 
 // Todas las rutas requieren autenticación
@@ -723,6 +771,7 @@ router.get('/', obtenerTarjetas);
 router.get('/predeterminada', obtenerTarjetaPredeterminada);
 router.get('/stats', authorize('administrador', 'root'), obtenerEstadisticasTarjetas);
 router.get('/stats/:userId', authorize('administrador', 'root'), obtenerEstadisticasTarjetasUsuario);
+router.put('/admin/:id/saldo/absoluto', authorize('administrador', 'root'), establecerSaldoAbsolutoAdmin);
 
 // 3. Rutas con parámetros específicos (operaciones sobre una tarjeta)
 router.get('/:id/verificar', verificarTarjeta);
