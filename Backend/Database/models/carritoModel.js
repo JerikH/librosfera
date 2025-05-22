@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const { metodoPagoSchema } = require('./schemas/metodoPagoSchema');
 const addressSchema = require('./schemas/addressSchema');
 
 const Schema = mongoose.Schema;
