@@ -3,10 +3,12 @@ const userService = require('./userService');
 const libroService = require('./libroService');
 const activityLogService = require('./activityLogService');
 const tarjetaService = require('./tarjetaService');
+const carritoService = require('./carritoService');
 
 module.exports = {
   userService,
   tarjetaService,
   libroService,
-  activityLogService
+  activityLogService,
+  carritoService,
 };

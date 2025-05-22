@@ -1,3 +1,4 @@
+// Database/models/schemas/bookPriceSchema.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
@@ -64,12 +65,10 @@ const bookPriceSchema = new Schema({
   }
 });
 
-// Método para calcular precio con impuestos
-bookPriceSchema.methods.calcularPrecioConImpuestos = function() {
-  const precioBase = this.precio_base;
+// Método para calcular precio con impuestos (desde precio con descuentos)
+bookPriceSchema.methods.calcularPrecioConImpuestos = function(precioConDescuentos) {
   const impuestoDecimal = this.impuesto.porcentaje / 100;
-  
-  return precioBase * (1 + impuestoDecimal);
+  return precioConDescuentos * (1 + impuestoDecimal);
 };
 
 // Método para obtener descuentos activos actualmente
@@ -83,27 +82,62 @@ bookPriceSchema.methods.obtenerDescuentosActivos = function() {
   });
 };
 
-// Método para calcular precio final con descuentos aplicados
-bookPriceSchema.methods.calcularPrecioFinal = function() {
-  let precioFinal = this.calcularPrecioConImpuestos();
+// Método para calcular precio con descuentos automáticos (sin código)
+bookPriceSchema.methods.calcularPrecioConDescuentosAutomaticos = function() {
+  let precioConDescuentos = this.precio_base;
   const descuentosActivos = this.obtenerDescuentosActivos();
   
-  // Aplicar descuentos
-  descuentosActivos.forEach(descuento => {
+  // Solo aplicar descuentos que NO tienen código (automáticos)
+  const descuentosAutomaticos = descuentosActivos.filter(desc => 
+    !desc.codigo_promocion || desc.codigo_promocion.trim() === ''
+  );
+  
+  descuentosAutomaticos.forEach(descuento => {
     if (descuento.tipo === 'porcentaje') {
-      // Descuento porcentual
       const descuentoDecimal = descuento.valor / 100;
-      precioFinal = precioFinal * (1 - descuentoDecimal);
+      precioConDescuentos = precioConDescuentos * (1 - descuentoDecimal);
     } else if (descuento.tipo === 'valor_fijo') {
-      // Descuento de valor fijo
-      precioFinal = Math.max(0, precioFinal - descuento.valor);
+      precioConDescuentos = Math.max(0, precioConDescuentos - descuento.valor);
     }
-    // Otros tipos de descuento (2x1, bundle) requieren lógica adicional
-    // en el contexto del carrito, no del precio individual
   });
   
-  // Redondear a 2 decimales
-  return Math.round(precioFinal * 100) / 100;
+  return Math.round(precioConDescuentos * 100) / 100;
+};
+
+// Método para calcular precio con descuentos específicos (incluyendo códigos)
+bookPriceSchema.methods.calcularPrecioConDescuentos = function(codigosAplicados = []) {
+  let precioConDescuentos = this.precio_base;
+  const descuentosActivos = this.obtenerDescuentosActivos();
+  
+  descuentosActivos.forEach(descuento => {
+    let aplicarDescuento = false;
+    
+    // Descuento automático (sin código)
+    if (!descuento.codigo_promocion || descuento.codigo_promocion.trim() === '') {
+      aplicarDescuento = true;
+    }
+    // Descuento con código (solo si está en la lista)
+    else if (codigosAplicados.includes(descuento.codigo_promocion)) {
+      aplicarDescuento = true;
+    }
+    
+    if (aplicarDescuento) {
+      if (descuento.tipo === 'porcentaje') {
+        const descuentoDecimal = descuento.valor / 100;
+        precioConDescuentos = precioConDescuentos * (1 - descuentoDecimal);
+      } else if (descuento.tipo === 'valor_fijo') {
+        precioConDescuentos = Math.max(0, precioConDescuentos - descuento.valor);
+      }
+    }
+  });
+  
+  return Math.round(precioConDescuentos * 100) / 100;
+};
+
+// Método para calcular precio final con impuestos
+bookPriceSchema.methods.calcularPrecioFinalConImpuestos = function(codigosAplicados = []) {
+  const precioConDescuentos = this.calcularPrecioConDescuentos(codigosAplicados);
+  return Math.round(this.calcularPrecioConImpuestos(precioConDescuentos) * 100) / 100;
 };
 
 // Método para agregar un nuevo descuento
