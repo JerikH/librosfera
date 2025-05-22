@@ -4,6 +4,7 @@ import UserLayout from './UserLayout';
 import axios from 'axios';
 import CachedImage from './CachedImage';
 import { getCartCount } from './cartUtils'; // Importar utilidad para obtener el contador del carrito
+import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
@@ -291,10 +292,11 @@ const BookCard = ({ book }) => {
         for (const image of book.imagenes) {
           try {
             // Check if image exists by making a HEAD request with axios
-            const response = await axios.head(image.url);
-            if (response.status === 200) {
-              validImages.push(image);
-            }
+            // const response = await axios.head(image.url);
+            // if (response.status === 200) {
+            //   validImages.push(image);
+            // }
+            validImages.push(image);
           } catch (error) {
             console.log(`Failed to verify image: ${image.url}`);
           }
@@ -325,80 +327,107 @@ const BookCard = ({ book }) => {
   };
 
   // Función para agregar al carrito
-  const handleAddToCart = (e) => {
+  const handleAddToCart = async (e) => {
     e.stopPropagation(); // Prevenir navegación a detalles
-      
+    
     // Si ya está en el carrito, no hacer nada
     if (isInCart) {
       return;
     }
-
+    
     // Comprobamos si hay stock disponible
     if (!book.stock || book.stock <= 0) {
       showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
       return;
     }
-    
+  
     // Mostrar animación de carga
     setAddingToCart(true);
-    
+  
     try {
       console.log('HomePage: Adding book to cart...', { bookId: book._id, title: book.titulo });
       
-      // Obtener el carrito actual del localStorage
-      const currentCart = localStorage.getItem('shoppingCart') 
-        ? JSON.parse(localStorage.getItem('shoppingCart')) 
-        : [];
-      
-      // Comprobar si el libro ya está en el carrito
-      const existingItemIndex = currentCart.findIndex(item => item.bookId === book._id);
-      
-      if (existingItemIndex >= 0) {
-        // Incrementar la cantidad si el libro ya está en el carrito
-        currentCart[existingItemIndex].quantity += 1;
-      } else {
-        // Agregar el libro al carrito con cantidad 1
-        currentCart.push({
-          bookId: book._id,
-          quantity: 1
-        });
+      // Obtener token de autenticación
+      const token = getAuthToken();
+      if (!token) {
+        showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
+        return;
       }
-      
-      // Guardar el carrito actualizado en localStorage
-      localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
-      
-      // Actualizar el contador del carrito
-      const newCount = currentCart.reduce((total, item) => total + item.quantity, 0);
-      updateCartCount(newCount);
-      
-      // Actualizar el estado de libros en carrito
-      getBooksInCart();
-      
-      // Dispatch synchronization events
-      console.log('HomePage: Dispatching synchronization events...');
-      const cartChangeEvent = new CustomEvent('cartUpdated', { 
-        bubbles: true,
-        detail: { 
-          bookId: book._id,
-          action: 'add',
-          timestamp: Date.now()
+
+      // Realizar petición al endpoint de agregar al carrito
+      const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
+        id_libro: book._id,
+        cantidad: 1
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         }
       });
-      window.dispatchEvent(cartChangeEvent);
-      
-      // Update timestamp to force other components to check
-      localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
-      
-      // Generic cart update event
-      window.dispatchEvent(new Event('globalCartUpdate'));
-      
-      // Mostrar un mensaje de éxito
-      showToast(`${book.titulo} agregado al carrito`);
-      
-      console.log('HomePage: All events dispatched successfully');
+
+      if (response.data.status === 'success') {
+        // Actualizar el contador del carrito basado en la respuesta del servidor
+        const newCount = response.data.data.carrito.n_item;
+        updateCartCount(newCount);
+        
+        // Actualizar el estado de libros en carrito
+        getBooksInCart();
+        
+        // Dispatch synchronization events
+        console.log('HomePage: Dispatching synchronization events...');
+        const cartChangeEvent = new CustomEvent('cartUpdated', {
+          bubbles: true,
+          detail: {
+            bookId: book._id,
+            action: 'add',
+            timestamp: Date.now(),
+            serverResponse: response.data
+          }
+        });
+        window.dispatchEvent(cartChangeEvent);
+        
+        // Update timestamp to force other components to check
+        localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+        
+        // Generic cart update event
+        window.dispatchEvent(new Event('globalCartUpdate'));
+        
+        // Mostrar mensaje de éxito del servidor
+        showToast(response.data.message || `${book.titulo} agregado al carrito`);
+        
+        console.log('HomePage: All events dispatched successfully');
+      }
     } catch (error) {
       console.error('Error al agregar al carrito:', error);
-      showToast('Ocurrió un error al agregar el libro al carrito', 'error');
+      
+      // Manejar diferentes tipos de errores del servidor
+      if (error.response) {
+        const { status, data } = error.response;
+        switch (status) {
+          case 400:
+            showToast(data.message || 'Datos inválidos o límites excedidos', 'error');
+            break;
+          case 401:
+            showToast('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.', 'error');
+            break;
+          case 403:
+            showToast('No tienes permisos para realizar esta acción', 'error');
+            break;
+          case 409:
+            showToast(data.message || 'Stock insuficiente o límites de carrito alcanzados', 'error');
+            break;
+          case 500:
+            showToast('Error interno del servidor. Intenta más tarde.', 'error');
+            break;
+          default:
+            showToast(data.message || 'Ocurrió un error al agregar el libro al carrito', 'error');
+        }
+      } else if (error.request) {
+        showToast('Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
+      } else {
+        showToast('Ocurrió un error inesperado', 'error');
+      }
     } finally {
       // Desactivar la animación después de un breve periodo
       setTimeout(() => {
@@ -534,7 +563,7 @@ const BookCard = ({ book }) => {
                 ${precioBase.toLocaleString('es-CO')}
               </span>
               <div className="text-lg font-bold text-red-600">
-                ${(book.precio - (book.precio * (porcentajeDescuento / 100))).toLocaleString('es-CO')}
+                ${(book.precio).toLocaleString('es-CO')}
               </div>
             </div>
           ) : (

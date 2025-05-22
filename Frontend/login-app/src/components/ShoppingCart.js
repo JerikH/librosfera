@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import CachedImage from './CachedImage'; 
 import { clearCart as clearCartUtil } from './cartUtils'; // Importar utilidad para vaciar el carrito
+import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
@@ -19,33 +20,48 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
       setIsLoading(true);
       try {
         // Obtener carrito del localStorage
-        const storedCart = localStorage.getItem('shoppingCart');
-        if (storedCart) {
-          const parsedCart = JSON.parse(storedCart);
+
+        const response = await axios.get(`${API_BASE_URL}/carrito`, {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`
+          }
+        });
+
+        if (response.data.status === 'success' && response.data.data) {
+        const { carrito, items } = response.data.data;
           
           // Obtener detalles adicionales de los libros
-          const cartWithDetails = await Promise.all(
-            parsedCart.map(async (item) => {
-              try {
-                const response = await axios.get(`${API_BASE_URL}/libros/${item.bookId}`);
-                if (response.data.status === 'success') {
-                  return {
-                    ...item,
-                    bookDetails: response.data.data
-                  };
-                }
-                return item;
-              } catch (error) {
-                console.error(`Error al obtener detalles del libro ${item.bookId}:`, error);
-                return item;
-              }
-            })
-          );
+          const cartWithDetails = items.map(item => ({
+            bookId: item.id_libro,
+            quantity: item.cantidad,
+            bookDetails: {
+              _id: item.id_libro,
+              titulo: item.metadatos.titulo_libro,
+              autor_nombre_completo: item.metadatos.autor_libro,
+              precio: item.precios.precio_base,
+              precio_info: {
+                descuentos: item.codigos_aplicados.map(codigo => ({
+                  activo: true,
+                  tipo: 'porcentaje',
+                  valor: codigo.tipo_descuento === 'porcentaje' ? (codigo.descuento_aplicado / item.precios.precio_base) * 100 : 0
+                }))
+              },
+              imagenes: item.metadatos.imagen_portada ? [{ url: item.metadatos.imagen_portada }] : [],
+              stock: item.metadatos.disponible ? 10 : 0, // API doesn't provide stock, using placeholder
+              editorial: '', // Not provided in API
+              estado: 'nuevo', // Not provided in API
+              anio_publicacion: '' // Not provided in API
+            },
+            itemId: item._id,
+            subtotal: item.subtotal
+          }));
           
           setCartItems(cartWithDetails);
           
           // Actualizar el contador del carrito en el componente padre si existe la función
-          updateCartCount(parsedCart.reduce((total, item) => total + item.quantity, 0));
+          // updateCartCount(parsedCart.reduce((total, item) => total + item.quantity, 0));
+          updateCartCount(carrito.n_libros_diferentes);
+          console.log(carrito);
         } else {
           setCartItems([]);
           updateCartCount(0);
