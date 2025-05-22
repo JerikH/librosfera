@@ -328,37 +328,50 @@ carritoItemSchema.statics.libroEnCarrito = async function(idCarrito, idLibro) {
 
 // Obtener estadísticas de items con estructura de precios detallada
 carritoItemSchema.statics.obtenerEstadisticasItems = async function(idCarrito) {
-  const stats = await this.aggregate([
-    { $match: { id_carrito: mongoose.Types.ObjectId(idCarrito) } },
-    {
-      $group: {
-        _id: null,
-        total_items: { $sum: '$cantidad' },
-        subtotal_sin_descuentos: { $sum: { $multiply: ['$precios.precio_base', '$cantidad'] } },
-        total_descuentos: { $sum: { $multiply: ['$precios.total_descuentos', '$cantidad'] } },
-        subtotal_sin_impuestos: { $sum: { $multiply: ['$precios.precio_con_descuentos', '$cantidad'] } },
-        total_impuestos: { $sum: { $multiply: ['$precios.impuesto.valor_impuesto', '$cantidad'] } },
-        total_final: { $sum: '$subtotal' },
-        items_con_precio_cambiado: {
-          $sum: { $cond: ['$precio_cambiado', 1, 0] }
-        },
-        items_sin_stock: {
-          $sum: { $cond: [{ $eq: ['$estado', 'sin_stock'] }, 1, 0] }
+  try {
+    // Asegurar que idCarrito es un ObjectId válido
+    let carritoObjectId;
+    if (mongoose.Types.ObjectId.isValid(idCarrito)) {
+      carritoObjectId = new mongoose.Types.ObjectId(idCarrito);
+    } else {
+      throw new Error('ID de carrito inválido');
+    }
+    
+    const stats = await this.aggregate([
+      { $match: { id_carrito: carritoObjectId } },
+      {
+        $group: {
+          _id: null,
+          total_items: { $sum: '$cantidad' },
+          subtotal_sin_descuentos: { $sum: { $multiply: ['$precios.precio_base', '$cantidad'] } },
+          total_descuentos: { $sum: { $multiply: ['$precios.total_descuentos', '$cantidad'] } },
+          subtotal_sin_impuestos: { $sum: { $multiply: ['$precios.precio_con_descuentos', '$cantidad'] } },
+          total_impuestos: { $sum: { $multiply: ['$precios.impuesto.valor_impuesto', '$cantidad'] } },
+          total_final: { $sum: '$subtotal' },
+          items_con_precio_cambiado: {
+            $sum: { $cond: ['$precio_cambiado', 1, 0] }
+          },
+          items_sin_stock: {
+            $sum: { $cond: [{ $eq: ['$estado', 'sin_stock'] }, 1, 0] }
+          }
         }
       }
-    }
-  ]);
-  
-  return stats.length > 0 ? stats[0] : {
-    total_items: 0,
-    subtotal_sin_descuentos: 0,
-    total_descuentos: 0,
-    subtotal_sin_impuestos: 0,
-    total_impuestos: 0,
-    total_final: 0,
-    items_con_precio_cambiado: 0,
-    items_sin_stock: 0
-  };
+    ]);
+    
+    return stats.length > 0 ? stats[0] : {
+      total_items: 0,
+      subtotal_sin_descuentos: 0,
+      total_descuentos: 0,
+      subtotal_sin_impuestos: 0,
+      total_impuestos: 0,
+      total_final: 0,
+      items_con_precio_cambiado: 0,
+      items_sin_stock: 0
+    };
+  } catch (error) {
+    console.error('Error en obtenerEstadisticasItems:', error);
+    throw error;
+  }
 };
 
 const CarritoItem = mongoose.model('Carrito_Items', carritoItemSchema);

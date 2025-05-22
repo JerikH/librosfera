@@ -74,6 +74,15 @@ const carritoService = {
         throw new Error('Libro no encontrado');
       }
       
+      console.log('Libro encontrado:', {
+        id: libro._id,
+        titulo: libro.titulo,
+        precio: libro.precio,
+        precio_info: libro.precio_info ? 'Tiene precio_info' : 'No tiene precio_info',
+        stock: libro.stock,
+        activo: libro.activo
+      });
+      
       if (!libro.activo) {
         throw new Error('El libro no está disponible');
       }
@@ -84,6 +93,11 @@ const carritoService = {
       
       // Obtener carrito del usuario
       const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
+      console.log('Carrito obtenido:', {
+        id: carrito._id,
+        id_usuario: carrito.id_usuario,
+        n_item: carrito.n_item
+      });
       
       // Verificar límite de libros diferentes
       const librosDiferentes = await CarritoItem.distinct('id_libro', { id_carrito: carrito._id });
@@ -106,6 +120,7 @@ const carritoService = {
       } else {
         // Crear nuevo item en el carrito con estructura de precios inicial
         const precioBase = libro.precio_info?.precio_base || libro.precio;
+        console.log('Precio base determinado:', precioBase);
         
         const nuevoItem = new CarritoItem({
           id_carrito: carrito._id,
@@ -131,8 +146,19 @@ const carritoService = {
           }
         });
         
+        console.log('Nuevo item creado, calculando precios...');
+        
         // Calcular precios con descuentos automáticos e impuestos
-        await nuevoItem.calcularPrecios([]);
+        try {
+          await nuevoItem.calcularPrecios([]);
+          console.log('Precios calculados exitosamente');
+        } catch (precioError) {
+          console.error('Error calculando precios:', precioError);
+          // Continuar con precios básicos si hay error
+          nuevoItem.precios.precio_con_descuentos = precioBase;
+          nuevoItem.precios.precio_con_impuestos = precioBase;
+          await nuevoItem.save();
+        }
         
         console.log('Nuevo item agregado al carrito:');
         console.log(`- Precio base: $${nuevoItem.precios.precio_base}`);
@@ -141,8 +167,10 @@ const carritoService = {
         console.log(`- Subtotal: $${nuevoItem.subtotal}`);
       }
       
+      console.log('Actualizando totales del carrito...');
       // Actualizar totales del carrito
       await carrito.actualizarTotales();
+      console.log('Totales actualizados exitosamente');
       
       return {
         exito: true,
