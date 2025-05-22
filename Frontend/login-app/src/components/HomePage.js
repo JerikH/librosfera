@@ -26,15 +26,76 @@ const HomePage = () => {
   
   // Estado para el contador del carrito
   const [cartCount, setCartCount] = useState(0);
+  
+  // Estado para rastrear qué libros están en el carrito
+  const [booksInCart, setBooksInCart] = useState(new Set());
+  
+  // Estado para notificaciones toast
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
   // Función para actualizar el contador del carrito
   const updateCartCount = (count) => {
     setCartCount(count);
   };
 
+  // Componente Toast para notificaciones
+  const Toast = ({ message, type, visible }) => {
+    if (!visible) return null;
+    
+    return (
+      <div className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg transform transition-all duration-300 ease-in-out ${
+        visible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95'
+      } ${
+        type === 'success' ? 'bg-green-500 text-white' : 
+        type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+      }`}>
+        <div className="flex items-center">
+          {type === 'success' && (
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          {type === 'error' && (
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+          <span className="font-medium">{message}</span>
+        </div>
+      </div>
+    );
+  };
+  
+  // Función para mostrar notificaciones toast
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+    
+    // Ocultar después de 2 segundos
+    setTimeout(() => {
+      setToast({ visible: false, message: '', type: 'success' });
+    }, 2000);
+  };
+
+  // Función para obtener los libros que están en el carrito
+  const getBooksInCart = () => {
+    try {
+      const currentCart = localStorage.getItem('shoppingCart') 
+        ? JSON.parse(localStorage.getItem('shoppingCart')) 
+        : [];
+      
+      const bookIds = new Set(currentCart.map(item => item.bookId));
+      setBooksInCart(bookIds);
+      return bookIds;
+    } catch (error) {
+      console.error('Error al leer el carrito:', error);
+      return new Set();
+    }
+  };
+
   useEffect(() => {
-    // Cargar el contador inicial del carrito
+    // Cargar el contador inicial del carrito y los libros en el carrito
     setCartCount(getCartCount());
+    getBooksInCart();
     
     // Función para cargar todos los datos necesarios
     const fetchAllData = async () => {
@@ -54,6 +115,40 @@ const HomePage = () => {
     };
 
     fetchAllData();
+
+    // Enhanced event listeners for cart synchronization
+    const handleStorageChange = (e) => {
+      console.log('HomePage: Storage change detected:', e.key);
+      if (e.key === 'shoppingCart' || e.key === 'cartLastUpdated') {
+        getBooksInCart();
+        setCartCount(getCartCount());
+      }
+    };
+
+    const handleCartUpdate = (e) => {
+      console.log('HomePage: Cart update event received:', e.type, e.detail);
+      getBooksInCart();
+      setCartCount(getCartCount());
+    };
+
+    const handleGlobalCartUpdate = () => {
+      console.log('HomePage: Global cart update received');
+      getBooksInCart();
+      setCartCount(getCartCount());
+    };
+
+    // Add all event listeners
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('cartUpdated', handleCartUpdate);
+    window.addEventListener('globalCartUpdate', handleGlobalCartUpdate);
+    window.addEventListener('cartChange', handleCartUpdate); // Keep backward compatibility
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('cartUpdated', handleCartUpdate);
+      window.removeEventListener('globalCartUpdate', handleGlobalCartUpdate);
+      window.removeEventListener('cartChange', handleCartUpdate);
+    };
   }, []);
 
   
@@ -184,6 +279,9 @@ const BookCard = ({ book }) => {
   const [imagesVerified, setImagesVerified] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false); // Estado para animación al agregar al carrito
   
+  // Verificar si este libro está en el carrito
+  const isInCart = booksInCart.has(book._id);
+  
   useEffect(() => {
     // Only run image verification once
     if (!imagesVerified && book.imagenes && book.imagenes.length > 0) {
@@ -230,10 +328,14 @@ const BookCard = ({ book }) => {
   const handleAddToCart = (e) => {
     e.stopPropagation(); // Prevenir navegación a detalles
       
+    // Si ya está en el carrito, no hacer nada
+    if (isInCart) {
+      return;
+    }
+
     // Comprobamos si hay stock disponible
     if (!book.stock || book.stock <= 0) {
-      // Puedes mostrar un mensaje de error aquí
-      alert('Lo sentimos, este libro no está disponible en inventario.');
+      showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
       return;
     }
     
@@ -241,6 +343,8 @@ const BookCard = ({ book }) => {
     setAddingToCart(true);
     
     try {
+      console.log('HomePage: Adding book to cart...', { bookId: book._id, title: book.titulo });
+      
       // Obtener el carrito actual del localStorage
       const currentCart = localStorage.getItem('shoppingCart') 
         ? JSON.parse(localStorage.getItem('shoppingCart')) 
@@ -267,11 +371,34 @@ const BookCard = ({ book }) => {
       const newCount = currentCart.reduce((total, item) => total + item.quantity, 0);
       updateCartCount(newCount);
       
+      // Actualizar el estado de libros en carrito
+      getBooksInCart();
+      
+      // Dispatch synchronization events
+      console.log('HomePage: Dispatching synchronization events...');
+      const cartChangeEvent = new CustomEvent('cartUpdated', { 
+        bubbles: true,
+        detail: { 
+          bookId: book._id,
+          action: 'add',
+          timestamp: Date.now()
+        }
+      });
+      window.dispatchEvent(cartChangeEvent);
+      
+      // Update timestamp to force other components to check
+      localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+      
+      // Generic cart update event
+      window.dispatchEvent(new Event('globalCartUpdate'));
+      
       // Mostrar un mensaje de éxito
-      alert(`${book.titulo} agregado al carrito`);
+      showToast(`${book.titulo} agregado al carrito`);
+      
+      console.log('HomePage: All events dispatched successfully');
     } catch (error) {
       console.error('Error al agregar al carrito:', error);
-      alert('Ocurrió un error al agregar el libro al carrito');
+      showToast('Ocurrió un error al agregar el libro al carrito', 'error');
     } finally {
       // Desactivar la animación después de un breve periodo
       setTimeout(() => {
@@ -421,13 +548,15 @@ const BookCard = ({ book }) => {
         <div className="mt-2 flex">
           <button 
             className={`flex items-center justify-center px-3 py-1 rounded-full text-sm w-full transition-colors
-              ${stockDisponible > 0 
-                ? addingToCart 
-                  ? 'bg-gray-400 text-white cursor-wait' 
-                  : 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+              ${stockDisponible <= 0 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : isInCart
+                  ? 'bg-green-600 text-white cursor-default'
+                  : addingToCart 
+                    ? 'bg-gray-400 text-white cursor-wait' 
+                    : 'bg-red-600 text-white hover:bg-red-700 cursor-pointer'}`}
             onClick={handleAddToCart}
-            disabled={stockDisponible <= 0 || addingToCart}
+            disabled={stockDisponible <= 0 || addingToCart || isInCart}
           >
             {addingToCart ? (
               <span className="flex items-center">
@@ -437,6 +566,13 @@ const BookCard = ({ book }) => {
                 </svg>
                 Agregando...
               </span>
+            ) : isInCart ? (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Agregado
+              </>
             ) : (
               <>
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -669,6 +805,12 @@ const BookCard = ({ book }) => {
   return (
     <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>
       <HomeContent />
+      {/* Toast notifications */}
+      <Toast 
+        message={toast.message} 
+        type={toast.type} 
+        visible={toast.visible} 
+      />
     </UserLayout>
   );
 };
