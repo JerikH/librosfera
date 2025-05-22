@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import UserLayout from './UserLayout';
-import CachedImage from './CachedImage'; // Import the CachedImage component
+import CachedImage from './CachedImage';
+import { addToCart, getCartCount } from './cartUtils'; // Import cart utility functions
 
 const BookDetails = () => {
   const { bookId } = useParams();
@@ -13,11 +14,114 @@ const BookDetails = () => {
   const navigate = useNavigate();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [displayedImageIndex, setDisplayedImageIndex] = useState(0);
+  const [displayedImageIndex, setDisplayedImageIndex] = useState(0); // Used in image transition logic
   const [validImageUrls, setValidImageUrls] = useState([]);
   const [imagesVerified, setImagesVerified] = useState(false);
+  
+  // States for cart functionality
+  const [cartCount, setCartCount] = useState(0);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [addedToCart, setAddedToCart] = useState(false);
+  const [isInCart, setIsInCart] = useState(false);
+  
+  // State for toast notifications
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  
+  // Function to show toast notifications
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+    
+    // Hide after 2 seconds
+    setTimeout(() => {
+      setToast({ visible: false, message: '', type: 'success' });
+    }, 2000);
+  };
+
+  // Function to update cart count
+  const updateCartCount = (count) => {
+    setCartCount(count);
+  };
+  
+  // Function to check if this book is in the cart - IMPROVED VERSION
+  const checkIfInCart = () => {
+    try {
+      const storedCart = localStorage.getItem('shoppingCart');
+      if (storedCart && book) {
+        const parsedCart = JSON.parse(storedCart);
+        
+        // Use the book ID from the current book object or the URL parameter
+        const currentBookId = book._id || book.id || bookId;
+        
+        // Check if book is in cart using different possible ID formats
+        const bookInCart = parsedCart.some(item => 
+          item.bookId === currentBookId ||
+          item.bookId === bookId ||
+          item.bookId === book?.id ||
+          item.bookId === book?._id
+        );
+        
+        console.log('BookDetails: Checking cart status:', { 
+          currentBookId,
+          bookId, 
+          bookIdFromBook: book?.id,
+          bookIdFromBook2: book?._id,
+          isInCart: bookInCart,
+          cartItems: parsedCart.map(item => item.bookId)
+        });
+        
+        setIsInCart(bookInCart);
+        setAddedToCart(bookInCart);
+        return bookInCart;
+      } else {
+        setIsInCart(false);
+        setAddedToCart(false);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error checking cart status:', error);
+      setIsInCart(false);
+      setAddedToCart(false);
+      return false;
+    }
+  };
+  
+  // Enhanced function to dispatch cart change events
+  const dispatchCartChangeEvent = () => {
+    console.log('BookDetails: Dispatching cart change events...');
+    
+    // Method 1: Custom event with detailed information
+    const cartChangeEvent = new CustomEvent('cartUpdated', { 
+      bubbles: true,
+      detail: { 
+        bookId: book._id || book.id || bookId,
+        action: 'add',
+        timestamp: Date.now()
+      }
+    });
+    window.dispatchEvent(cartChangeEvent);
+    
+    // Method 2: Storage event simulation (for cross-tab compatibility)
+    const storageEvent = new StorageEvent('storage', {
+      key: 'shoppingCart',
+      newValue: localStorage.getItem('shoppingCart'),
+      oldValue: null,
+      url: window.location.href
+    });
+    window.dispatchEvent(storageEvent);
+    
+    // Method 3: Generic cart update event
+    window.dispatchEvent(new Event('globalCartUpdate'));
+    
+    // Method 4: Update a timestamp to force other components to check
+    localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+    
+    console.log('BookDetails: All cart events dispatched');
+  };
 
   useEffect(() => {
+    // Load initial cart count
+    setCartCount(getCartCount());
+    
     const fetchBookDetails = async () => { 
       try {
         // Realizar la llamada a la API con axios
@@ -71,6 +175,7 @@ const BookDetails = () => {
           // Mapear los datos al formato esperado por el componente
           const bookData = {
             id: apiBook._id,
+            _id: apiBook._id, // Keep both for consistency
             title: apiBook.titulo,
             subtitle: "", // No hay campo equivalente en la API
             author: authorName,
@@ -109,6 +214,65 @@ const BookDetails = () => {
     setIsLoading(true);
     fetchBookDetails();
   }, [bookId]);
+  
+  // Enhanced event listeners for cart synchronization
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      console.log('BookDetails: Storage change detected:', e.key);
+      if (e.key === 'shoppingCart' || e.key === 'cartLastUpdated') {
+        updateCartCount(getCartCount());
+        checkIfInCart();
+      }
+    };
+    
+    const handleCartUpdate = (e) => {
+      console.log('BookDetails: Cart update event received:', e.type, e.detail);
+      updateCartCount(getCartCount());
+      checkIfInCart();
+    };
+    
+    const handleGlobalCartUpdate = () => {
+      console.log('BookDetails: Global cart update received');
+      updateCartCount(getCartCount());
+      checkIfInCart();
+    };
+    
+    // Add all event listeners
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('cartUpdated', handleCartUpdate);
+    window.addEventListener('globalCartUpdate', handleGlobalCartUpdate);
+    window.addEventListener('cartChange', handleCartUpdate); // Keep backward compatibility
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('cartUpdated', handleCartUpdate);
+      window.removeEventListener('globalCartUpdate', handleGlobalCartUpdate);
+      window.removeEventListener('cartChange', handleCartUpdate);
+    };
+  }, []);
+  
+  // Check cart status whenever book data changes
+  useEffect(() => {
+    if (book) {
+      console.log('BookDetails: Book data changed, checking cart status...');
+      checkIfInCart();
+    }
+  }, [book]);
+
+  // Periodic check to ensure synchronization (fallback)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (book) {
+        const wasInCart = isInCart;
+        const nowInCart = checkIfInCart();
+        if (wasInCart !== nowInCart) {
+          console.log('BookDetails: Cart status change detected via periodic check');
+        }
+      }
+    }, 2000); // Check every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [book, isInCart]);
 
   useEffect(() => {
     if (book && book.images && book.images.length > 0 && !imagesVerified) {
@@ -193,8 +357,6 @@ const BookDetails = () => {
     }
   };
 
-
-
   const handleQuantityChange = (e) => {
     const value = parseInt(e.target.value);
     if (value > 0 && value <= (book?.stock || 1)) {
@@ -214,14 +376,95 @@ const BookDetails = () => {
     }
   };
 
-  const addToCart = () => {
-    // Aquí implementarías la lógica para añadir el libro al carrito
-    alert(`Añadido al carrito: ${book.title} (${quantity} unidades)`);
+  // Enhanced addToCart function with better synchronization
+  const handleAddToCart = () => {
+    // Check if there's stock available
+    if (!book.stock || book.stock <= 0) {
+      showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
+      return;
+    }
+    
+    // Prevent adding if already in cart
+    if (isInCart) {
+      showToast('Este libro ya está en tu carrito', 'info');
+      return;
+    }
+    
+    // Show loading animation
+    setAddingToCart(true);
+    
+    try {
+      console.log('BookDetails: Adding book to cart...', { bookId: book._id || book.id, title: book.title });
+      
+      // Use the imported utility function
+      const result = addToCart(book, quantity);
+      
+      console.log('BookDetails: Cart update result:', result);
+      
+      // Update cart count
+      updateCartCount(result.totalItems);
+      
+      // Show success message
+      showToast(result.message, result.success ? 'success' : 'error');
+      
+      // If successful, update cart status and notify other components
+      if (result.success) {
+        console.log('BookDetails: Successfully added to cart, updating states...');
+        
+        // 1. Update local state immediately
+        setIsInCart(true);
+        setAddedToCart(true);
+        
+        // 2. Wait a moment to ensure localStorage is updated, then dispatch events
+        setTimeout(() => {
+          console.log('BookDetails: Dispatching synchronization events...');
+          dispatchCartChangeEvent();
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error al agregar al carrito:', error);
+      showToast('Ocurrió un error al agregar el libro al carrito', 'error');
+    } finally {
+      // Disable loading animation after a short period
+      setTimeout(() => {
+        setAddingToCart(false);
+      }, 500);
+    }
   };
 
   const buyNow = () => {
-    // Aquí implementarías la lógica para compra directa
+    // Primero agregamos al carrito
+    handleAddToCart();
+    // Luego redirigimos al checkout
     navigate('/checkout', { state: { items: [{ book, quantity }] } });
+  };
+
+  // Toast component for notifications
+  const Toast = ({ message, type, visible }) => {
+    if (!visible) return null;
+    
+    return (
+      <div className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg transform transition-all duration-300 ease-in-out ${
+        visible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95'
+      } ${
+        type === 'success' ? 'bg-green-500 text-white' : 
+        type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+      }`}>
+        <div className="flex items-center">
+          {type === 'success' && (
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          {type === 'error' && (
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+          <span className="font-medium">{message}</span>
+        </div>
+      </div>
+    );
   };
 
   // Función para renderizar estrellas de calificación
@@ -302,7 +545,7 @@ const BookDetails = () => {
 
   if (isLoading) {
     return (
-      <UserLayout>
+      <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>
         <div className="container mx-auto py-12 px-4 flex justify-center">
           <div className="text-center">
             <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -315,7 +558,7 @@ const BookDetails = () => {
 
   if (!book) {
     return (
-      <UserLayout>
+      <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>
         <div className="container mx-auto py-12 px-4">
           <div className="bg-white rounded-lg shadow-md p-8 text-center">
             <div className="mb-4">
@@ -352,7 +595,7 @@ const BookDetails = () => {
   }
 
   return (
-    <UserLayout>
+    <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>
       <div className="container mx-auto py-8 px-4">
         {/* Breadcrumbs */}
         <nav className="flex mb-6 text-sm">
@@ -403,67 +646,62 @@ const BookDetails = () => {
             {/* Columna izquierda - Imágenes */}
             <div className="md:w-2/5 mb-6 md:mb-0 md:pr-8">
               <div className="sticky top-6">
-              <div className="aspect-w-3 aspect-h-4 bg-gray-100 rounded-lg overflow-hidden mb-4 flex items-center justify-center relative">
-  {/* Showing the image */
-  
-  
-  }
-  <div className="aspect-w-3 aspect-h-4 bg-gray-100 rounded-lg overflow-hidden mb-4 flex items-center justify-center relative"></div>
-  {validImageUrls && validImageUrls.length > 0 ? (
-    <CachedImage 
-      src={validImageUrls[currentImageIndex]} 
-      alt={`${book.title} - Vista ${currentImageIndex + 1}`}
-      className="max-w-full max-h-full object-contain"
-      fallbackSrc="/placeholder-book.jpg"
-    />
-  ) : (
-    getBookIcon(book.id)
-  )}
-  
-  {/* Navigation buttons - only if there are multiple images */}
-  {validImageUrls && validImageUrls.length > 1 && (
-    <>
-      <button 
-        type="button"
-        className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-white z-10"
-        onClick={handlePrevImage}
-      >
-        <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
-      <button 
-        type="button"
-        className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-white z-10"
-        onClick={handleNextImage}
-      >
-        <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </button>
-    </>
-  )}
-</div>
+                <div className="aspect-w-3 aspect-h-4 bg-gray-100 rounded-lg overflow-hidden mb-4 flex items-center justify-center relative">
+                  {validImageUrls && validImageUrls.length > 0 ? (
+                    <CachedImage 
+                      src={validImageUrls[currentImageIndex]} 
+                      alt={`${book.title} - Vista ${currentImageIndex + 1}`}
+                      className="max-w-full max-h-full object-contain"
+                      fallbackSrc="/placeholder-book.jpg"
+                    />
+                  ) : (
+                    getBookIcon(book.id)
+                  )}
+                  
+                  {/* Navigation buttons - only if there are multiple images */}
+                  {validImageUrls && validImageUrls.length > 1 && (
+                    <>
+                      <button 
+                        type="button"
+                        className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-white z-10"
+                        onClick={handlePrevImage}
+                      >
+                        <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <button 
+                        type="button"
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full w-8 h-8 flex items-center justify-center shadow hover:bg-white z-10"
+                        onClick={handleNextImage}
+                      >
+                        <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
 
                 {/* Miniaturas */}
                 {book.images && book.images.length > 1 && (
-  <div className="grid grid-cols-4 gap-2">
-    {validImageUrls.map((img, idx) => (
-      <div
-        key={idx}
-        className={`aspect-w-1 aspect-h-1 bg-gray-100 rounded overflow-hidden cursor-pointer flex items-center justify-center ${idx === currentImageIndex ? 'border-2 border-blue-500' : 'border'}`}
-        onClick={() => setCurrentImageIndex(idx)}
-      >
-        <CachedImage 
-          src={img} 
-          alt={`${book.title} - Vista ${idx + 1}`}
-          className="max-w-full max-h-full object-contain"
-          fallbackSrc="/placeholder-book.png"
-        />
-      </div>
-    ))}
-  </div>
-)}
+                  <div className="grid grid-cols-4 gap-2">
+                    {validImageUrls.map((img, idx) => (
+                      <div
+                        key={idx}
+                        className={`aspect-w-1 aspect-h-1 bg-gray-100 rounded overflow-hidden cursor-pointer flex items-center justify-center ${idx === currentImageIndex ? 'border-2 border-blue-500' : 'border'}`}
+                        onClick={() => setCurrentImageIndex(idx)}
+                      >
+                        <CachedImage 
+                          src={img} 
+                          alt={`${book.title} - Vista ${idx + 1}`}
+                          className="max-w-full max-h-full object-contain"
+                          fallbackSrc="/placeholder-book.png"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -477,13 +715,6 @@ const BookDetails = () => {
               
               <p className="text-lg mb-4">
                 por {book.author}
-                {/* <a
-                  href={`/author/${encodeURIComponent(book.author)}`}
-                  className="font-medium text-blue-600 hover:underline"
-                  disabled={true}
-                >
-                  {book.author}
-                </a> */}
               </p>
 
               {/* Calificación */}
@@ -552,15 +783,15 @@ const BookDetails = () => {
                 </p>
               </div>
 
-              {/* Cantidad y botones de acción - SIEMPRE DESHABILITADOS */}
+              {/* Cantidad y botones de acción */}
               <div className="mb-8">
                 <div className="flex items-center mb-4">
                   <span className="mr-4 font-medium">Cantidad</span>
                   <div className="flex items-center border border-gray-300 rounded">
                     <button
                       onClick={decrementQuantity}
-                      className="px-3 py-1 text-gray-600 hover:bg-gray-100"
-                      disabled={true}
+                      className={`px-3 py-1 text-gray-600 hover:bg-gray-100 ${book.stock <= 0 || quantity <= 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={book.stock <= 0 || quantity <= 1}
                     >
                       -
                     </button>
@@ -570,13 +801,13 @@ const BookDetails = () => {
                       max={book.stock}
                       value={quantity}
                       onChange={handleQuantityChange}
-                      className="w-12 text-center border-x border-gray-300 py-1"
-                      disabled={true}
+                      className={`w-12 text-center border-x border-gray-300 py-1 ${book.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={book.stock <= 0}
                     />
                     <button
                       onClick={incrementQuantity}
-                      className="px-3 py-1 text-gray-600 hover:bg-gray-100"
-                      disabled={true}
+                      className={`px-3 py-1 text-gray-600 hover:bg-gray-100 ${book.stock <= 0 || quantity >= book.stock ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={book.stock <= 0 || quantity >= book.stock}
                     >
                       +
                     </button>
@@ -585,29 +816,58 @@ const BookDetails = () => {
 
                 <div className="flex space-x-4">
                   <button
-                    onClick={addToCart}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg flex items-center justify-center font-medium opacity-50 cursor-not-allowed"
-                    disabled={true}
+                    onClick={handleAddToCart}
+                    className={`flex-1 py-3 px-6 rounded-lg flex items-center justify-center font-medium transition-colors ${
+                      book.stock <= 0 
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : isInCart 
+                          ? 'bg-green-600 text-white cursor-default'
+                          : addingToCart 
+                            ? 'bg-gray-400 text-white cursor-wait' 
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                    disabled={book.stock <= 0 || addingToCart || isInCart}
                   >
-                    <svg
-                      className="w-5 h-5 mr-2"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                      />
-                    </svg>
-                    Agregar al carrito
+                    {addingToCart ? (
+                      <>
+                        <svg className="w-5 h-5 mr-2 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Agregando...
+                      </>
+                    ) : isInCart ? (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Agregado
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-5 h-5 mr-2"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                          />
+                        </svg>
+                        Agregar al carrito
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={buyNow}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-lg flex items-center justify-center font-medium opacity-50 cursor-not-allowed"
-                    disabled={true}
+                    className={`flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-lg flex items-center justify-center font-medium ${
+                      book.stock <= 0 || addingToCart || isInCart ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    disabled={book.stock <= 0 || addingToCart || isInCart}
                   >
                     <svg
                       className="w-5 h-5 mr-2"
@@ -783,6 +1043,13 @@ const BookDetails = () => {
             </div>
           </div>
         )}
+        
+        {/* Toast notifications */}
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          visible={toast.visible} 
+        />
       </div>
     </UserLayout>
   );
