@@ -1,18 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import UserLayout from './UserLayout';
+import { useState, useEffect } from 'react';
 
 const CheckoutDeliveryPage = () => {
-  const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deliveryMethod, setDeliveryMethod] = useState('');
   const [redirectTo, setRedirectTo] = useState(null);
   
   // Resumen de compra
-  const [subtotal, setSubtotal] = useState(0);
-  const [shippingCost, setShippingCost] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [subtotal, setSubtotal] = useState(35000);
+  const [shippingCost, setShippingCost] = useState(7000);
+  const [total, setTotal] = useState(42000);
 
   // Ubicación del usuario
   const [userLocation, setUserLocation] = useState({
@@ -20,108 +17,88 @@ const CheckoutDeliveryPage = () => {
     departamento: 'Risaralda'
   });
 
-  // Efecto para manejar la redirección
-  useEffect(() => {
-    if (redirectTo) {
-      navigate(redirectTo);
-    }
-  }, [redirectTo, navigate]);
-
-  // Cargar datos del carrito
-  useEffect(() => {
-    const fetchCartData = async () => {
-      setIsLoading(true);
-      try {
-        // Obtener carrito del localStorage
-        const storedCart = localStorage.getItem('shoppingCart');
-        if (storedCart) {
-          const parsedCart = JSON.parse(storedCart);
-          setCartItems(parsedCart);
-          
-          // Calcular subtotal (simulado, en realidad vendría de la API con detalles completos)
-          const calculatedSubtotal = parsedCart.reduce((total, item) => {
-            // En un entorno real, obtendríamos el precio desde el detalle del libro
-            return total + ((item.price || 35000) * item.quantity);
-          }, 0);
-          
-          setSubtotal(calculatedSubtotal);
-          setTotal(calculatedSubtotal);
-        }
-        
-        // Obtener datos de usuario desde localStorage o API
-        const userData = localStorage.getItem('userData');
-        if (userData) {
-          const parsedUserData = JSON.parse(userData);
-          setUserLocation({
-            ciudad: parsedUserData.ciudad || 'Pereira',
-            departamento: parsedUserData.departamento || 'Risaralda'
-          });
-        }
-      } catch (error) {
-        console.error('Error al cargar datos del carrito:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchCartData();
-  }, []);
-
-  // Actualizar costos de envío y total cuando cambia el método
-  useEffect(() => {
-    if (deliveryMethod === 'domicilio') {
-      const cost = userLocation.ciudad === 'Pereira' ? 7000 : 12000;
-      setShippingCost(cost);
-      setTotal(subtotal + cost);
-    } else if (deliveryMethod === 'tienda') {
-      setShippingCost(0);
-      setTotal(subtotal);
-    }
-  }, [deliveryMethod, subtotal, userLocation]);
-
   // Manejar cambio en método de entrega
   const handleDeliveryMethodChange = (method) => {
     setDeliveryMethod(method);
+    
+    if (method === 'domicilio') {
+      setShippingCost(7000);
+      setTotal(subtotal + 7000);
+    } else if (method === 'tienda') {
+      setShippingCost(0);
+      setTotal(subtotal);
+    }
   };
 
   // Continuar al siguiente paso
   const handleContinue = () => {
-    // Verificar que se haya seleccionado un método de entrega
     if (!deliveryMethod) {
       alert('Por favor selecciona un método de entrega para continuar');
       return;
     }
     
-    try {
-      // Guardar preferencias de envío
-      const shippingPreferences = {
-        method: deliveryMethod,
-        storeId: null, // Ya no seleccionamos tienda en esta página
-        shippingCost,
-        locationCity: userLocation.ciudad,
-        locationState: userLocation.departamento
-      };
-      
-      localStorage.setItem('shippingPreferences', JSON.stringify(shippingPreferences));
-      console.log("Preferencias de envío guardadas:", shippingPreferences);
-      
-      // Con el enfoque de rutas anidadas
-      if (deliveryMethod === 'tienda') {
-        // Si el método es tienda, ir a la página de selección de tiendas
-        navigate('/checkout/store-selection');
-      } else if (deliveryMethod === 'domicilio') {
-        // Si el método es domicilio, ir directamente a la página de pago
-        navigate('/checkout/payment');
-      }
-    } catch (error) {
-      console.error("Error en el proceso de navegación:", error);
-      alert("Ha ocurrido un error al procesar su solicitud. Por favor intente nuevamente.");
+    // Guardar preferencias de envío en localStorage
+    const shippingPreferences = {
+      method: deliveryMethod,
+      shippingCost,
+      locationCity: userLocation.ciudad,
+      locationState: userLocation.departamento
+    };
+    
+    localStorage.setItem('shippingPreferences', JSON.stringify(shippingPreferences));
+    
+    // Navegar a la página correcta según el método seleccionado
+    if (deliveryMethod === 'tienda') {
+      // Si es retiro en tienda, navegar a la selección de tienda
+      window.location.href = '/checkout/store-selection';
+    } else {
+      // Si es envío a domicilio, ir directamente a pago
+      window.location.href = '/checkout/payment';
     }
   };
 
+  useEffect(() => {
+    // Simular carga inicial y selección predeterminada
+    setTimeout(() => {
+      setIsLoading(false);
+      handleDeliveryMethodChange('domicilio');
+    }, 500);
+  }, []);
+
   return (
-    <UserLayout>
-      <div className="bg-gray-100 min-h-screen">
+    <div className="min-h-screen flex flex-col">
+      {/* Header - Solo la barra azul oscura superior */}
+      <header className="bg-gray-900 text-white py-4 px-4">
+        <div className="container mx-auto flex justify-between items-center">
+          <div className="flex items-center">
+            <a href="/" className="text-xl font-bold mr-3">Librosfera</a>
+            <span className="text-sm text-gray-300">Tu librería de confianza</span>
+          </div>
+          <div className="flex items-center space-x-6">
+            <button 
+              onClick={() => window.location.href = "/mi-cuenta"} 
+              className="text-sm hover:underline"
+            >
+              Mi Cuenta
+            </button>
+            <button 
+              onClick={() => window.location.href = "/mis-pedidos"} 
+              className="text-sm hover:underline"
+            >
+              Mis Pedidos
+            </button>
+            <button 
+              onClick={() => window.location.href = "/logout"} 
+              className="text-sm hover:underline"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+        </div>
+      </header>
+      
+      {/* Contenido principal */}
+      <div className="flex-grow bg-gray-100">
         <div className="container mx-auto py-8 px-4">
           <div className="flex flex-col lg:flex-row gap-6">
             {/* Columna principal - Opciones de envío */}
@@ -141,13 +118,17 @@ const CheckoutDeliveryPage = () => {
                         value="domicilio"
                         checked={deliveryMethod === 'domicilio'}
                         onChange={() => handleDeliveryMethodChange('domicilio')}
-                        className="h-5 w-5 text-blue-600"
+                        className="h-5 w-5 text-blue-600 cursor-pointer"
                       />
-                      <label htmlFor="delivery-home" className="ml-3 text-lg">
+                      <label 
+                        htmlFor="delivery-home" 
+                        className="ml-3 text-lg cursor-pointer"
+                        onClick={() => handleDeliveryMethodChange('domicilio')}
+                      >
                         Enviar a domicilio
                       </label>
                     </div>
-                    <span className="font-bold">$ {deliveryMethod === 'domicilio' ? shippingCost.toLocaleString('es-CO') : '7.000'}</span>
+                    <span className="font-bold">$ 7.000</span>
                   </div>
                   
                   {deliveryMethod === 'domicilio' && (
@@ -168,9 +149,13 @@ const CheckoutDeliveryPage = () => {
                         value="tienda"
                         checked={deliveryMethod === 'tienda'}
                         onChange={() => handleDeliveryMethodChange('tienda')}
-                        className="h-5 w-5 text-blue-600"
+                        className="h-5 w-5 text-blue-600 cursor-pointer"
                       />
-                      <label htmlFor="delivery-pickup" className="ml-3 text-lg">
+                      <label 
+                        htmlFor="delivery-pickup" 
+                        className="ml-3 text-lg cursor-pointer"
+                        onClick={() => handleDeliveryMethodChange('tienda')}
+                      >
                         Retiro en un punto de entrega
                       </label>
                     </div>
@@ -205,8 +190,8 @@ const CheckoutDeliveryPage = () => {
                 <h2 className="text-xl font-bold mb-4">Resumen de compra</h2>
                 <div className="border-b pb-4 mb-4">
                   <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Producto{cartItems.length !== 1 ? 's' : ''}</span>
-                    <span>$ {subtotal.toLocaleString('es-CO')}</span>
+                    <span className="text-gray-600">Producto</span>
+                    <span>$ 35.000</span>
                   </div>
                   
                   <div className="flex justify-between">
@@ -214,7 +199,7 @@ const CheckoutDeliveryPage = () => {
                     {deliveryMethod === 'tienda' ? (
                       <span className="text-green-600">Gratis</span>
                     ) : (
-                      <span>$ {shippingCost.toLocaleString('es-CO')}</span>
+                      <span>$ 7.000</span>
                     )}
                   </div>
                 </div>
@@ -228,7 +213,7 @@ const CheckoutDeliveryPage = () => {
           </div>
         </div>
       </div>
-    </UserLayout>
+    </div>
   );
 };
 
