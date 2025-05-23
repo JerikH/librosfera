@@ -386,6 +386,7 @@ const carritoService = {
       const stats = await CarritoItem.obtenerEstadisticasItems(carrito._id);
       
       return {
+        totales: carrito.totales,
         subtotal: carrito.subtotal,
         descuentos: carrito.total_descuentos,
         costo_envio: carrito.info_envio?.costo_envio || 0,
