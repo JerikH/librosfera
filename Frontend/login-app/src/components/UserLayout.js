@@ -47,7 +47,9 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
         
         console.log("User data loaded from cookie");
         setUserData(parsedData.Data);
-        fetchCartUtils();
+        if (parsedData) {
+          fetchCartUtils();
+        }
         setIsLoading(false);
       } catch (error) {
         console.error("Error checking authentication:", error);
