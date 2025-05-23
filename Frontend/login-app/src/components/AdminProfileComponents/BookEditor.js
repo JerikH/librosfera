@@ -16,12 +16,11 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     issn: '',
     idioma: '',
     fecha: '',
+    estado: 'Nuevo',
     precio: '',
     imagen: '',
     descripcion: '',
-    stock: 1,
-    ejemplaresNuevos: 0,
-    ejemplaresUsados: 0
+    stock: 1
   });
 
   const [discountData, setDiscountData] = useState({
@@ -100,7 +99,6 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         console.error('Error al actualizar tipo de imagen:', response.data);
         return false;
       }
-      
     } catch (error) {
       console.error('Error al actualizar tipo de imagen:', error);
       if (error.response) {
@@ -484,10 +482,6 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       const authorName = authorParts[0] || '';
       const authorSurname = authorParts.slice(1).join(' ') || '';
       
-      // Calculate ejemplaresNuevos and ejemplaresUsados from book data if available
-      const nuevos = book.newConditionCount || 0;
-      const usados = book.usedConditionCount || 0;
-      
       setFormData({
         titulo: book.title || '',
         autor_nombre: authorName,
@@ -499,12 +493,11 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         issn: book.issn || '',
         idioma: book.language || '',
         fecha: book.publicationDate ? formatDateForInput(book.publicationDate) : '',
+        estado: book.condition || 'Nuevo',
         precio: book.price ? book.price.toString() : '',
         imagen: book.image || '',
         descripcion: book.description || '',
-        stock: book.stock || 1,
-        ejemplaresNuevos: nuevos, 
-        ejemplaresUsados: usados
+        stock: book.stock || 1
       });
       
       setSelectedGenres(bookGenres);
@@ -530,46 +523,10 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
-    // Special handling for numeric fields
-    if (name === 'precio' || name === 'paginas' || name === 'año' || 
-        name === 'stock' || name === 'ejemplaresNuevos' || name === 'ejemplaresUsados') {
-      // Allow empty string
-      if (value === '') {
-        setFormData({
-          ...formData,
-          [name]: ''
-        });
-        return;
-      }
-      
-      // Convert to number
-      const numValue = Number(value);
-      if (isNaN(numValue)) return;
-      
-      // Update state with numeric value
-      setFormData({
-        ...formData,
-        [name]: numValue
-      });
-      
-      // If ejemplaresNuevos or ejemplaresUsados changes, update stock
-      if (name === 'ejemplaresNuevos' || name === 'ejemplaresUsados') {
-        const nuevos = name === 'ejemplaresNuevos' ? numValue : formData.ejemplaresNuevos;
-        const usados = name === 'ejemplaresUsados' ? numValue : formData.ejemplaresUsados;
-        setFormData(prev => ({
-          ...prev,
-          [name]: numValue,
-          stock: nuevos + usados
-        }));
-      }
-    } else {
-      // Handle other fields normally
-      setFormData({
-        ...formData,
-        [name]: value
-      });
-    }
+    setFormData({
+      ...formData,
+      [name]: value
+    });
   };
 
   const handleChangeDiscount = (e) => {
@@ -616,7 +573,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         titulo: formData.titulo,
         autor: [{
           nombre: formData.autor_nombre || '',
-          apellidos: formData.autor_apellidos || '',
+        apellidos: formData.autor_apellidos || '',
           nacionalidad: 'd',
           biografia: 'f',
           fechas: {
@@ -643,11 +600,8 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
           envio_gratis: true
         },
         precio: parseFloat(formData.precio) || 0,
-        estado: {
-          nuevo: Number(formData.ejemplaresNuevos) || 0,
-          usado: Number(formData.ejemplaresUsados) || 0
-        },
-        stock: Number(formData.ejemplaresNuevos) + Number(formData.ejemplaresUsados) || 0,
+        estado: formData.estado.toLowerCase(),
+        stock: parseInt(formData.stock) || 1,
         descripcion: formData.descripcion || '',
         tabla_contenido: '',
         palabras_clave: selectedGenres.map(g => g.toLowerCase()),
@@ -1417,6 +1371,20 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
               </div>
               
               <div className="form-group">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                <select
+                  name="estado"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.estado}
+                  onChange={handleChange}
+                >
+                  <option value="Nuevo">Nuevo</option>
+                  <option value="Usado">Usado</option>
+                  <option value="Deteriorado">Deteriorado</option>
+                </select>
+              </div>
+              
+              <div className="form-group">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Precio</label>
                 <input
                   type="number"
@@ -1431,39 +1399,19 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
                 />
               </div>
               
-              <div className="form-group col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ejemplares</label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Libros Nuevos</label>
-                    <input
-                      type="number"
-                      name="ejemplaresNuevos"
-                      placeholder="Cantidad de nuevos"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={formData.ejemplaresNuevos}
-                      onChange={handleChange}
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Libros Usados</label>
-                    <input
-                      type="number"
-                      name="ejemplaresUsados"
-                      placeholder="Cantidad de usados"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={formData.ejemplaresUsados}
-                      onChange={handleChange}
-                      min="0"
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Stock total: {Number(formData.ejemplaresNuevos) + Number(formData.ejemplaresUsados)} ejemplares
-                </p>
+              <div className="form-group">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
+                <input
+                  type="number"
+                  name="stock"
+                  placeholder="Cantidad disponible"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.stock}
+                  onChange={handleChange}
+                  min="0"
+                />
               </div>
-              
+
               <div className="form-group">
   <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
   <input
