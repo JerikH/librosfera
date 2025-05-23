@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Sidebar from './UserProfilePageComponents/Sidebar';
 import Dashboard from './UserProfilePageComponents/Dashboard';
@@ -8,6 +8,7 @@ import CartPage from './UserProfilePageComponents/CartPage';
 import CardPage from './UserProfilePageComponents/CardPage';
 import EditProfile from './EditProfile';
 import { fetchUserData, logoutUser } from './UserProfilePageComponents/authUtils';
+import { getCartCount } from './cartUtils';
 
 const UserProfile = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -18,7 +19,15 @@ const UserProfile = () => {
   const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
 
-  
+  // SOLUCIÓN 1: Usar useCallback para memoizar updateCartCount
+  const updateCartCount = useCallback((count) => {
+    setCartCount(count);
+  }, []);
+
+  // Cargar el contador del carrito al iniciar (solo una vez)
+  useEffect(() => {
+    setCartCount(getCartCount());
+  }, []);
   
   // Helper function to get cookie data
   const getCookie = (name) => {
@@ -29,10 +38,8 @@ const UserProfile = () => {
   // Check authentication and user type immediately on mount
   useEffect(() => {
     const checkUserTypeAndRedirect = async () => {
-      // Check if the token exists in cookies
       const dataCookie = getCookie("data");
       
-      // Redirect immediately if no token found
       if (!dataCookie) {
         console.log("No data cookie found, redirecting to login");
         window.location.replace('/Login');
@@ -40,7 +47,6 @@ const UserProfile = () => {
       }
       
       try {
-        // First try to parse data directly from cookie to avoid unnecessary API calls
         const parsedData = JSON.parse(dataCookie);
         console.log("Parsed cookie data in UserProfile:", parsedData);
         
@@ -50,7 +56,6 @@ const UserProfile = () => {
           return;
         }
         
-        // Check user type and redirect immediately if needed
         if (parsedData.Data && parsedData.Data.tipo_usuario) {
           const userType = parsedData.Data.tipo_usuario.toLowerCase();
           
@@ -69,7 +74,6 @@ const UserProfile = () => {
           }
         }
         
-        // We have valid data for a regular user, set it and stop loading
         console.log("Regular user confirmed, loading profile");
         setUserData(parsedData.Data);
         setIsLoading(false);
@@ -82,77 +86,63 @@ const UserProfile = () => {
     checkUserTypeAndRedirect();
   }, [navigate]);
   
-  // Fetch user data when active tab changes
-  useEffect(() => {
-    if (!isLoading && !isEditingProfile) { // Only refresh data if initial load is complete
-      const refreshData = async () => {
-        const result = await fetchUserData();
-        
-        if (result.success) {
-          setUserData(result.data);
-        } else {
-          // Token is no longer valid, redirect
-          window.location.replace('/Login');
-        }
-      };
-      
-      refreshData();
+  // SOLUCIÓN 2: Optimizar el refresh de datos - solo cuando sea necesario
+  const refreshUserData = useCallback(async () => {
+    const result = await fetchUserData();
+    
+    if (result.success) {
+      setUserData(result.data);
+    } else {
+      window.location.replace('/Login');
     }
-  }, [activeTab, isLoading, isEditingProfile]);
+  }, []);
+
+  // SOLUCIÓN 3: Reducir llamadas innecesarias - solo refrescar en casos específicos
+  useEffect(() => {
+    // Solo refrescar datos si no estamos cargando y no estamos editando perfil
+    // Y solo para ciertos tabs que realmente necesitan datos frescos
+    if (!isLoading && !isEditingProfile && (activeTab === 'profile' || activeTab === 'compras')) {
+      refreshUserData();
+    }
+  }, [activeTab, isLoading, isEditingProfile, refreshUserData]);
 
   useEffect(() => {
     window.isEditingProfile = isEditingProfile;
   }, [isEditingProfile]);
   
-  // Handler para editar perfil
-  const handleEditProfile = (value) => {
+  // SOLUCIÓN 4: Memoizar handler para editar perfil
+  const handleEditProfile = useCallback((value) => {
     if (value === false) {
       setIsEditingProfile(false);
-      // Refrescar datos del usuario
-      const refreshData = async () => {
-        const result = await fetchUserData();
-        if (result.success) {
-          setUserData(result.data);
-        }
-      };
-      refreshData();
+      // Solo refrescar si realmente cambiamos de edición a no edición
+      refreshUserData();
     } else {
       setIsEditingProfile(true);
     }
-  };
+  }, [refreshUserData]);
   
   // Handler para regresar de la edición de perfil
-  const handleGoBack = () => {
+  const handleGoBack = useCallback(() => {
     setIsEditingProfile(false);
-    // Refrescar datos del usuario
-    const refreshData = async () => {
-      const result = await fetchUserData();
-      if (result.success) {
-        setUserData(result.data);
-      }
-    };
-    refreshData();
-  };
+    refreshUserData();
+  }, [refreshUserData]);
 
   // Función para cerrar sesión
   const handleLogout = () => {
-    // Limpiar las cookies
+    localStorage.removeItem('shoppingCart');
     document.cookie.split(";").forEach((cookie) => {
       document.cookie = cookie
         .replace(/^ +/, "")
         .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
     });
     
-    // Redireccionar a la página de login
     navigate('/login');
   };
 
-  // Función para ir al perfil de usuario
   const goToProfile = () => {
     navigate('/Profile');
   };
   
-  // Render nothing until we confirm this is a regular user
   if (isLoading || !userData) {
     return (
       <div className="w-full h-screen flex items-center justify-center">
@@ -166,9 +156,7 @@ const UserProfile = () => {
   
   return (
     <div className="flex flex-col h-screen">
-      {/* Header from UserLayout */}
       <header className="bg-white shadow-sm w-full">
-        {/* Top navigation bar */}
         <div className="bg-gray-800 text-white">
           <div className="container mx-auto px-4 py-2 flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -182,7 +170,7 @@ const UserProfile = () => {
               >
                 Mi Cuenta
               </button>
-              <Link to="/mis-pedidos" className="text-sm hover:underline">Mis Pedidos</Link>
+              {/* <Link to="/mis-pedidos" className="text-sm hover:underline">Mis Pedidos</Link> */}
               <button 
                 onClick={handleLogout}
                 className="text-sm hover:underline cursor-pointer"
@@ -192,21 +180,19 @@ const UserProfile = () => {
             </div>
           </div>
         </div>
-    
       </header>
 
-      {/* Rest of the UserProfile component */}
       <div className="flex flex-1 bg-[#f9fafb]">
-        {/* Left sidebar */}
         <Sidebar 
           activeTab={activeTab} 
           setActiveTab={setActiveTab} 
           userData={userData}
           isLoading={isLoading}
           onEditProfile={handleEditProfile}
+          onDataRefresh={null}
+          cartCount={cartCount}
         />
         
-        {/* Main content area */}
         <div className="flex-1">
           {isEditingProfile ? (
             <div className="h-full overflow-y-auto p-6">
@@ -221,7 +207,7 @@ const UserProfile = () => {
               {activeTab === 'home' && <Dashboard userData={userData} onEditProfile={handleEditProfile} />}
               {activeTab === 'profile' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
               {activeTab === 'compras' && <PurchasesPage />}
-              {activeTab === 'carrito' && <CartPage />}
+              {activeTab === 'carrito' && <CartPage updateCartCount={updateCartCount} />}
               {activeTab === 'tarjeta' && <CardPage />}
             </div>
           )}

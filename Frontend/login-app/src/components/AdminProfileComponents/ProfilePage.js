@@ -108,13 +108,13 @@ const ProfilePage = ({ userData }) => {
           </div>
         </div>
         
-        {/* User Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Personal Information */}
-          <div className="bg-white rounded-lg shadow-md p-6">
+        {/* User Details - Only Personal Information */}
+        <div className="max-w-4xl">
+          {/* Personal Information - Now takes full width */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h4 className="text-xl font-semibold mb-4">Información Personal</h4>
             
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <p className="text-gray-500 text-sm">Nombre Completo</p>
                 <p className="font-medium">{userData?.nombres || 'N/A'} {userData?.apellidos || ''}</p>
@@ -147,84 +147,32 @@ const ProfilePage = ({ userData }) => {
               </div>
             </div>
           </div>
-          
-          {/* Account Settings and Preferences */}
+
+          {/* Account Actions */}
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h4 className="text-xl font-semibold mb-4">Preferencias</h4>
+            <h4 className="text-xl font-semibold mb-4">Acciones de Cuenta</h4>
             
-            <div className="mb-6">
-              <p className="text-gray-500 text-sm mb-2">Temas de Interés</p>
-              <div className="flex flex-wrap gap-2">
-                {userData?.preferencias?.temas && userData.preferencias.temas.length > 0 ? (
-                  userData.preferencias.temas.map((tema, index) => (
-                    <span 
-                      key={index} 
-                      className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm"
-                    >
-                      {tema}
-                    </span>
-                  ))
-                ) : (
-                  <p className="text-gray-500">No hay temas seleccionados</p>
-                )}
-              </div>
-            </div>
-            
-            <div className="mb-6">
-              <p className="text-gray-500 text-sm mb-2">Autores Favoritos</p>
-              {userData?.preferencias?.autores && userData.preferencias.autores.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {userData.preferencias.autores.map((autor, index) => (
-                    <span 
-                      key={index} 
-                      className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm"
-                    >
-                      {autor}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500">No hay autores favoritos seleccionados</p>
-              )}
-            </div>
-            
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Recibir Noticias</p>
-                  <p className="text-gray-500 text-sm">Suscripción al boletín</p>
-                </div>
-                <div className="relative">
-                  <div className={`w-11 h-6 rounded-full transition-colors duration-300 ease-in-out ${userData?.suscrito_noticias ? 'bg-blue-500' : 'bg-gray-300'}`}>
-                    <div className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full transition-transform duration-300 ease-in-out ${userData?.suscrito_noticias ? 'transform translate-x-5' : ''}`}></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="mt-6 pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 border border-gray-100 rounded-lg">
                 <div>
                   <p className="font-medium">Cambiar Contraseña</p>
                   <p className="text-gray-500 text-sm">Actualiza tu contraseña de acceso</p>
                 </div>
                 <button 
-                  className="text-blue-500 hover:underline"
+                  className="text-blue-500 hover:underline font-medium"
                   onClick={handleEditProfile}
                 >
                   Cambiar
                 </button>
               </div>
-            </div>
-            
-            <div className="pt-4 border-t border-gray-100 mt-6">
-              <div className="flex items-center justify-between">
+              
+              <div className="flex items-center justify-between p-4 border border-red-100 rounded-lg">
                 <div>
                   <p className="font-medium text-red-600">Cerrar Sesión</p>
                   <p className="text-gray-500 text-sm">Salir de tu cuenta</p>
                 </div>
                 <button 
-                  className="text-red-600 hover:underline"
+                  className="text-red-600 hover:underline font-medium"
                   onClick={handleLogout}
                 >
                   Salir

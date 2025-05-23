@@ -5,7 +5,7 @@ import Dashboard from './AdminProfileComponents/Dashboard';
 import ManageBooks from './AdminProfileComponents/ManageBooks';
 import ManageMessages from './AdminProfileComponents/ManageMessages';
 import ManageUsers from './AdminProfileComponents/ManageUsers';
-import ProfilePage from './UserProfilePageComponents/ProfilePage';
+import ProfilePage from './AdminProfileComponents/ProfilePage';
 import EditProfile from './EditProfile';
 
 // Helper function to get cookie data
@@ -131,6 +131,7 @@ const RootProfile = () => {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('shoppingCart');
     // Limpiar las cookies
     document.cookie.split(";").forEach((cookie) => {
       document.cookie = cookie

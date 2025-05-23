@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Link,  useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import CachedImage from './CachedImage';
+import { getCartCount } from './cartUtils'; // Importar utilidad para obtener el contador del carrito
+import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
@@ -22,11 +24,90 @@ const HomePage = () => {
   const navigate = useNavigate();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [validImageUrls, setValidImageUrls] = useState([]);
-
   
+  // Estado para el contador del carrito
+  const [cartCount, setCartCount] = useState(0);
+  
+  // Estado para rastrear qué libros están en el carrito
+  const [booksInCart, setBooksInCart] = useState(new Set());
+  
+  // Estado para notificaciones toast
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
+  // Función para actualizar el contador del carrito
+  const updateCartCount = (count) => {
+    setCartCount(count);
+  };
+
+  // Componente Toast para notificaciones
+  const Toast = ({ message, type, visible }) => {
+    if (!visible) return null;
+    
+    return (
+      <div className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg transform transition-all duration-300 ease-in-out ${
+        visible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95'
+      } ${
+        type === 'success' ? 'bg-green-500 text-white' : 
+        type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+      }`}>
+        <div className="flex items-center">
+          {type === 'success' && (
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          {type === 'error' && (
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+          <span className="font-medium">{message}</span>
+        </div>
+      </div>
+    );
+  };
+  
+  // Función para mostrar notificaciones toast
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+    
+    // Ocultar después de 2 segundos
+    setTimeout(() => {
+      setToast({ visible: false, message: '', type: 'success' });
+    }, 2000);
+  };
+
+  // Función para obtener los libros que están en el carrito
+  const getBooksInCart = () => {
+  try {
+    const currentCart = localStorage.getItem('shoppingCart') 
+      ? JSON.parse(localStorage.getItem('shoppingCart')) 
+      : [];
+    
+    // Extract book IDs properly, handling both full book objects and ID strings
+    const bookIds = new Set(currentCart.map(item => {
+      if (typeof item.bookId === 'string') {
+        return item.bookId;
+      } else if (item.bookId && typeof item.bookId === 'object') {
+        return item.bookId._id || item.bookId.id;
+      }
+      return null;
+    }).filter(id => id !== null));
+    
+    console.log("ids in cart:", Array.from(bookIds));
+    setBooksInCart(bookIds);
+    return bookIds;
+  } catch (error) {
+    console.error('Error al leer el carrito:', error);
+    return new Set();
+  }
+};
 
   useEffect(() => {
+    // Cargar el contador inicial del carrito y los libros en el carrito
+    setCartCount(getCartCount());
+    getBooksInCart();
+    
     // Función para cargar todos los datos necesarios
     const fetchAllData = async () => {
       setIsLoading(true);
@@ -45,6 +126,40 @@ const HomePage = () => {
     };
 
     fetchAllData();
+
+    // Enhanced event listeners for cart synchronization
+    const handleStorageChange = (e) => {
+      console.log('HomePage: Storage change detected:', e.key);
+      if (e.key === 'shoppingCart' || e.key === 'cartLastUpdated') {
+        getBooksInCart();
+        setCartCount(getCartCount());
+      }
+    };
+
+    const handleCartUpdate = (e) => {
+      console.log('HomePage: Cart update event received:', e.type, e.detail);
+      getBooksInCart();
+      setCartCount(getCartCount());
+    };
+
+    const handleGlobalCartUpdate = () => {
+      console.log('HomePage: Global cart update received');
+      getBooksInCart();
+      setCartCount(getCartCount());
+    };
+
+    // Add all event listeners
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('cartUpdated', handleCartUpdate);
+    window.addEventListener('globalCartUpdate', handleGlobalCartUpdate);
+    window.addEventListener('cartChange', handleCartUpdate); // Keep backward compatibility
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('cartUpdated', handleCartUpdate);
+      window.removeEventListener('globalCartUpdate', handleGlobalCartUpdate);
+      window.removeEventListener('cartChange', handleCartUpdate);
+    };
   }, []);
 
   
@@ -168,13 +283,20 @@ const HomePage = () => {
 
  
 // Componente para mostrar un libro
-// Componente para mostrar un libro
-// Componente para mostrar un libro
 const BookCard = ({ book }) => {
   const navigate = useNavigate();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [validImageUrls, setValidImageUrls] = useState([]);
   const [imagesVerified, setImagesVerified] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false); // Estado para animación al agregar al carrito
+  
+  // Verificar si este libro está en el carrito
+  const isInCart = booksInCart.has(book._id);
+
+  console.log(booksInCart);
+  console.log(book.titulo);
+  console.log(book._id);
+  console.log(isInCart);
   
   useEffect(() => {
     // Only run image verification once
@@ -185,10 +307,11 @@ const BookCard = ({ book }) => {
         for (const image of book.imagenes) {
           try {
             // Check if image exists by making a HEAD request with axios
-            const response = await axios.head(image.url);
-            if (response.status === 200) {
-              validImages.push(image);
-            }
+            // const response = await axios.head(image.url);
+            // if (response.status === 200) {
+            //   validImages.push(image);
+            // }
+            validImages.push(image);
           } catch (error) {
             console.log(`Failed to verify image: ${image.url}`);
           }
@@ -218,6 +341,124 @@ const BookCard = ({ book }) => {
     navigate(`/libro/${book._id}`);
   };
 
+  // Función para agregar al carrito
+const handleAddToCart = async (e, book) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  // FIXED: Use the same logic as the isInCart check above
+  if (booksInCart.has(book._id)) {
+    return;
+  }
+  
+  // Check if there's available stock
+  if (!book.stock || book.stock <= 0) {
+    showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
+    return;
+  }
+
+  // Show loading animation
+  setAddingToCart(true); // FIXED: Changed from setAddingToCart(book._id) to setAddingToCart(true)
+
+  try {
+    console.log('HomePage: Adding book to cart...', { bookId: book._id, title: book.titulo });
+    
+    const token = getAuthToken();
+    if (!token) {
+      showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
+      return;
+    }
+
+    const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
+      id_libro: book._id,
+      cantidad: 1
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (response.data.status === 'success') {
+      const currentCart = localStorage.getItem('shoppingCart') 
+      ? JSON.parse(localStorage.getItem('shoppingCart')) 
+      : [];
+      
+      currentCart.push({
+        bookId: book,
+        quantity: 1
+      });
+      
+      localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
+
+      const newCount = response.data.data.carrito.n_item;
+      updateCartCount(newCount);
+
+      setBooksInCart(prevBooksInCart => {
+          const newBooksInCart = new Set(prevBooksInCart);
+          newBooksInCart.add(book._id);
+          return newBooksInCart;
+        });
+      
+      getBooksInCart();
+      
+      console.log('HomePage: Dispatching synchronization events...');
+      const cartChangeEvent = new CustomEvent('cartUpdated', {
+        bubbles: true,
+        detail: {
+          bookId: book._id,
+          action: 'add',
+          timestamp: Date.now(),
+          serverResponse: response.data
+        }
+      });
+      window.dispatchEvent(cartChangeEvent);
+      
+      localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+      window.dispatchEvent(new Event('globalCartUpdate'));
+      
+      showToast(response.data.message || `${book.titulo} agregado al carrito`);
+      
+      console.log('HomePage: All events dispatched successfully');
+    }
+
+    console.log("booksInCart:", booksInCart);
+  } catch (error) {
+    console.error('Error al agregar al carrito:', error);
+    
+    if (error.response) {
+      const { status, data } = error.response;
+      switch (status) {
+        case 400:
+          showToast(data.message || 'Datos inválidos o límites excedidos', 'error');
+          break;
+        case 401:
+          showToast('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.', 'error');
+          break;
+        case 403:
+          showToast('No tienes permisos para realizar esta acción', 'error');
+          break;
+        case 409:
+          showToast(data.message || 'Stock insuficiente o límites de carrito alcanzados', 'error');
+          break;
+        case 500:
+          showToast('Error interno del servidor. Intenta más tarde.', 'error');
+          break;
+        default:
+          showToast(data.message || 'Ocurrió un error inesperado al agregar el libro al carrito', 'error');
+      }
+    } else if (error.request) {
+      showToast('Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
+    } else {
+      showToast('Ocurrió un error inesperado', 'error');
+    }
+  } finally {
+    setTimeout(() => {
+      setAddingToCart(false); // FIXED: Changed from setAddingToCart(null) to setAddingToCart(false)
+    }, 500);
+  }
+};
   // Calcular precio con y sin descuento
   const precioBase = book.precio_info?.precio_base || book.precio;
   const tieneDescuento = book.precio_info?.descuentos?.some(d => d.activo);
@@ -345,7 +586,7 @@ const BookCard = ({ book }) => {
                 ${precioBase.toLocaleString('es-CO')}
               </span>
               <div className="text-lg font-bold text-red-600">
-                ${(book.precio - (book.precio * (porcentajeDescuento / 100))).toLocaleString('es-CO')}
+                ${(book.precio).toLocaleString('es-CO')}
               </div>
             </div>
           ) : (
@@ -355,20 +596,44 @@ const BookCard = ({ book }) => {
           )}
         </div>
         
-        {/* Botón Agregar al carrito (antes "Rápido") - ahora aparece en todas las tarjetas */}
+        {/* Botón Agregar al carrito */}
         <div className="mt-2 flex">
           <button 
-            className="flex items-center justify-center bg-red-600 text-white px-3 py-1 rounded-full text-sm hover:bg-red-700 transition-colors w-full opacity-50 cursor-not-allowed"
-            onClick={(e) => {
-              e.stopPropagation(); // Prevenir que el click se propague a la tarjeta completa
-            }}
-            disabled
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            Agregar al carrito
-          </button>
+    className={`flex items-center justify-center px-3 py-1 rounded-full text-sm w-full transition-colors
+      ${stockDisponible <= 0 
+        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+        : isInCart
+          ? 'bg-green-600 text-white cursor-default'
+          : addingToCart 
+            ? 'bg-gray-400 text-white cursor-wait' 
+            : 'bg-red-600 text-white hover:bg-red-700 cursor-pointer'}`}
+    onClick={(e) => handleAddToCart(e, book)}
+    disabled={stockDisponible <= 0 || addingToCart || isInCart}
+  >
+    {addingToCart ? (
+      <span className="flex items-center">
+        <svg className="w-4 h-4 mr-2 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Agregando...
+      </span>
+    ) : isInCart ? (
+      <>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+        Agregado
+      </>
+    ) : (
+      <>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+        Agregar al carrito
+      </>
+    )}
+  </button>
         </div>
 
         {/* Botón Ver detalles */}
@@ -391,7 +656,7 @@ const BookCard = ({ book }) => {
   // Banner promocional
   const PromoBanner = () => (
     <div className="relative overflow-hidden rounded-lg mb-8">
-      <img 
+      {/* <img 
         src="/promo-banner.jpg" 
         alt="Promoción" 
         className="w-full h-64 object-cover bg-blue-900"
@@ -410,7 +675,7 @@ const BookCard = ({ book }) => {
             </div>
           `;
         }}
-      />
+      /> */}
       
       <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-6">
         <h2 className="text-4xl md:text-5xl font-bold mb-4">BOOKS 60% DCTO</h2>
@@ -556,8 +821,6 @@ const BookCard = ({ book }) => {
     );
   };
 
-  // Eliminado el componente de búsqueda
-
   // Contenido principal que se mostrará dentro del layout
   const HomeContent = () => {
     if (isLoading) {
@@ -581,7 +844,6 @@ const BookCard = ({ book }) => {
           
           {/* Contenido principal (derecha) */}
           <div className="md:w-3/4 lg:w-4/5">
-
             <PromoBanner />
             <DiscountedBooksSection />
             <FeaturedBooksSection />
@@ -593,8 +855,14 @@ const BookCard = ({ book }) => {
   };
 
   return (
-    <UserLayout>
+    <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>
       <HomeContent />
+      {/* Toast notifications */}
+      <Toast 
+        message={toast.message} 
+        type={toast.type} 
+        visible={toast.visible} 
+      />
     </UserLayout>
   );
 };

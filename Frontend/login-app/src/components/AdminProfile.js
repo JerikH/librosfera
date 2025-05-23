@@ -5,7 +5,8 @@ import Dashboard from './AdminProfileComponents/Dashboard';
 import ManageBooks from './AdminProfileComponents/ManageBooks';
 import ManageMessages from './AdminProfileComponents/ManageMessages';
 import ManageUsers from './AdminProfileComponents/ManageUsers';
-import ProfilePage from './UserProfilePageComponents/ProfilePage';
+import ManageStores from './AdminProfileComponents/ManageStores'; // Importamos el nuevo componente
+import ProfilePage from './AdminProfileComponents/ProfilePage';
 import EditProfile from './EditProfile';
 
 // Helper function to get cookie data
@@ -131,6 +132,8 @@ const AdminProfile = () => {
   };
 
   const handleLogout = () => {
+
+    localStorage.removeItem('shoppingCart');
     // Limpiar las cookies
     document.cookie.split(";").forEach((cookie) => {
       document.cookie = cookie
@@ -222,12 +225,13 @@ const AdminProfile = () => {
             
             {/* Main content area */}
             <div className="flex-1 flex h-full">
-            {activeTab === 'inicio' && <Dashboard userData={userData} setActiveTab={setActiveTab} />}
-            {activeTab === 'administrar-libro' && <ManageBooks />}
-            {activeTab === 'gestionar-usuarios' && <ManageUsers />}
-            {activeTab === 'gestionar-mensajes' && <ManageMessages />}
-            {activeTab === 'mi-perfil' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
-          </div>
+              {activeTab === 'inicio' && <Dashboard userData={userData} setActiveTab={setActiveTab} />}
+              {activeTab === 'administrar-libro' && <ManageBooks />}
+              {activeTab === 'gestionar-usuarios' && <ManageUsers />}
+              {activeTab === 'gestionar-mensajes' && <ManageMessages />}
+              {activeTab === 'administrar-tiendas' && <ManageStores />} {/* Nueva opción */}
+              {activeTab === 'mi-perfil' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
+            </div>
           </>
         )}
       </div>

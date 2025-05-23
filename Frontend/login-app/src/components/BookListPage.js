@@ -445,7 +445,7 @@ const BookListPage = ({ category }) => {
                   ${precioBase.toLocaleString('es-CO')}
                 </span>
                 <div className="text-lg font-bold text-red-600">
-                    ${(book.precio - (book.precio * (porcentajeDescuento / 100))).toLocaleString('es-CO')}
+                    ${(book.precio).toLocaleString('es-CO')}
                 </div>
               </div>
             ) : (

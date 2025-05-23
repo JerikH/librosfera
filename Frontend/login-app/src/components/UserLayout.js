@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import ShoppingCart from './ShoppingCart'; // Importar el componente de carrito
+import { fetchCartUtils } from './cartUtils';
 
 // Helper function to get cookie data - same as in AdminProfile
 const getCookie = (name) => {
@@ -9,16 +11,15 @@ const getCookie = (name) => {
 };
 
 // Componente de layout para usuarios normales (no administradores)
-const UserLayout = ({ children }) => {
+const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [cartCount, setCartCount] = useState(0);
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const searchRef = useRef(null);
-
+  const [isCartOpen, setIsCartOpen] = useState(false); // Estado para controlar la visibilidad del carrito
 
   // Verificar la autenticación al cargar el componente
   useEffect(() => {
@@ -45,7 +46,12 @@ const UserLayout = ({ children }) => {
         }
         
         console.log("User data loaded from cookie");
+        console.log(parsedData.Data);
         setUserData(parsedData.Data);
+
+        if (parsedData && !(parsedData.Data.tipo_usuario == "administrador")&& !(parsedData.Data.tipo_usuario == "root")) {
+          fetchCartUtils();
+        }
         setIsLoading(false);
       } catch (error) {
         console.error("Error checking authentication:", error);
@@ -124,9 +130,9 @@ const UserLayout = ({ children }) => {
     navigate(`/search?q=${encodeURIComponent(suggestion.titulo)}`);
   };
 
-
   // Función para cerrar sesión
   const handleLogout = () => {
+    localStorage.removeItem('shoppingCart');
     // Limpiar las cookies
     document.cookie.split(";").forEach((cookie) => {
       document.cookie = cookie
@@ -159,6 +165,12 @@ const UserLayout = ({ children }) => {
     }
   };
 
+  // Función para alternar la visibilidad del carrito
+  const toggleCart = (e) => {
+    e.preventDefault(); // Prevenir navegación
+    setIsCartOpen(!isCartOpen);
+  };
+
   // Verificar el tipo de usuario (Si está logueado)
   const isLoggedIn = !!userData;
   const userType = userData?.tipo_usuario?.toLowerCase();
@@ -188,11 +200,11 @@ const UserLayout = ({ children }) => {
                   </button>
                   
                   {/* Mostrar "Mis Pedidos" solo para usuarios regulares (clientes) */}
-                  {isRegularUser && (
+                  {/* {isRegularUser && (
                     <Link to="/mis-pedidos" className="text-sm hover:underline">
                       Mis Pedidos
                     </Link>
-                  )}
+                  )} */}
                   
                   <button 
                     onClick={handleLogout}
@@ -270,9 +282,10 @@ const UserLayout = ({ children }) => {
           </div>
           
           <div className="ml-6">
-            <Link 
-              to={cartCount > 0 ? "/carrito" : "#"} 
-              className={`relative inline-block p-2 ${cartCount === 0 ? 'cursor-not-allowed opacity-50' : ''}`}
+            {/* Botón del carrito - Ahora abre el carrito desplegable en vez de navegar */}
+            <button 
+              onClick={toggleCart}
+              className="relative inline-block p-2 focus:outline-none"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -282,12 +295,12 @@ const UserLayout = ({ children }) => {
                   {cartCount}
                 </span>
               )}
-            </Link>
+            </button>
           </div>
         </div>
         
         {/* Navigation links - modificados para estar distribuidos uniformemente */}
-        <nav className="bg-gray-100">
+        {/* <nav className="bg-gray-100">
           <div className="container mx-auto">
             <ul className="flex justify-between items-center px-4 py-3 text-sm">
               {[
@@ -307,7 +320,7 @@ const UserLayout = ({ children }) => {
               ))}
             </ul>
           </div>
-        </nav>
+        </nav> */}
       </header>
       
       {/* Main content */}
@@ -392,6 +405,13 @@ const UserLayout = ({ children }) => {
           </div>
         </div>
       </footer>
+
+      {/* Componente de carrito desplegable */}
+      <ShoppingCart 
+        isOpen={isCartOpen} 
+        onClose={() => setIsCartOpen(false)} 
+        updateCartCount={updateCartCount}
+      />
     </div>
   );
 };
