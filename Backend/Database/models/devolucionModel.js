@@ -1,406 +1,657 @@
+// Database/models/devolucionModel.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
+const QRCode = require('qrcode');
 const addressSchema = require('./schemas/addressSchema');
 
-const devolucionSchema = new Schema({
-  // Identificador único de la devolución
-  id_devolucion: {
-    type: String,
-    default: function() {
-      return new mongoose.Types.ObjectId().toString();
-    },
-    unique: true,
-    index: true
+// Esquema para los items a devolver
+const devolucionItemSchema = new Schema({
+  id_item_venta: {
+    type: Schema.Types.ObjectId,
+    required: true
   },
   
-  // Transacción a la que está asociada la devolución
-  id_transaccion: {
+  id_libro: {
     type: Schema.Types.ObjectId,
-    ref: 'Transaccion',
+    ref: 'Libro',
+    required: true
+  },
+  
+  // Información snapshot del libro
+  info_libro: {
+    titulo: String,
+    autor: String,
+    isbn: String,
+    precio_pagado: Number
+  },
+  
+  cantidad_comprada: {
+    type: Number,
+    required: true
+  },
+  
+  cantidad_a_devolver: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  
+  motivo: {
+    type: String,
+    enum: [
+      'producto_dañado',
+      'producto_incorrecto',
+      'no_coincide_descripcion',
+      'no_satisfecho',
+      'error_compra',
+      'producto_no_llego',
+      'otro'
+    ],
+    required: true
+  },
+  
+  descripcion_problema: {
+    type: String,
+    required: true
+  },
+  
+  // Estado individual del item
+  estado_item: {
+    type: String,
+    enum: ['solicitado', 'aprobado', 'rechazado', 'recibido', 'inspeccionado', 'reembolsado'],
+    default: 'solicitado'
+  },
+  
+  // Resultado de la inspección
+  inspeccion: {
+    fecha: Date,
+    resultado: {
+      type: String,
+      enum: ['aprobado', 'rechazado', 'aprobado_parcial']
+    },
+    notas: String,
+    porcentaje_reembolso: {
+      type: Number,
+      min: 0,
+      max: 100
+    },
+    inspector: {
+      type: Schema.Types.ObjectId,
+      ref: 'Usuario'
+    }
+  },
+  
+  monto_reembolso: {
+    type: Number,
+    default: 0
+  }
+});
+
+const devolucionSchema = new Schema({
+  // Código único de devolución
+  codigo_devolucion: {
+    type: String,
+    unique: true,
+    index: true,
+    default: function() {
+      const fecha = new Date();
+      const año = fecha.getFullYear();
+      const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+      const dia = String(fecha.getDate()).padStart(2, '0');
+      const random = Math.random().toString(36).substr(2, 6).toUpperCase();
+      return `DEV-${año}${mes}${dia}-${random}`;
+    }
+  },
+  
+  // Referencia a la venta original
+  id_venta: {
+    type: Schema.Types.ObjectId,
+    ref: 'Venta',
     required: true,
     index: true
   },
   
-  // Usuario que solicita la devolución
-  id_usuario: {
+  numero_venta: {
+    type: String,
+    required: true
+  },
+  
+  // Cliente
+  id_cliente: {
     type: Schema.Types.ObjectId,
     ref: 'Usuario',
     required: true,
     index: true
   },
   
-  // Motivo principal de la devolución
-  motivo: {
-    type: String,
-    enum: ['mal_estado', 'no_satisfactorio', 'retraso_entrega', 'otro'],
-    required: true
-  },
+  // Items a devolver
+  items: [devolucionItemSchema],
   
-  // Descripción detallada del motivo
-  descripcion: {
-    type: String,
-    trim: true
-  },
-  
-  // Ítems que se están devolviendo
-  items: [{
-    id_libro: {
-      type: Schema.Types.ObjectId,
-      ref: 'Libro',
+  // Totales
+  totales: {
+    monto_total_compra: {
+      type: Number,
       required: true
     },
-    cantidad: {
+    monto_items_devolucion: {
       type: Number,
-      required: true,
-      min: 1
+      required: true
     },
-    titulo: String, // Para mantener el título incluso si el libro cambia
-    precio_unitario: Number,
-    subtotal: Number,
-    estado_item: {
-      type: String,
-      enum: ['solicitado', 'en_revision', 'aceptado', 'rechazado'],
-      default: 'solicitado'
+    monto_aprobado_reembolso: {
+      type: Number,
+      default: 0
+    },
+    monto_reembolsado: {
+      type: Number,
+      default: 0
     }
-  }],
-  
-  // Fecha de solicitud
-  fecha_solicitud: {
-    type: Date,
-    default: Date.now,
-    index: true
-  },
-  
-  // Código QR o código único enviado al cliente para la devolución
-  codigo_devolucion: {
-    type: String,
-    required: true,
-    unique: true
   },
   
   // Estado general de la devolución
   estado: {
     type: String,
-    enum: ['solicitada', 'en_proceso', 'aceptada', 'rechazada', 'completada'],
+    enum: [
+      'solicitada',
+      'aprobada',
+      'rechazada',
+      'esperando_envio',
+      'en_transito',
+      'recibida',
+      'en_inspeccion',
+      'reembolso_aprobado',
+      'reembolso_procesando',
+      'reembolso_completado',
+      'cerrada',
+      'cancelada'
+    ],
     default: 'solicitada',
     index: true
   },
   
-  // Información de reembolso (si aplica)
-  reembolso: {
-    monto: Number,
+  // Información de envío de devolución
+  envio_devolucion: {
     metodo: {
       type: String,
-      enum: ['mismo_metodo_pago', 'saldo_cuenta', 'otro']
+      enum: ['correo', 'entrega_tienda', 'recoleccion_domicilio']
     },
-    fecha_reembolso: Date,
-    id_transaccion_reembolso: Schema.Types.ObjectId,
+    direccion_recoleccion: addressSchema,
+    fecha_recoleccion_programada: Date,
+    guia_envio: String,
+    empresa_envio: String,
+    fecha_envio: Date,
+    fecha_recepcion: Date,
+    costo_envio_cliente: {
+      type: Number,
+      default: 0
+    },
+    notas_envio: String
+  },
+  
+  // QR Code
+  qr_code: {
+    codigo: {
+      type: String,
+      unique: true,
+      required: true
+    },
+    url_rastreo: {
+      type: String,
+      required: true
+    },
+    imagen_base64: String,
+    fecha_generacion: {
+      type: Date,
+      default: Date.now
+    }
+  },
+  
+  // Proceso de reembolso
+  reembolso: {
+    metodo: {
+      type: String,
+      enum: ['tarjeta_original', 'credito_tienda', 'transferencia']
+    },
+    id_tarjeta_original: String,
+    fecha_aprobacion: Date,
+    fecha_procesamiento: Date,
+    fecha_completado: Date,
+    referencia_reembolso: String,
     notas: String
   },
   
-  // Método de devolución
-  metodo_devolucion: {
-    type: String,
-    enum: ['tienda_fisica', 'recogida_domicilio', 'envio_cliente'],
-    required: true
-  },
-  
-  // Tienda física donde se realizará la devolución (si aplica)
-  id_tienda_devolucion: {
-    type: Schema.Types.ObjectId,
-    ref: 'Tienda_Fisica'
-  },
-  
-  // Dirección para recogida a domicilio (si aplica)
-  direccion_recogida: {
-    type: [addressSchema]
-  },
-  
-  // Fechas de procesamiento
-  fechas: {
-    aprobacion: Date,
-    recepcion_items: Date,
-    reembolso: Date
-  },
-  
-  // Historial de cambios de estado
-  historial: [{
-    estado_anterior: String,
-    estado_nuevo: String,
+  // Comunicación con el cliente
+  comunicaciones: [{
+    tipo: {
+      type: String,
+      enum: ['email', 'sms', 'llamada', 'nota_interna']
+    },
     fecha: {
       type: Date,
       default: Date.now
     },
-    id_usuario_operacion: {
+    asunto: String,
+    mensaje: String,
+    enviado_por: {
+      type: Schema.Types.ObjectId,
+      ref: 'Usuario'
+    }
+  }],
+  
+  // Documentos adjuntos (fotos del producto dañado, etc.)
+  documentos: [{
+    tipo: {
+      type: String,
+      enum: ['foto_producto', 'video', 'comprobante', 'otro']
+    },
+    url: String,
+    nombre_archivo: String,
+    fecha_subida: {
+      type: Date,
+      default: Date.now
+    },
+    subido_por: {
+      type: String,
+      enum: ['cliente', 'administrador']
+    }
+  }],
+  
+  // Historial de eventos
+  historial: [{
+    evento: {
+      type: String,
+      required: true
+    },
+    fecha: {
+      type: Date,
+      default: Date.now
+    },
+    descripcion: String,
+    usuario_responsable: {
       type: Schema.Types.ObjectId,
       ref: 'Usuario'
     },
-    notas: String
+    metadata: Schema.Types.Mixed
   }],
   
-  // Imágenes adjuntas del producto (opcional)
-  imagenes: [String],
+  // Fechas importantes
+  fecha_solicitud: {
+    type: Date,
+    default: Date.now
+  },
   
-  // Notas internas
-  notas_internas: String
+  fecha_limite_envio: {
+    type: Date,
+    default: function() {
+      const fecha = new Date();
+      fecha.setDate(fecha.getDate() + 15); // 15 días para enviar el producto
+      return fecha;
+    }
+  },
+  
+  fecha_resolucion: Date,
+  
+  // Timestamps
+  fecha_creacion: {
+    type: Date,
+    default: Date.now
+  },
+  
+  fecha_actualizacion: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: {
+    createdAt: 'fecha_creacion',
+    updatedAt: 'fecha_actualizacion'
+  }
 });
 
 // ÍNDICES
-devolucionSchema.index({ fecha_solicitud: -1 });
+devolucionSchema.index({ id_cliente: 1, fecha_solicitud: -1 });
 devolucionSchema.index({ estado: 1, fecha_solicitud: -1 });
-devolucionSchema.index({ id_transaccion: 1, estado: 1 });
+devolucionSchema.index({ 'qr_code.codigo': 1 });
 
 // MIDDLEWARE
-// Actualiza el historial cuando cambia el estado
-devolucionSchema.pre('save', function(next) {
-  if (this.isModified('estado')) {
-    const estadoAnterior = this.modifiedPaths().includes('estado') 
-      ? this._original.estado 
-      : undefined;
+
+// Generar QR antes de guardar
+devolucionSchema.pre('save', async function(next) {
+  if (this.isNew) {
+    try {
+      // Generar URL de rastreo
+      const baseUrl = process.env.FRONT_URL || 'http://localhost:3000';
+      this.qr_code.url_rastreo = `${baseUrl}/devolucion/rastreo/${this.codigo_devolucion}`;
       
-    if (estadoAnterior && estadoAnterior !== this.estado) {
-      this.historial.push({
-        estado_anterior: estadoAnterior,
-        estado_nuevo: this.estado,
-        fecha: new Date()
-      });
+      // Generar código QR único
+      this.qr_code.codigo = `QR-${this.codigo_devolucion}`;
+      
+      // Generar imagen QR en base64
+      const qrOptions = {
+        type: 'png',
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      };
+      
+      this.qr_code.imagen_base64 = await QRCode.toDataURL(this.qr_code.url_rastreo, qrOptions);
+      
+    } catch (error) {
+      console.error('Error generando QR:', error);
+      return next(error);
     }
   }
+  
   next();
 });
 
 // MÉTODOS DE INSTANCIA
 
-// Aprobar la devolución
-devolucionSchema.methods.aprobar = async function(idUsuarioAdmin, notas = '') {
-  if (this.estado !== 'solicitada') {
-    throw new Error('Solo se pueden aprobar devoluciones en estado "solicitada"');
-  }
-  
-  // Verificar que no hayan pasado más de 8 días desde la compra
-  const Transaccion = mongoose.model('Transaccion');
-  const transaccion = await Transaccion.findById(this.id_transaccion);
-  
-  if (!transaccion) {
-    throw new Error('Transacción no encontrada');
-  }
-  
-  const diasTranscurridos = Math.floor(
-    (this.fecha_solicitud - transaccion.fecha_pago) / (1000 * 60 * 60 * 24)
-  );
-  
-  if (diasTranscurridos > 8) {
-    throw new Error('No se pueden hacer devoluciones pasados 8 días después de haber recibido el producto');
-  }
-  
-  this.estado = 'aceptada';
-  this.fechas.aprobacion = new Date();
-  
-  // Actualizar el estado de los items
-  this.items.forEach(item => {
-    item.estado_item = 'aceptado';
-  });
-  
-  // Añadir al historial
+// Registrar evento en el historial
+devolucionSchema.methods.registrarEvento = async function(evento, descripcion, usuarioId = null, metadata = {}) {
   this.historial.push({
-    estado_anterior: 'solicitada',
-    estado_nuevo: 'aceptada',
-    fecha: new Date(),
-    id_usuario_operacion: idUsuarioAdmin,
-    notas: notas || 'Devolución aprobada'
+    evento,
+    descripcion,
+    usuario_responsable: usuarioId,
+    metadata
   });
   
   return this.save();
 };
 
-// Rechazar la devolución
-devolucionSchema.methods.rechazar = async function(idUsuarioAdmin, motivo) {
-  if (this.estado !== 'solicitada' && this.estado !== 'en_proceso') {
-    throw new Error('Solo se pueden rechazar devoluciones en estado "solicitada" o "en_proceso"');
+// Cambiar estado
+devolucionSchema.methods.cambiarEstado = async function(nuevoEstado, usuarioId, descripcion = '') {
+  const estadoAnterior = this.estado;
+  this.estado = nuevoEstado;
+  
+  await this.registrarEvento(
+    'cambio_estado',
+    descripcion || `Estado cambiado de ${estadoAnterior} a ${nuevoEstado}`,
+    usuarioId,
+    { estado_anterior: estadoAnterior, estado_nuevo: nuevoEstado }
+  );
+  
+  return this;
+};
+
+// Aprobar devolución
+devolucionSchema.methods.aprobar = async function(usuarioId, notas = '') {
+  if (this.estado !== 'solicitada') {
+    throw new Error('Solo se pueden aprobar devoluciones en estado solicitada');
   }
   
-  this.estado = 'rechazada';
+  // Aprobar todos los items
+  this.items.forEach(item => {
+    item.estado_item = 'aprobado';
+  });
   
-  // Actualizar el estado de los items
+  await this.cambiarEstado('aprobada', usuarioId, `Devolución aprobada. ${notas}`);
+  await this.cambiarEstado('esperando_envio', usuarioId, 'Esperando que el cliente envíe los productos');
+  
+  return this;
+};
+
+// Rechazar devolución
+devolucionSchema.methods.rechazar = async function(usuarioId, motivo) {
+  if (this.estado !== 'solicitada') {
+    throw new Error('Solo se pueden rechazar devoluciones en estado solicitada');
+  }
+  
+  // Rechazar todos los items
   this.items.forEach(item => {
     item.estado_item = 'rechazado';
   });
   
-  // Añadir al historial
-  this.historial.push({
-    estado_anterior: this.estado,
-    estado_nuevo: 'rechazada',
-    fecha: new Date(),
-    id_usuario_operacion: idUsuarioAdmin,
-    notas: motivo || 'Devolución rechazada'
-  });
+  await this.cambiarEstado('rechazada', usuarioId, `Devolución rechazada: ${motivo}`);
   
-  return this.save();
+  return this;
 };
 
-// Registrar recepción de items
-devolucionSchema.methods.registrarRecepcion = async function(idUsuarioAdmin, notas = '') {
-  if (this.estado !== 'aceptada') {
-    throw new Error('Solo se pueden recibir devoluciones en estado "aceptada"');
+// Marcar como recibida
+devolucionSchema.methods.marcarComoRecibida = async function(usuarioId, datosRecepcion = {}) {
+  if (!['esperando_envio', 'en_transito'].includes(this.estado)) {
+    throw new Error('Estado inválido para marcar como recibida');
   }
   
-  this.fechas.recepcion_items = new Date();
+  this.envio_devolucion.fecha_recepcion = datosRecepcion.fecha || new Date();
+  if (datosRecepcion.notas) {
+    this.envio_devolucion.notas_envio = datosRecepcion.notas;
+  }
   
-  // Añadir al historial
-  this.historial.push({
-    estado_anterior: this.estado,
-    estado_nuevo: this.estado,
-    fecha: new Date(),
-    id_usuario_operacion: idUsuarioAdmin,
-    notas: notas || 'Ítems recibidos'
+  // Actualizar items
+  this.items.forEach(item => {
+    if (item.estado_item === 'aprobado') {
+      item.estado_item = 'recibido';
+    }
   });
+  
+  await this.cambiarEstado('recibida', usuarioId, 'Productos recibidos en almacén');
+  await this.cambiarEstado('en_inspeccion', usuarioId, 'Iniciando proceso de inspección');
+  
+  return this;
+};
+
+// Completar inspección de un item
+devolucionSchema.methods.inspeccionarItem = async function(idItem, resultado, usuarioId, notas = '', porcentajeReembolso = 100) {
+  const item = this.items.id(idItem);
+  if (!item) {
+    throw new Error('Item no encontrado');
+  }
+  
+  if (item.estado_item !== 'recibido') {
+    throw new Error('El item debe estar en estado recibido para ser inspeccionado');
+  }
+  
+  item.inspeccion = {
+    fecha: new Date(),
+    resultado,
+    notas,
+    porcentaje_reembolso: porcentajeReembolso,
+    inspector: usuarioId
+  };
+  
+  item.estado_item = 'inspeccionado';
+  
+  // Calcular monto de reembolso para este item
+  if (resultado === 'aprobado') {
+    item.monto_reembolso = item.info_libro.precio_pagado * (porcentajeReembolso / 100);
+  } else if (resultado === 'aprobado_parcial') {
+    item.monto_reembolso = item.info_libro.precio_pagado * (porcentajeReembolso / 100);
+  } else {
+    item.monto_reembolso = 0;
+  }
+  
+  // Verificar si todos los items han sido inspeccionados
+  const todosInspeccionados = this.items.every(i => i.estado_item === 'inspeccionado');
+  
+  if (todosInspeccionados) {
+    // Calcular total de reembolso
+    this.totales.monto_aprobado_reembolso = this.items.reduce((total, i) => total + i.monto_reembolso, 0);
+    
+    await this.cambiarEstado('reembolso_aprobado', usuarioId, 'Inspección completada, reembolso aprobado');
+  }
   
   return this.save();
 };
 
 // Procesar reembolso
-devolucionSchema.methods.procesarReembolso = async function(montoReembolso, metodoReembolso, idUsuarioAdmin, notas = '') {
-  if (this.estado !== 'aceptada' || !this.fechas.recepcion_items) {
-    throw new Error('Solo se pueden reembolsar devoluciones aceptadas y recibidas');
+devolucionSchema.methods.procesarReembolso = async function(datosReembolso, usuarioId) {
+  if (this.estado !== 'reembolso_aprobado') {
+    throw new Error('El reembolso debe estar aprobado para procesarlo');
   }
   
   this.reembolso = {
-    monto: montoReembolso,
-    metodo: metodoReembolso,
-    fecha_reembolso: new Date(),
-    notas: notas
+    metodo: datosReembolso.metodo,
+    id_tarjeta_original: datosReembolso.id_tarjeta_original,
+    fecha_procesamiento: new Date(),
+    referencia_reembolso: datosReembolso.referencia,
+    notas: datosReembolso.notas
   };
   
-  this.fechas.reembolso = new Date();
-  this.estado = 'completada';
+  await this.cambiarEstado('reembolso_procesando', usuarioId, 'Procesando reembolso');
   
-  // Añadir al historial
-  this.historial.push({
-    estado_anterior: 'aceptada',
-    estado_nuevo: 'completada',
-    fecha: new Date(),
-    id_usuario_operacion: idUsuarioAdmin,
-    notas: `Reembolso procesado por ${montoReembolso}. ${notas}`
-  });
-  
-  // Si el reembolso va al saldo del usuario, actualizarlo
-  if (metodoReembolso === 'saldo_cuenta') {
-    const Saldo = mongoose.model('Saldo');
-    await Saldo.obtenerOCrearSaldo(this.id_usuario)
-      .then(saldo => saldo.agregarFondos(
-        montoReembolso, 
-        'reembolso', 
-        `Reembolso por devolución #${this.id_devolucion}`,
-        this._id,
-        idUsuarioAdmin
-      ));
+  return this;
+};
+
+// Completar reembolso
+devolucionSchema.methods.completarReembolso = async function(usuarioId, referencia = null) {
+  if (this.estado !== 'reembolso_procesando') {
+    throw new Error('El reembolso debe estar en procesamiento para completarlo');
   }
   
+  this.reembolso.fecha_completado = new Date();
+  if (referencia) {
+    this.reembolso.referencia_reembolso = referencia;
+  }
+  
+  this.totales.monto_reembolsado = this.totales.monto_aprobado_reembolso;
+  this.fecha_resolucion = new Date();
+  
+  // Actualizar items
+  this.items.forEach(item => {
+    if (item.monto_reembolso > 0) {
+      item.estado_item = 'reembolsado';
+    }
+  });
+  
+  await this.cambiarEstado('reembolso_completado', usuarioId, 'Reembolso completado exitosamente');
+  await this.cambiarEstado('cerrada', usuarioId, 'Devolución cerrada');
+  
+  return this;
+};
+
+// Cancelar devolución
+devolucionSchema.methods.cancelar = async function(usuarioId, motivo) {
+  const estadosNoCancelables = ['reembolso_procesando', 'reembolso_completado', 'cerrada', 'cancelada'];
+  
+  if (estadosNoCancelables.includes(this.estado)) {
+    throw new Error('No se puede cancelar la devolución en este estado');
+  }
+  
+  await this.cambiarEstado('cancelada', usuarioId, `Devolución cancelada: ${motivo}`);
+  
+  return this;
+};
+
+// Agregar comunicación
+devolucionSchema.methods.agregarComunicacion = async function(tipo, asunto, mensaje, usuarioId) {
+  this.comunicaciones.push({
+    tipo,
+    asunto,
+    mensaje,
+    enviado_por: usuarioId
+  });
+  
+  return this.save();
+};
+
+// Agregar documento
+devolucionSchema.methods.agregarDocumento = async function(datosDocumento) {
+  this.documentos.push(datosDocumento);
   return this.save();
 };
 
 // MÉTODOS ESTÁTICOS
 
-// Crear una nueva solicitud de devolución
-devolucionSchema.statics.solicitarDevolucion = async function(idTransaccion, idUsuario, motivo, descripcion, items, metodoDevolucion, direccionOTienda) {
-  // Verificar la transacción
-  const Transaccion = mongoose.model('Transaccion');
-  const transaccion = await Transaccion.findById(idTransaccion);
-  
-  if (!transaccion) {
-    throw new Error('Transacción no encontrada');
+// Crear devolución desde una venta
+devolucionSchema.statics.crearDesdeVenta = async function(venta, itemsDevolucion, idCliente) {
+  // Validar que la venta puede tener devolución
+  const validacion = venta.puedeSolicitarDevolucion();
+  if (!validacion.puede) {
+    throw new Error(validacion.razon);
   }
   
-  // Verificar que el usuario sea el propietario de la transacción
-  if (transaccion.id_usuario.toString() !== idUsuario.toString()) {
-    throw new Error('El usuario no es propietario de esta transacción');
-  }
-  
-  // Verificar que no hayan pasado más de 8 días
-  const diasTranscurridos = Math.floor(
-    (new Date() - transaccion.fecha_pago) / (1000 * 60 * 60 * 24)
-  );
-  
-  if (diasTranscurridos > 8) {
-    throw new Error('No se pueden hacer devoluciones pasados 8 días después de haber recibido el producto');
-  }
-  
-  // Verificar que los items estén en la transacción
-  for (const item of items) {
-    const transaccionItem = transaccion.items.find(
-      i => i.id_libro.toString() === item.id_libro.toString()
-    );
+  // Preparar items de devolución
+  const itemsPreparados = itemsDevolucion.map(itemDev => {
+    const itemVenta = venta.items.find(i => i._id.toString() === itemDev.id_item_venta);
     
-    if (!transaccionItem) {
-      throw new Error(`El libro ${item.id_libro} no está en esta transacción`);
+    if (!itemVenta) {
+      throw new Error(`Item de venta no encontrado: ${itemDev.id_item_venta}`);
     }
     
-    if (item.cantidad > transaccionItem.cantidad) {
-      throw new Error(`No se puede devolver más unidades (${item.cantidad}) que las compradas (${transaccionItem.cantidad})`);
+    if (itemDev.cantidad > itemVenta.cantidad - itemVenta.cantidad_devuelta) {
+      throw new Error(`Cantidad a devolver excede la cantidad disponible para el item ${itemVenta.snapshot.titulo}`);
     }
     
-    // Añadir información adicional del item
-    item.titulo = transaccionItem.titulo;
-    item.precio_unitario = transaccionItem.precio_unitario;
-    item.subtotal = transaccionItem.precio_unitario * item.cantidad;
-  }
-  
-  // Generar código QR único
-  const codigoDevolucion = `DEV-${idTransaccion}-${Date.now().toString(36)}`;
-  
-  // Crear objeto de devolución
-  const devolucion = new this({
-    id_transaccion: idTransaccion,
-    id_usuario: idUsuario,
-    motivo: motivo,
-    descripcion: descripcion,
-    items: items,
-    codigo_devolucion: codigoDevolucion,
-    metodo_devolucion: metodoDevolucion
+    return {
+      id_item_venta: itemVenta._id,
+      id_libro: itemVenta.id_libro,
+      info_libro: {
+        titulo: itemVenta.snapshot.titulo,
+        autor: itemVenta.snapshot.autor,
+        isbn: itemVenta.snapshot.isbn,
+        precio_pagado: itemVenta.precios.precio_unitario_final
+      },
+      cantidad_comprada: itemVenta.cantidad,
+      cantidad_a_devolver: itemDev.cantidad,
+      motivo: itemDev.motivo,
+      descripcion_problema: itemDev.descripcion
+    };
   });
   
-  // Agregar dirección o tienda según el método
-  if (metodoDevolucion === 'tienda_fisica') {
-    devolucion.id_tienda_devolucion = direccionOTienda;
-  } else if (metodoDevolucion === 'recogida_domicilio') {
-    devolucion.direccion_recogida = direccionOTienda;
-  }
+  // Calcular totales
+  const montoItemsDevolucion = itemsPreparados.reduce((total, item) => {
+    return total + (item.info_libro.precio_pagado * item.cantidad_a_devolver);
+  }, 0);
+  
+  // Crear devolución
+  const devolucion = new this({
+    id_venta: venta._id,
+    numero_venta: venta.numero_venta,
+    id_cliente: idCliente,
+    items: itemsPreparados,
+    totales: {
+      monto_total_compra: venta.totales.total_final,
+      monto_items_devolucion: montoItemsDevolucion
+    }
+  });
   
   await devolucion.save();
   
-  // Actualizar la transacción para indicar que hay una devolución en proceso
-  await Transaccion.findByIdAndUpdate(
-    idTransaccion,
-    { $set: { 'items.$[elem].estado_item': 'en_proceso_devolucion' } },
-    { 
-      arrayFilters: [{ 
-        'elem.id_libro': { $in: items.map(item => item.id_libro) } 
-      }] 
-    }
+  // Registrar evento inicial
+  await devolucion.registrarEvento(
+    'solicitud_creada',
+    'Solicitud de devolución creada por el cliente',
+    idCliente
   );
   
   return devolucion;
 };
 
-// Obtener devoluciones pendientes
-devolucionSchema.statics.obtenerDevolucionesPendientes = function() {
-  return this.find({
-    estado: { $in: ['solicitada', 'en_proceso', 'aceptada'] }
-  })
-  .sort({ fecha_solicitud: 1 })
-  .populate('id_usuario', 'nombre email')
-  .populate('id_transaccion', 'id_transaccion fecha_pago');
+// Obtener devoluciones de un cliente
+devolucionSchema.statics.obtenerDevolucionesCliente = function(idCliente, opciones = {}) {
+  const {
+    page = 1,
+    limit = 10,
+    estado = null
+  } = opciones;
+  
+  const query = { id_cliente: idCliente };
+  if (estado) {
+    query.estado = estado;
+  }
+  
+  return this.find(query)
+    .populate('id_venta', 'numero_venta fecha_creacion')
+    .sort('-fecha_solicitud')
+    .limit(limit * 1)
+    .skip((page - 1) * limit);
 };
 
-// Obtener devoluciones de un usuario
-devolucionSchema.statics.obtenerDevolucionesUsuario = function(idUsuario) {
-  return this.find({ id_usuario: idUsuario })
-    .sort({ fecha_solicitud: -1 });
+// Buscar por código QR
+devolucionSchema.statics.buscarPorCodigoQR = function(codigoQR) {
+  return this.findOne({ 'qr_code.codigo': codigoQR })
+    .populate('id_cliente', 'nombres apellidos email')
+    .populate('id_venta', 'numero_venta');
 };
 
-// Validar código de devolución
-devolucionSchema.statics.validarCodigoDevolucion = function(codigo) {
-  return this.findOne({ codigo_devolucion: codigo });
+// Buscar por código de devolución
+devolucionSchema.statics.buscarPorCodigo = function(codigoDevolucion) {
+  return this.findOne({ codigo_devolucion: codigoDevolucion })
+    .populate('id_cliente', 'nombres apellidos email')
+    .populate('id_venta', 'numero_venta');
 };
 
 const Devolucion = mongoose.model('Devolucion', devolucionSchema);
