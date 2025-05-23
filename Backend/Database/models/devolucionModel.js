@@ -1,4 +1,3 @@
-// Database/models/devolucionModel.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const QRCode = require('qrcode');
@@ -349,8 +348,8 @@ devolucionSchema.pre('save', async function(next) {
 
 // MÉTODOS DE INSTANCIA
 
-// Registrar evento en el historial
-devolucionSchema.methods.registrarEvento = async function(evento, descripcion, usuarioId = null, metadata = {}) {
+// Registrar evento en el historial (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.registrarEvento = function(evento, descripcion, usuarioId = null, metadata = {}) {
   this.historial.push({
     evento,
     descripcion,
@@ -358,15 +357,15 @@ devolucionSchema.methods.registrarEvento = async function(evento, descripcion, u
     metadata
   });
   
-  return this.save();
+  return this; // Retornamos el objeto sin guardarlo
 };
 
-// Cambiar estado
-devolucionSchema.methods.cambiarEstado = async function(nuevoEstado, usuarioId, descripcion = '') {
+// Cambiar estado (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.cambiarEstado = function(nuevoEstado, usuarioId, descripcion = '') {
   const estadoAnterior = this.estado;
   this.estado = nuevoEstado;
   
-  await this.registrarEvento(
+  this.registrarEvento(
     'cambio_estado',
     descripcion || `Estado cambiado de ${estadoAnterior} a ${nuevoEstado}`,
     usuarioId,
@@ -376,8 +375,8 @@ devolucionSchema.methods.cambiarEstado = async function(nuevoEstado, usuarioId, 
   return this;
 };
 
-// Aprobar devolución
-devolucionSchema.methods.aprobar = async function(usuarioId, notas = '') {
+// Aprobar devolución (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.aprobar = function(usuarioId, notas = '') {
   if (this.estado !== 'solicitada') {
     throw new Error('Solo se pueden aprobar devoluciones en estado solicitada');
   }
@@ -387,14 +386,14 @@ devolucionSchema.methods.aprobar = async function(usuarioId, notas = '') {
     item.estado_item = 'aprobado';
   });
   
-  await this.cambiarEstado('aprobada', usuarioId, `Devolución aprobada. ${notas}`);
-  await this.cambiarEstado('esperando_envio', usuarioId, 'Esperando que el cliente envíe los productos');
+  this.cambiarEstado('aprobada', usuarioId, `Devolución aprobada. ${notas}`);
+  this.cambiarEstado('esperando_envio', usuarioId, 'Esperando que el cliente envíe los productos');
   
   return this;
 };
 
-// Rechazar devolución
-devolucionSchema.methods.rechazar = async function(usuarioId, motivo) {
+// Rechazar devolución (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.rechazar = function(usuarioId, motivo) {
   if (this.estado !== 'solicitada') {
     throw new Error('Solo se pueden rechazar devoluciones en estado solicitada');
   }
@@ -404,13 +403,13 @@ devolucionSchema.methods.rechazar = async function(usuarioId, motivo) {
     item.estado_item = 'rechazado';
   });
   
-  await this.cambiarEstado('rechazada', usuarioId, `Devolución rechazada: ${motivo}`);
+  this.cambiarEstado('rechazada', usuarioId, `Devolución rechazada: ${motivo}`);
   
   return this;
 };
 
-// Marcar como recibida
-devolucionSchema.methods.marcarComoRecibida = async function(usuarioId, datosRecepcion = {}) {
+// Marcar como recibida (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.marcarComoRecibida = function(usuarioId, datosRecepcion = {}) {
   if (!['esperando_envio', 'en_transito'].includes(this.estado)) {
     throw new Error('Estado inválido para marcar como recibida');
   }
@@ -427,14 +426,14 @@ devolucionSchema.methods.marcarComoRecibida = async function(usuarioId, datosRec
     }
   });
   
-  await this.cambiarEstado('recibida', usuarioId, 'Productos recibidos en almacén');
-  await this.cambiarEstado('en_inspeccion', usuarioId, 'Iniciando proceso de inspección');
+  this.cambiarEstado('recibida', usuarioId, 'Productos recibidos en almacén');
+  this.cambiarEstado('en_inspeccion', usuarioId, 'Iniciando proceso de inspección');
   
   return this;
 };
 
-// Completar inspección de un item
-devolucionSchema.methods.inspeccionarItem = async function(idItem, resultado, usuarioId, notas = '', porcentajeReembolso = 100) {
+// Completar inspección de un item (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.inspeccionarItem = function(idItem, resultado, usuarioId, notas = '', porcentajeReembolso = 100) {
   const item = this.items.id(idItem);
   if (!item) {
     throw new Error('Item no encontrado');
@@ -470,14 +469,14 @@ devolucionSchema.methods.inspeccionarItem = async function(idItem, resultado, us
     // Calcular total de reembolso
     this.totales.monto_aprobado_reembolso = this.items.reduce((total, i) => total + i.monto_reembolso, 0);
     
-    await this.cambiarEstado('reembolso_aprobado', usuarioId, 'Inspección completada, reembolso aprobado');
+    this.cambiarEstado('reembolso_aprobado', usuarioId, 'Inspección completada, reembolso aprobado');
   }
   
-  return this.save();
+  return this;
 };
 
-// Procesar reembolso
-devolucionSchema.methods.procesarReembolso = async function(datosReembolso, usuarioId) {
+// Procesar reembolso (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.procesarReembolso = function(datosReembolso, usuarioId) {
   if (this.estado !== 'reembolso_aprobado') {
     throw new Error('El reembolso debe estar aprobado para procesarlo');
   }
@@ -490,13 +489,13 @@ devolucionSchema.methods.procesarReembolso = async function(datosReembolso, usua
     notas: datosReembolso.notas
   };
   
-  await this.cambiarEstado('reembolso_procesando', usuarioId, 'Procesando reembolso');
+  this.cambiarEstado('reembolso_procesando', usuarioId, 'Procesando reembolso');
   
   return this;
 };
 
-// Completar reembolso
-devolucionSchema.methods.completarReembolso = async function(usuarioId, referencia = null) {
+// Completar reembolso (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.completarReembolso = function(usuarioId, referencia = null) {
   if (this.estado !== 'reembolso_procesando') {
     throw new Error('El reembolso debe estar en procesamiento para completarlo');
   }
@@ -516,27 +515,27 @@ devolucionSchema.methods.completarReembolso = async function(usuarioId, referenc
     }
   });
   
-  await this.cambiarEstado('reembolso_completado', usuarioId, 'Reembolso completado exitosamente');
-  await this.cambiarEstado('cerrada', usuarioId, 'Devolución cerrada');
+  this.cambiarEstado('reembolso_completado', usuarioId, 'Reembolso completado exitosamente');
+  this.cambiarEstado('cerrada', usuarioId, 'Devolución cerrada');
   
   return this;
 };
 
-// Cancelar devolución
-devolucionSchema.methods.cancelar = async function(usuarioId, motivo) {
+// Cancelar devolución (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.cancelar = function(usuarioId, motivo) {
   const estadosNoCancelables = ['reembolso_procesando', 'reembolso_completado', 'cerrada', 'cancelada'];
   
   if (estadosNoCancelables.includes(this.estado)) {
     throw new Error('No se puede cancelar la devolución en este estado');
   }
   
-  await this.cambiarEstado('cancelada', usuarioId, `Devolución cancelada: ${motivo}`);
+  this.cambiarEstado('cancelada', usuarioId, `Devolución cancelada: ${motivo}`);
   
   return this;
 };
 
-// Agregar comunicación
-devolucionSchema.methods.agregarComunicacion = async function(tipo, asunto, mensaje, usuarioId) {
+// Agregar comunicación (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.agregarComunicacion = function(tipo, asunto, mensaje, usuarioId) {
   this.comunicaciones.push({
     tipo,
     asunto,
@@ -544,13 +543,13 @@ devolucionSchema.methods.agregarComunicacion = async function(tipo, asunto, mens
     enviado_por: usuarioId
   });
   
-  return this.save();
+  return this;
 };
 
-// Agregar documento
-devolucionSchema.methods.agregarDocumento = async function(datosDocumento) {
+// Agregar documento (CORREGIDO: no guarda automáticamente)
+devolucionSchema.methods.agregarDocumento = function(datosDocumento) {
   this.documentos.push(datosDocumento);
-  return this.save();
+  return this;
 };
 
 // MÉTODOS ESTÁTICOS
@@ -608,10 +607,8 @@ devolucionSchema.statics.crearDesdeVenta = async function(venta, itemsDevolucion
     }
   });
   
-  await devolucion.save();
-  
-  // Registrar evento inicial
-  await devolucion.registrarEvento(
+  // Registrar evento inicial (sin guardar)
+  devolucion.registrarEvento(
     'solicitud_creada',
     'Solicitud de devolución creada por el cliente',
     idCliente
