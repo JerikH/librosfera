@@ -1,4 +1,3 @@
-// Database/models/ventaModel.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const addressSchema = require('./schemas/addressSchema');
@@ -74,6 +73,7 @@ const ventaSchema = new Schema({
   numero_venta: {
     type: String,
     unique: true,
+    index: true,
     default: function() {
       const fecha = new Date();
       const año = fecha.getFullYear();
@@ -297,8 +297,8 @@ ventaSchema.index({ numero_venta: 1 });
 
 // MÉTODOS DE INSTANCIA
 
-// Registrar evento en el historial
-ventaSchema.methods.registrarEvento = async function(evento, descripcion, usuarioId = null, metadata = {}) {
+// Registrar evento en el historial (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods.registrarEvento = function(evento, descripcion, usuarioId = null, metadata = {}) {
   this.historial.push({
     evento,
     descripcion,
@@ -306,15 +306,15 @@ ventaSchema.methods.registrarEvento = async function(evento, descripcion, usuari
     metadata
   });
   
-  return this.save();
+  return this; // Retornamos el objeto sin guardarlo
 };
 
-// Cambiar estado de la venta
-ventaSchema.methods.cambiarEstado = async function(nuevoEstado, usuarioId, descripcion = '') {
+// Cambiar estado de la venta (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods.cambiarEstado = function(nuevoEstado, usuarioId, descripcion = '') {
   const estadoAnterior = this.estado;
   this.estado = nuevoEstado;
   
-  await this.registrarEvento(
+  this.registrarEvento(
     'cambio_estado',
     descripcion || `Estado cambiado de ${estadoAnterior} a ${nuevoEstado}`,
     usuarioId,
@@ -324,8 +324,8 @@ ventaSchema.methods.cambiarEstado = async function(nuevoEstado, usuarioId, descr
   return this;
 };
 
-// Aprobar pago
-ventaSchema.methods.aprobarPago = async function(referenciaPago = null) {
+// Aprobar pago (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods.aprobarPago = function(referenciaPago = null) {
   if (this.pago.estado_pago !== 'pendiente' && this.pago.estado_pago !== 'procesando') {
     throw new Error('El pago ya fue procesado');
   }
@@ -336,35 +336,35 @@ ventaSchema.methods.aprobarPago = async function(referenciaPago = null) {
     this.pago.referencia_pago = referenciaPago;
   }
   
-  await this.cambiarEstado('pago_aprobado', null, 'Pago aprobado exitosamente');
+  this.cambiarEstado('pago_aprobado', null, 'Pago aprobado exitosamente');
   
   // Automáticamente pasar a preparando
-  await this.cambiarEstado('preparando', null, 'Orden en preparación');
+  this.cambiarEstado('preparando', null, 'Orden en preparación');
   
   return this;
 };
 
-// Rechazar pago
-ventaSchema.methods.rechazarPago = async function(motivo = '') {
+// Rechazar pago (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods.rechazarPago = function(motivo = '') {
   this.pago.estado_pago = 'rechazado';
-  await this.cambiarEstado('fallo_pago', null, `Pago rechazado: ${motivo}`);
+  this.cambiarEstado('fallo_pago', null, `Pago rechazado: ${motivo}`);
   
   return this;
 };
 
-// Marcar como listo para envío
-ventaSchema.methods.marcarListoParaEnvio = async function(usuarioId) {
+// Marcar como listo para envío (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods.marcarListoParaEnvio = function(usuarioId) {
   if (this.estado !== 'preparando') {
     throw new Error('La orden debe estar en preparación para marcarla como lista para envío');
   }
   
-  await this.cambiarEstado('listo_para_envio', usuarioId, 'Orden lista para ser enviada');
+  this.cambiarEstado('listo_para_envio', usuarioId, 'Orden lista para ser enviada');
   
   return this;
 };
 
-// Marcar como enviado
-ventaSchema.methods.marcarComoEnviado = async function(datosEnvio, usuarioId) {
+// Marcar como enviado (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods.marcarComoEnviado = function(datosEnvio, usuarioId) {
   if (this.estado !== 'listo_para_envio' && this.estado !== 'preparando') {
     throw new Error('La orden debe estar lista para envío');
   }
@@ -379,13 +379,13 @@ ventaSchema.methods.marcarComoEnviado = async function(datosEnvio, usuarioId) {
     item.estado_item = 'enviado';
   });
   
-  await this.cambiarEstado('enviado', usuarioId, 'Orden enviada');
+  this.cambiarEstado('enviado', usuarioId, 'Orden enviada');
   
   return this;
 };
 
-// Marcar como entregado
-ventaSchema.methods.marcarComoEntregado = async function(usuarioId, fechaEntrega = null) {
+// Marcar como entregado (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods.marcarComoEntregado = function(usuarioId, fechaEntrega = null) {
   if (this.estado !== 'enviado' && this.estado !== 'en_transito') {
     throw new Error('La orden debe estar enviada para marcarla como entregada');
   }
@@ -399,13 +399,13 @@ ventaSchema.methods.marcarComoEntregado = async function(usuarioId, fechaEntrega
     }
   });
   
-  await this.cambiarEstado('entregado', usuarioId, 'Orden entregada exitosamente');
+  this.cambiarEstado('entregado', usuarioId, 'Orden entregada exitosamente');
   
   return this;
 };
 
-// Cancelar venta
-ventaSchema.methods.cancelarVenta = async function(motivo, solicitadaPor, usuarioId) {
+// Cancelar venta (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods.cancelarVenta = function(motivo, solicitadaPor, usuarioId) {
   // Validar que se puede cancelar
   const estadosNoCancelables = ['enviado', 'en_transito', 'entregado', 'cancelado', 'reembolsado'];
   if (estadosNoCancelables.includes(this.estado)) {
@@ -424,19 +424,19 @@ ventaSchema.methods.cancelarVenta = async function(motivo, solicitadaPor, usuari
     this.pago.estado_pago = 'reembolsado';
   }
   
-  await this.cambiarEstado('cancelado', usuarioId, `Venta cancelada: ${motivo}`);
+  this.cambiarEstado('cancelado', usuarioId, `Venta cancelada: ${motivo}`);
   
   return this;
 };
 
 // Agregar nota interna
-ventaSchema.methods.agregarNotaInterna = async function(nota, usuarioId) {
+ventaSchema.methods.agregarNotaInterna = function(nota, usuarioId) {
   this.notas_internas.push({
     nota,
     usuario: usuarioId
   });
   
-  return this.save();
+  return this;
 };
 
 // Validar si se puede solicitar devolución
