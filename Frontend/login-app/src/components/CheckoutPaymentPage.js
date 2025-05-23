@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import UserLayout from './UserLayout';
+import axios from 'axios';
+import { getAuthToken } from './UserProfilePageComponents/authUtils';
+
+const API_BASE_URL = 'http://localhost:5000/api/v1';
 
 // Componente de página de pago
 function CheckoutPaymentPage() {
@@ -21,74 +25,239 @@ function CheckoutPaymentPage() {
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
+  const [cardid, setCardId] = useState('');
   const [cardholderName, setCardholderName] = useState('');
   
   // Estado para el total
   const [subtotal, setSubtotal] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
+  const [cartPrices, setCartPrices] = useState([]);
+  const [Taxes, setTaxes] = useState(0);
   const [total, setTotal] = useState(0);
-  
+
+  const [cards, setCards] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [selectedCard, setSelectedCard] = useState('');
+
+  const axiosConfig = {
+    headers: {
+      'Authorization': `Bearer ${getAuthToken()}`,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    }
+  };
+
+  const fetchCards = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    const response = await axios.get(`${API_BASE_URL}/tarjetas`, axiosConfig);
+    
+    if (response.data.status === 'success') {
+      // Transformar los datos de la API al formato que espera el componente
+      const transformedCards = response.data.data.map(card => ({
+        id: card.id_tarjeta,
+        type: card.marca === 'visa' ? 'Visa' : 'Mastercard',
+        bank: `${card.tipo.charAt(0).toUpperCase() + card.tipo.slice(1)} ${card.marca.toUpperCase()}`,
+        lastFour: card.ultimos_digitos,
+        cardholderName: card.nombre_titular,
+        expiryMonth: card.fecha_expiracion.mes.toString().padStart(2, '0'),
+        expiryYear: card.fecha_expiracion.anio.toString().slice(-2),
+        isDefault: card.predeterminada,
+        isActive: card.activa,
+        cardType: card.tipo,
+        balance: card.saldo || 0 // Show 0 instead of null for all cards
+      }));
+      
+      setCards(transformedCards);
+    }
+  } catch (err) {
+    console.error('Error fetching cards:', err);
+    setError('Error al cargar las tarjetas. Por favor, intenta de nuevo.');
+  } finally {
+    setLoading(false);
+  }
+};
+
   // Cargar datos al iniciar
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        console.log("Cargando datos de pago...");
-        // Obtener carrito del localStorage
-        const storedCart = localStorage.getItem('shoppingCart');
-        if (storedCart) {
+  const fetchCartData = async () => {
+    setIsLoading(true);
+    
+    try {
+      // Debug: Log all localStorage contents
+      console.log("=== DEBUGGING LOCALSTORAGE ===");
+      console.log("All localStorage keys:", Object.keys(localStorage));
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        console.log(`${key}:`, localStorage.getItem(key));
+      }
+      console.log("==============================");
+      
+      // Get cart data from localStorage with correct key names
+      const storedCart = localStorage.getItem('shoppingCart');
+      const storedPrices = localStorage.getItem('CartPrices'); // Use the correct key name with capital C
+      
+      console.log("Stored Cart:", storedCart);
+      console.log("Stored Prices:", storedPrices);
+      
+      // Since cart is loaded from API, check if prices exist and wait for cart sync
+      if (storedPrices && storedPrices !== null && storedPrices !== undefined) {
+        try {
+          const parsedPrices = JSON.parse(storedPrices);
+          console.log("Parsed Prices:", parsedPrices);
+          
+          if (parsedPrices && typeof parsedPrices === 'object') {
+            setCartPrices(parsedPrices);
+            
+            // Use the pricing data that's available
+            if (parsedPrices.subtotal_con_descuentos !== undefined) {
+              setSubtotal(parsedPrices.subtotal_con_descuentos);
+              setTaxes(parsedPrices.total_impuestos);
+              setTotal((parsedPrices.subtotal_con_descuentos + parsedPrices.total_impuestos) || parsedPrices.total_final);
+            }
+          }
+        } catch (priceParseError) {
+          console.error('Error parsing cart prices:', priceParseError);
+        }
+      }
+      
+      // Check for cart items (may come later from API)
+      if (storedCart && storedCart !== null && storedCart !== undefined) {
+        try {
           const parsedCart = JSON.parse(storedCart);
+          console.log("Parsed Cart:", parsedCart);
+          
+          // Validate that parsedCart is an array
+          if (Array.isArray(parsedCart) && parsedCart.length > 0) {
+            setCartItems(parsedCart);
+            
+            // Handle prices separately with validation
+            if (storedPrices && storedPrices !== null && storedPrices !== undefined) {
+              try {
+                const parsedPrices = JSON.parse(storedPrices);
+                console.log("Parsed Prices:", parsedPrices);
+                
+                if (parsedPrices && typeof parsedPrices === 'object') {
+                  setCartPrices(parsedPrices);
+                  
+                  // Use the parsed data directly instead of state
+                  if (parsedPrices.subtotal_con_descuentos !== undefined) {
+                    setSubtotal(parsedPrices.subtotal_con_descuentos);
+                    setTotal((parsedPrices.subtotal_con_descuentos + parsedPrices.total_impuestos) || parsedPrices.total_final);
+                  }
+                }
+              } catch (priceParseError) {
+                console.error('Error parsing cart prices:', priceParseError);
+                // Fallback: calculate subtotal manually
+                const calculatedSubtotal = parsedCart.reduce((total, item) => {
+                  return total + ((item.price || 35000) * item.quantity);
+                }, 0);
+                setSubtotal(calculatedSubtotal);
+                // Fix: Use the current tax state value or 0
+                setTotal(calculatedSubtotal + (Taxes));
+              }
+            } else {
+              // No stored prices, calculate manually
+              console.log("No stored prices found, calculating manually");
+              const calculatedSubtotal = parsedCart.reduce((total, item) => {
+                return total + ((item.price || 35000) * item.quantity);
+              }, 0);
+              setSubtotal(calculatedSubtotal);
+              setTotal(calculatedSubtotal + Taxes);
+            }
+          } else {
+            console.error('Cart data is not an array or is empty:', parsedCart);
+          }
+        } catch (cartParseError) {
+          console.error('Error parsing cart data:', cartParseError);
+        }
+      } else {
+        console.log("No cart data found in localStorage");
+      }
+      
+      // Cargar información de envío
+      const storedShippingInfo = localStorage.getItem('shippingPreferences');
+      if (storedShippingInfo) {
+        const parsedShippingInfo = JSON.parse(storedShippingInfo);
+        setShippingInfo(parsedShippingInfo);
+        
+        // Establecer costo de envío
+        const cost = parsedShippingInfo.shippingCost || 0;
+        setShippingCost(cost);
+      }
+      
+    } catch (error) {
+      console.error('Error al cargar datos del carrito:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  fetchCartData();
+  fetchCards(); // Load cards when component mounts
+}, [navigate]);
+
+useEffect(() => {
+  const checkForCartUpdates = () => {
+    const storedCart = localStorage.getItem('shoppingCart');
+    const storedPrices = localStorage.getItem('CartPrices');
+    
+    if (storedCart && storedCart !== null) {
+      try {
+        const parsedCart = JSON.parse(storedCart);
+        if (Array.isArray(parsedCart) && parsedCart.length > 0) {
           setCartItems(parsedCart);
           
-          // Simular la obtención de detalles de los libros
-          const mockBookDetails = parsedCart.map(item => ({
-            id: item.bookId || Math.random().toString(36).substr(2, 9),
-            title: `Libro de ejemplo ${item.bookId?.slice(-3) || '001'}`,
-            author: 'Autor de ejemplo',
-            image: '/placeholder-book.png',
-            price: item.price || 35000,
-            quantity: item.quantity || 1
-          }));
-          
-          setBookDetails(mockBookDetails);
-          
-          // Calcular subtotal
-          const calculatedSubtotal = mockBookDetails.reduce((total, book) => {
-            return total + (book.price * book.quantity);
-          }, 0);
-          
-          setSubtotal(calculatedSubtotal);
-          
-          // Cargar información de envío
-          const storedShippingInfo = localStorage.getItem('shippingPreferences');
-          if (storedShippingInfo) {
-            const parsedShippingInfo = JSON.parse(storedShippingInfo);
-            setShippingInfo(parsedShippingInfo);
-            
-            // Establecer costo de envío
-            const cost = parsedShippingInfo.shippingCost || 0;
-            setShippingCost(cost);
-            
-            // Calcular total con envío
-            setTotal(calculatedSubtotal + cost);
-          } else {
-            setTotal(calculatedSubtotal);
+          // If no prices were loaded before, calculate from cart
+          if (cartPrices.length === 0 || Object.keys(cartPrices).length === 0) {
+            const calculatedSubtotal = parsedCart.reduce((total, item) => {
+              return total + ((item.price || 35000) * item.quantity);
+            }, 0);
+            setSubtotal(calculatedSubtotal);
+            setTotal(calculatedSubtotal + Taxes);
           }
-        } else {
-          // Si no hay carrito, redireccionar a la página de inicio
-          navigate('/Home');
-          return;
         }
       } catch (error) {
-        console.error('Error al cargar datos:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('Error parsing updated cart:', error);
       }
-    };
-    
-    loadData();
-  }, [navigate]);
+    }
+  };
   
+  // Check immediately
+  checkForCartUpdates();
+  
+  // Set up an interval to check for updates (since cart loads from API)
+  const interval = setInterval(checkForCartUpdates, 1000);
+  
+  // Clean up
+  return () => clearInterval(interval);
+}, [cartPrices]);
+
+const handleCardSelection = (cardId) => {
+  setSelectedCard(cardId);
+  
+  if (cardId === '') {
+    // Clear form if no card selected
+    setCardNumber('');
+    setExpiry('');
+    setCvc('');
+    setCardholderName('');
+  } else {
+    // Find selected card and populate form
+    const card = cards.find(c => c.id === cardId);
+    if (card) {
+      setCardId(cardId);
+      setCardNumber(`**** **** **** ${card.lastFour}`);
+      setExpiry(`${card.expiryMonth}/${card.expiryYear}`);
+      setCvc('***');
+      setCardholderName(card.cardholderName);
+    }
+  }
+};
+
   // Validar el formulario
   const validateForm = () => {
     if (!cardNumber) {
@@ -119,6 +288,7 @@ function CheckoutPaymentPage() {
     try {
       // Guardar los datos del pago en localStorage temporalmente
       const paymentInfo = {
+        Id: cardid,
         method: paymentMethod,
         cardNumber,
         cardExpiry: expiry,
@@ -186,11 +356,17 @@ function CheckoutPaymentPage() {
                     <label className="block text-gray-700 mb-2">Método de pago</label>
                     <div className="relative">
                       <select
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        value={selectedCard}
+                        onChange={(e) => handleCardSelection(e.target.value)}
                         className="block w-full border border-gray-300 rounded-md px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                        disabled={loading}
                       >
-                        <option value="credit_card">Tarjeta de crédito</option>
+                        <option value="">Seleccionar tarjeta</option>
+                        {cards.filter(card => card.isActive).map(card => (
+                          <option key={card.id} value={card.id}>
+                            {card.bank} **** {card.lastFour}
+                          </option>
+                        ))}
                       </select>
                       <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
                         <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -198,6 +374,12 @@ function CheckoutPaymentPage() {
                         </svg>
                       </div>
                     </div>
+                    {error && (
+                      <p className="text-red-500 text-sm mt-1">{error}</p>
+                    )}
+                    {loading && (
+                      <p className="text-gray-500 text-sm mt-1">Cargando tarjetas...</p>
+                    )}
                   </div>
                   
                   {/* Información de la tarjeta */}
@@ -210,7 +392,8 @@ function CheckoutPaymentPage() {
                           placeholder="1234 1234 1234 1234"
                           value={cardNumber}
                           onChange={(e) => setCardNumber(e.target.value)}
-                          className="block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={selectedCard !== ''}
+                          className={`block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedCard !== '' ? 'bg-gray-100' : ''}`}
                         />
                         <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                           <div className="flex space-x-1">
@@ -229,7 +412,8 @@ function CheckoutPaymentPage() {
                           placeholder="MM / YY"
                           value={expiry}
                           onChange={(e) => setExpiry(e.target.value)}
-                          className="block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={selectedCard !== ''}
+                          className={`block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedCard !== '' ? 'bg-gray-100' : ''}`}
                         />
                       </div>
                       <div className="w-1/2">
@@ -240,11 +424,12 @@ function CheckoutPaymentPage() {
                             placeholder="CVC"
                             value={cvc}
                             onChange={(e) => setCvc(e.target.value)}
-                            className="block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            disabled={selectedCard !== ''}
+                            className={`block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedCard !== '' ? 'bg-gray-100' : ''}`}
                           />
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                             <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                             </svg>
                           </div>
                         </div>
@@ -258,10 +443,12 @@ function CheckoutPaymentPage() {
                         placeholder="Nombre como aparece en la tarjeta"
                         value={cardholderName}
                         onChange={(e) => setCardholderName(e.target.value)}
-                        className="block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={selectedCard !== ''}
+                        className={`block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedCard !== '' ? 'bg-gray-100' : ''}`}
                       />
                     </div>
                   </div>
+
                 </div>
                 
                 {/* Método de envío */}
@@ -279,12 +466,12 @@ function CheckoutPaymentPage() {
                         />
                         <label className="ml-3">
                           <div className="flex justify-between w-full items-center">
-                            <span className="font-medium">{shippingInfo.method === 'tienda' ? 'Recoger en tienda' : 'Envío a domicilio'}</span>
-                            <div className="text-right">
+                            <span className="font-medium">{shippingInfo.method === 'tienda' ? 'Recoger en tienda' : 'Envío a domicilio '}</span>
+                            <div className="">
                               {shippingInfo.method === 'tienda' ? (
                                 <p className="text-green-600 font-bold">Gratis</p>
                               ) : (
-                                <p className="font-bold">$ {shippingCost.toLocaleString('es-CO')}</p>
+                                <span><p className="font-bold"> ${shippingCost.toLocaleString('es-CO')}</p></span>
                               )}
                             </div>
                           </div>
@@ -313,6 +500,10 @@ function CheckoutPaymentPage() {
                     <div className="flex justify-between">
                       <span className="text-gray-600">Producto</span>
                       <span>$ {subtotal.toLocaleString('es-CO')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Impuestos</span>
+                      <span>$ {Taxes.toLocaleString('es-CO')}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Envío</span>

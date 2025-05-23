@@ -170,7 +170,7 @@ const UserProfile = () => {
               >
                 Mi Cuenta
               </button>
-              <Link to="/mis-pedidos" className="text-sm hover:underline">Mis Pedidos</Link>
+              {/* <Link to="/mis-pedidos" className="text-sm hover:underline">Mis Pedidos</Link> */}
               <button 
                 onClick={handleLogout}
                 className="text-sm hover:underline cursor-pointer"

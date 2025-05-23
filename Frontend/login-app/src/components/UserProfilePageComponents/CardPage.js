@@ -558,7 +558,7 @@ const CardPage = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Tarjeta de Saldo (siempre visible) */}
-          <div className="border border-gray-300 rounded-lg p-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md relative">
+          {/* <div className="border border-gray-300 rounded-lg p-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md relative">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <p className="text-sm opacity-80">Tarjeta de</p>
@@ -590,7 +590,7 @@ const CardPage = () => {
             >
               Recargar saldo
             </button>
-          </div>
+          </div> */}
           
           {/* Tarjetas guardadas */}
           {cards.map((card) => (
