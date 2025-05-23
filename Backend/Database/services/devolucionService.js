@@ -1,4 +1,3 @@
-// Database/services/devolucionService.js
 const mongoose = require('mongoose');
 const Devolucion = require('../models/devolucionModel');
 const Venta = require('../models/ventaModel');
@@ -82,94 +81,158 @@ class DevolucionService {
    * Aprobar devolución (admin)
    */
   async aprobarDevolucion(codigoDevolucion, idUsuarioAdmin, notas = '') {
-    const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion);
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (!devolucion) {
-      throw new Error('Devolución no encontrada');
+    try {
+      const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion).session(session);
+      
+      if (!devolucion) {
+        throw new Error('Devolución no encontrada');
+      }
+      
+      // Aplicar cambios sin guardar
+      devolucion.aprobar(idUsuarioAdmin, notas);
+      
+      // Guardar con la sesión
+      await devolucion.save({ session });
+      
+      await session.commitTransaction();
+      
+      // Enviar notificación al cliente
+      this._enviarNotificacionAprobacion(devolucion).catch(err =>
+        console.error('Error enviando notificación:', err)
+      );
+      
+      return devolucion;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-    
-    await devolucion.aprobar(idUsuarioAdmin, notas);
-    
-    // Enviar notificación al cliente
-    this._enviarNotificacionAprobacion(devolucion).catch(err =>
-      console.error('Error enviando notificación:', err)
-    );
-    
-    return devolucion;
   }
   
   /**
    * Rechazar devolución (admin)
    */
   async rechazarDevolucion(codigoDevolucion, idUsuarioAdmin, motivo) {
-    const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion);
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (!devolucion) {
-      throw new Error('Devolución no encontrada');
+    try {
+      const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion).session(session);
+      
+      if (!devolucion) {
+        throw new Error('Devolución no encontrada');
+      }
+      
+      if (!motivo) {
+        throw new Error('Debe proporcionar un motivo para rechazar la devolución');
+      }
+      
+      // Aplicar cambios sin guardar
+      devolucion.rechazar(idUsuarioAdmin, motivo);
+      
+      // Guardar con la sesión
+      await devolucion.save({ session });
+      
+      await session.commitTransaction();
+      
+      // Enviar notificación al cliente
+      this._enviarNotificacionRechazo(devolucion, motivo).catch(err =>
+        console.error('Error enviando notificación:', err)
+      );
+      
+      return devolucion;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-    
-    if (!motivo) {
-      throw new Error('Debe proporcionar un motivo para rechazar la devolución');
-    }
-    
-    await devolucion.rechazar(idUsuarioAdmin, motivo);
-    
-    // Enviar notificación al cliente
-    this._enviarNotificacionRechazo(devolucion, motivo).catch(err =>
-      console.error('Error enviando notificación:', err)
-    );
-    
-    return devolucion;
   }
   
   /**
    * Marcar devolución como recibida (admin)
    */
   async marcarComoRecibida(codigoDevolucion, idUsuarioAdmin, datosRecepcion = {}) {
-    const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion);
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (!devolucion) {
-      throw new Error('Devolución no encontrada');
+    try {
+      const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion).session(session);
+      
+      if (!devolucion) {
+        throw new Error('Devolución no encontrada');
+      }
+      
+      // Aplicar cambios sin guardar
+      devolucion.marcarComoRecibida(idUsuarioAdmin, datosRecepcion);
+      
+      // Guardar con la sesión
+      await devolucion.save({ session });
+      
+      await session.commitTransaction();
+      
+      return devolucion;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-    
-    await devolucion.marcarComoRecibida(idUsuarioAdmin, datosRecepcion);
-    
-    return devolucion;
   }
   
   /**
    * Inspeccionar item de devolución (admin)
    */
   async inspeccionarItem(codigoDevolucion, idItem, datosInspeccion, idUsuarioAdmin) {
-    const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion);
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (!devolucion) {
-      throw new Error('Devolución no encontrada');
-    }
-    
-    const { resultado, notas, porcentajeReembolso } = datosInspeccion;
-    
-    if (!resultado || !['aprobado', 'rechazado', 'aprobado_parcial'].includes(resultado)) {
-      throw new Error('Resultado de inspección no válido');
-    }
-    
-    await devolucion.inspeccionarItem(
-      idItem,
-      resultado,
-      idUsuarioAdmin,
-      notas,
-      porcentajeReembolso || (resultado === 'aprobado' ? 100 : 0)
-    );
-    
-    // Si todos los items han sido inspeccionados, proceder con el reembolso
-    if (devolucion.estado === 'reembolso_aprobado') {
-      // Notificar al cliente sobre el resultado de la inspección
-      this._enviarNotificacionInspeccion(devolucion).catch(err =>
-        console.error('Error enviando notificación:', err)
+    try {
+      const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion).session(session);
+      
+      if (!devolucion) {
+        throw new Error('Devolución no encontrada');
+      }
+      
+      const { resultado, notas, porcentajeReembolso } = datosInspeccion;
+      
+      if (!resultado || !['aprobado', 'rechazado', 'aprobado_parcial'].includes(resultado)) {
+        throw new Error('Resultado de inspección no válido');
+      }
+      
+      // Aplicar cambios sin guardar
+      devolucion.inspeccionarItem(
+        idItem,
+        resultado,
+        idUsuarioAdmin,
+        notas,
+        porcentajeReembolso || (resultado === 'aprobado' ? 100 : 0)
       );
+      
+      // Guardar con la sesión
+      await devolucion.save({ session });
+      
+      await session.commitTransaction();
+      
+      // Si todos los items han sido inspeccionados, proceder con el reembolso
+      if (devolucion.estado === 'reembolso_aprobado') {
+        // Notificar al cliente sobre el resultado de la inspección
+        this._enviarNotificacionInspeccion(devolucion).catch(err =>
+          console.error('Error enviando notificación:', err)
+        );
+      }
+      
+      return devolucion;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-    
-    return devolucion;
   }
   
   /**
@@ -201,7 +264,11 @@ class DevolucionService {
         notas: `Reembolso por devolución ${devolucion.codigo_devolucion}`
       };
       
-      await devolucion.procesarReembolso(datosReembolso, idUsuarioAdmin);
+      // Aplicar cambios sin guardar
+      devolucion.procesarReembolso(datosReembolso, idUsuarioAdmin);
+      
+      // Guardar con la sesión
+      await devolucion.save({ session });
       
       // Procesar el reembolso real
       try {
@@ -213,8 +280,11 @@ class DevolucionService {
           `Reembolso devolución ${devolucion.codigo_devolucion}`
         );
         
-        // Marcar como completado
-        await devolucion.completarReembolso(idUsuarioAdmin, datosReembolso.referencia);
+        // Marcar como completado (sin guardar)
+        devolucion.completarReembolso(idUsuarioAdmin, datosReembolso.referencia);
+        
+        // Guardar con la sesión
+        await devolucion.save({ session });
         
       } catch (errorReembolso) {
         throw new Error(`Error procesando reembolso: ${errorReembolso.message}`);
@@ -259,66 +329,97 @@ class DevolucionService {
    * Cancelar devolución
    */
   async cancelarDevolucion(codigoDevolucion, idUsuario, motivo, esAdmin = false) {
-    const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion);
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (!devolucion) {
-      throw new Error('Devolución no encontrada');
+    try {
+      const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion).session(session);
+      
+      if (!devolucion) {
+        throw new Error('Devolución no encontrada');
+      }
+      
+      // Verificar permisos
+      if (!esAdmin && devolucion.id_cliente.toString() !== idUsuario) {
+        throw new Error('No tienes permisos para cancelar esta devolución');
+      }
+      
+      // Aplicar cambios sin guardar
+      devolucion.cancelar(idUsuario, motivo);
+      
+      // Guardar con la sesión
+      await devolucion.save({ session });
+      
+      await session.commitTransaction();
+      
+      return devolucion;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-    
-    // Verificar permisos
-    if (!esAdmin && devolucion.id_cliente.toString() !== idUsuario) {
-      throw new Error('No tienes permisos para cancelar esta devolución');
-    }
-    
-    await devolucion.cancelar(idUsuario, motivo);
-    
-    return devolucion;
   }
   
   /**
    * Agregar documento a devolución
    */
   async agregarDocumento(codigoDevolucion, archivo, tipo, idUsuario) {
-    const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion);
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (!devolucion) {
-      throw new Error('Devolución no encontrada');
-    }
-    
-    // Verificar permisos
-    const esCliente = devolucion.id_cliente.toString() === idUsuario;
-    if (!esCliente) {
-      // Verificar si es admin
-      const usuario = await mongoose.model('Usuario').findById(idUsuario);
-      if (!['administrador', 'root'].includes(usuario.tipo_usuario)) {
-        throw new Error('No tienes permisos para agregar documentos a esta devolución');
+    try {
+      const devolucion = await Devolucion.buscarPorCodigo(codigoDevolucion).session(session);
+      
+      if (!devolucion) {
+        throw new Error('Devolución no encontrada');
       }
+      
+      // Verificar permisos
+      const esCliente = devolucion.id_cliente.toString() === idUsuario;
+      if (!esCliente) {
+        // Verificar si es admin
+        const usuario = await mongoose.model('Usuario').findById(idUsuario);
+        if (!['administrador', 'root'].includes(usuario.tipo_usuario)) {
+          throw new Error('No tienes permisos para agregar documentos a esta devolución');
+        }
+      }
+      
+      // Guardar archivo
+      const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../../uploads');
+      const devolucionesDir = path.join(uploadDir, 'devoluciones', devolucion.codigo_devolucion);
+      
+      // Crear directorio si no existe
+      await fs.mkdir(devolucionesDir, { recursive: true });
+      
+      const nombreArchivo = `${tipo}_${Date.now()}_${archivo.originalname}`;
+      const rutaArchivo = path.join(devolucionesDir, nombreArchivo);
+      
+      await fs.rename(archivo.path, rutaArchivo);
+      
+      // Guardar referencia en la devolución (sin guardar)
+      const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+      const urlArchivo = `${baseUrl}/uploads/devoluciones/${devolucion.codigo_devolucion}/${nombreArchivo}`;
+      
+      devolucion.agregarDocumento({
+        tipo,
+        url: urlArchivo,
+        nombre_archivo: nombreArchivo,
+        subido_por: esCliente ? 'cliente' : 'administrador'
+      });
+      
+      // Guardar con la sesión
+      await devolucion.save({ session });
+      
+      await session.commitTransaction();
+      
+      return devolucion;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-    
-    // Guardar archivo
-    const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../../uploads');
-    const devolucionesDir = path.join(uploadDir, 'devoluciones', devolucion.codigo_devolucion);
-    
-    // Crear directorio si no existe
-    await fs.mkdir(devolucionesDir, { recursive: true });
-    
-    const nombreArchivo = `${tipo}_${Date.now()}_${archivo.originalname}`;
-    const rutaArchivo = path.join(devolucionesDir, nombreArchivo);
-    
-    await fs.rename(archivo.path, rutaArchivo);
-    
-    // Guardar referencia en la devolución
-    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-    const urlArchivo = `${baseUrl}/uploads/devoluciones/${devolucion.codigo_devolucion}/${nombreArchivo}`;
-    
-    await devolucion.agregarDocumento({
-      tipo,
-      url: urlArchivo,
-      nombre_archivo: nombreArchivo,
-      subido_por: esCliente ? 'cliente' : 'administrador'
-    });
-    
-    return devolucion;
   }
   
   /**
