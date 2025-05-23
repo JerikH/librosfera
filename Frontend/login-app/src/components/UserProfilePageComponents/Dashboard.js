@@ -99,11 +99,11 @@ const Dashboard = ({ userData }) => {
   }, [axiosConfig]);
 
   // Función para manejar la navegación a tarjetas
-  const handleNavigateToCards = () => {
-    // Aquí puedes usar react-router si lo tienes configurado
-    // navigate('/cards');
-    window.location.href = '/cards'; // Redirige a la página de tarjetas
-  };
+  // const handleNavigateToCards = () => {
+  //   // Aquí puedes usar react-router si lo tienes configurado
+  //   // navigate('/cards');
+  //   window.location.href = '/cards'; // Redirige a la página de tarjetas
+  // };
 
   // useEffect para cargar la tarjeta predeterminada al montar el componente
   useEffect(() => {
@@ -144,7 +144,7 @@ const Dashboard = ({ userData }) => {
       // Mostrar la tarjeta predeterminada del usuario
       return (
         <div className="bg-gradient-to-r from-gray-800 to-gray-900 text-white rounded-lg p-5 mb-8 w-96 h-56 flex flex-col justify-between shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
-             onClick={handleNavigateToCards}>
+             >
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm opacity-80">Tarjeta {defaultCard.type}</p>
@@ -202,7 +202,7 @@ const Dashboard = ({ userData }) => {
       // Mostrar tarjeta de saldo por defecto si no hay tarjeta principal
       return (
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-5 mb-8 w-96 h-56 flex flex-col justify-between shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
-             onClick={handleNavigateToCards}>
+             >
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm opacity-80">Tarjeta de</p>
@@ -239,7 +239,7 @@ const Dashboard = ({ userData }) => {
             <button 
               onClick={(e) => {
                 e.stopPropagation();
-                handleNavigateToCards();
+                
               }}
               className="bg-white text-blue-600 font-medium py-2 px-4 rounded-md hover:bg-blue-50 transition-colors text-sm"
             >
@@ -263,7 +263,7 @@ const Dashboard = ({ userData }) => {
         {renderMainCard()}
         
         {/* Recent Purchases */}
-        <div>
+        {/* <div>
           <h2 className="text-xl font-bold mb-4">Compras recientes</h2>
           <div className="bg-white rounded-lg shadow p-5">
             <div className="border-b pb-5 mb-5">
@@ -302,7 +302,7 @@ const Dashboard = ({ userData }) => {
               </div>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
       
       {/* Right column - Column 3 (smaller) */}
@@ -327,7 +327,7 @@ const Dashboard = ({ userData }) => {
                 </div>
               </div>
               <button 
-                onClick={handleNavigateToCards}
+                
                 className="text-blue-600 hover:text-blue-800 transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -338,13 +338,13 @@ const Dashboard = ({ userData }) => {
             
             <div className="space-y-2">
               <button 
-                onClick={handleNavigateToCards}
+                
                 className="w-full text-left p-2 rounded-md hover:bg-gray-50 transition-colors flex items-center"
               >
                 <span className="text-sm text-gray-600">💳 Ver todas las tarjetas</span>
               </button>
               <button 
-                onClick={handleNavigateToCards}
+                
                 className="w-full text-left p-2 rounded-md hover:bg-gray-50 transition-colors flex items-center"
               >
                 <span className="text-sm text-gray-600">💰 Recargar saldo</span>
@@ -354,7 +354,7 @@ const Dashboard = ({ userData }) => {
         </div>
         
         {/* Resumen de actividad */}
-        <div>
+        {/* <div>
           <h3 className="text-lg font-semibold mb-4 text-gray-700">Actividad Reciente</h3>
           <div className="bg-white rounded-lg shadow p-4">
             <div className="space-y-3">
@@ -398,7 +398,7 @@ const Dashboard = ({ userData }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </>
   );
