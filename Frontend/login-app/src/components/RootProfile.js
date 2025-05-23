@@ -131,6 +131,7 @@ const RootProfile = () => {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('shoppingCart');
     // Limpiar las cookies
     document.cookie.split(";").forEach((cookie) => {
       document.cookie = cookie
