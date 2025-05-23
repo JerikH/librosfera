@@ -656,7 +656,7 @@ const handleAddToCart = async (e, book) => {
   // Banner promocional
   const PromoBanner = () => (
     <div className="relative overflow-hidden rounded-lg mb-8">
-      <img 
+      {/* <img 
         src="/promo-banner.jpg" 
         alt="Promoción" 
         className="w-full h-64 object-cover bg-blue-900"
@@ -675,7 +675,7 @@ const handleAddToCart = async (e, book) => {
             </div>
           `;
         }}
-      />
+      /> */}
       
       <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-6">
         <h2 className="text-4xl md:text-5xl font-bold mb-4">BOOKS 60% DCTO</h2>
