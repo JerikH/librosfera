@@ -7,6 +7,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
   const [refreshing, setRefreshing] = useState(false);
   // Función para manejar el logout
   const handleLogout = async () => {
+    localStorage.removeItem('shoppingCart');
     await logoutUser();
     window.location.replace('/Login');
   };
@@ -63,6 +64,17 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
       hideForRoot: true // hidden for root
     },
     { 
+      id: 'administrar-tiendas', 
+      name: 'Administrar Tiendas', 
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" />
+          <circle cx="12" cy="10" r="3" />
+        </svg>
+      ),
+      hideForRoot: true // hidden for root (manteniendo consistencia con otras opciones de administración)
+    },
+    { 
       id: 'mi-perfil', 
       name: 'Mi Perfil', 
       icon: (
@@ -110,7 +122,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
   // If current activeTab is now hidden for root users, reset to 'inicio'
   React.useEffect(() => {
     // Only reset the tab if the user is root and is on a tab that's hidden for root users
-    if (isRootUser && ['administrar-libro', 'gestionar-mensajes'].includes(activeTab)) {
+    if (isRootUser && ['administrar-libro', 'gestionar-mensajes', 'administrar-tiendas'].includes(activeTab)) {
       setActiveTab('inicio');
     }
   }, [isRootUser, activeTab, setActiveTab]);

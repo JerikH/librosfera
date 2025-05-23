@@ -11,7 +11,24 @@ import RootProfile from './components/RootProfile';
 import HomePage from './components/HomePage';
 import SearchResults from './components/SearchResults';
 import BookDetails from './components/BookDetails';
-import BookListPage from './components/BookListPage'; // Nuevo componente para listar libros por categoría
+import BookListPage from './components/BookListPage'; 
+import CheckoutDeliveryPage from './components/CheckoutDeliveryPage';
+import CheckoutStoreSelectionPage from './components/CheckoutStoreSelectionPage';
+import CheckoutPaymentPage from './components/CheckoutPaymentPage';
+import CheckoutPaymentConfirmation from './components/CheckoutPaymentConfirmation';
+import BookItemsList from './components/AdminProfileComponents/BookItemsList'; // Ruta corregida
+
+// Wrapper para el checkout para manejar más fácilmente cualquier estado compartido
+const CheckoutWrapper = () => {
+  return (
+    <Routes>
+      <Route path="/" element={<CheckoutDeliveryPage />} />
+      <Route path="/store-selection" element={<CheckoutStoreSelectionPage />} />
+      <Route path="/payment" element={<CheckoutPaymentPage />} />
+      <Route path="/confirm-payment" element={<CheckoutPaymentConfirmation />} />
+    </Routes>
+  );
+};
 
 const App = () => {
   return (
@@ -30,6 +47,9 @@ const App = () => {
         {/* Ruta para la página de bienvenida (legacy) */}
         <Route path="/Welcome" element={<WelcomePage />} />
         
+        {/* Rutas de checkout usando un wrapper para mejor manejo de rutas anidadas */}
+        <Route path="/checkout/*" element={<CheckoutWrapper />} />
+
         {/* Página principal, búsqueda y detalles de libro */}
         <Route path="/Home" element={<HomePage />} />
         <Route path="/search" element={<SearchResults />} />
@@ -40,6 +60,9 @@ const App = () => {
         <Route path="/libros/descuentos" element={<BookListPage category="descuentos" />} />
         <Route path="/libros" element={<BookListPage category="todos" />} />
         <Route path="/libros/categoria/:categoryName" element={<BookListPage category="categoria" />} />
+        
+        {/* Nueva ruta para la lista de ejemplares de un libro */}
+        <Route path="/admin/libros/:id/ejemplares" element={<BookItemsList />} />
         
         {/* Rutas de perfil de usuario y administrador */}
         <Route path="/Profile" element={<UserProfile />} />

@@ -3,17 +3,80 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import CachedImage from './CachedImage';
+import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
+
+
 
 const SearchResults = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchId, setSearchId] = useState('');
+  const [isInCart, setIsInCart] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [addedToCart, setAddedToCart] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+  const [booksInCart, setBooksInCart] = useState(new Set());
+
+
+  useEffect(() => {
+  getBooksInCart();
+}, []);
+
+useEffect(() => {
+  // Add event listeners for cart synchronization
+  const handleCartUpdate = () => {
+    console.log('SearchResults: Received cart update event');
+    getBooksInCart();
+  };
+
+  const handleGlobalCartUpdate = () => {
+    console.log('SearchResults: Received global cart update event');
+    getBooksInCart();
+  };
+
+  // Listen for cart update events
+  window.addEventListener('cartUpdated', handleCartUpdate);
+  window.addEventListener('globalCartUpdate', handleGlobalCartUpdate);
+  
+  // Also listen for storage events (when localStorage changes in other tabs/components)
+  const handleStorageChange = (e) => {
+    if (e.key === 'shoppingCart') {
+      console.log('SearchResults: Storage changed, updating cart');
+      getBooksInCart();
+    }
+  };
+  
+  window.addEventListener('storage', handleStorageChange);
+
+  // Cleanup event listeners
+  return () => {
+    window.removeEventListener('cartUpdated', handleCartUpdate);
+    window.removeEventListener('globalCartUpdate', handleGlobalCartUpdate);
+    window.removeEventListener('storage', handleStorageChange);
+  };
+}, []);
+  // Function to show toast notifications
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+    
+    // Hide after 2 seconds
+    setTimeout(() => {
+      setToast({ visible: false, message: '', type: 'success' });
+    }, 2000);
+  };
+
+  const updateCartCount = (count) => {
+    setCartCount(count);
+  };
   
   // Extraer el término de búsqueda de los parámetros de la URL
   useEffect(() => {
@@ -98,6 +161,150 @@ const SearchResults = () => {
     }
     return stars;
   };
+
+  const getBooksInCart = () => {
+    try {
+      const currentCart = localStorage.getItem('shoppingCart') 
+        ? JSON.parse(localStorage.getItem('shoppingCart')) 
+        : [];
+      const bookIds = new Set(currentCart.map(item => item.bookId));
+      console.log("ids in cart:", bookIds);
+      setBooksInCart(bookIds);
+      return bookIds;
+    } catch (error) {
+      console.error('Error al leer el carrito:', error);
+      return new Set();
+    }
+  };
+
+  
+  const handleAddToCart = async (book) => {
+  // If already in cart, don't do anything
+  if (booksInCart.has(book._id)) {
+    return;
+  }
+  
+  // Check if there's available stock
+  if (!book.stock || book.stock <= 0) {
+    showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
+    return;
+  }
+
+  // Show loading animation
+  setAddingToCart(book._id);
+
+  try {
+    console.log('SearchResults: Adding book to cart...', { bookId: book._id, title: book.titulo });
+    
+    // Get authentication token
+    const token = getAuthToken();
+    if (!token) {
+      showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
+      return;
+    }
+
+    // Make request to add to cart endpoint
+    const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
+      id_libro: book._id,
+      cantidad: 1
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (response.data.status === 'success') {
+      // FIXED: Read current cart state first
+      const currentCart = localStorage.getItem('shoppingCart') 
+        ? JSON.parse(localStorage.getItem('shoppingCart')) 
+        : [];
+      
+      // FIXED: Check if book is already in cart to avoid duplicates
+      const existingItemIndex = currentCart.findIndex(item => item.bookId === book._id);
+      
+      if (existingItemIndex === -1) {
+        // FIXED: Store only the book ID, not the entire book object
+        currentCart.push({
+          bookId: book._id, // Store only ID, not entire book object
+          quantity: 1
+        });
+        
+        localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
+      }
+
+      // Update cart counter based on server response
+      const newCount = response.data.data.carrito.n_item;
+      updateCartCount(newCount);
+      
+      // Update books in cart state
+      getBooksInCart();
+      
+      // Dispatch synchronization events
+      console.log('SearchResults: Dispatching synchronization events...');
+      const cartChangeEvent = new CustomEvent('cartUpdated', {
+        bubbles: true,
+        detail: {
+          bookId: book._id,
+          action: 'add',
+          timestamp: Date.now(),
+          serverResponse: response.data
+        }
+      });
+      window.dispatchEvent(cartChangeEvent);
+      
+      // Update timestamp to force other components to check
+      localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+      
+      // Generic cart update event
+      window.dispatchEvent(new Event('globalCartUpdate'));
+      
+      // Show success message from server
+      showToast(response.data.message || `${book.titulo} agregado al carrito`);
+      
+      console.log('SearchResults: All events dispatched successfully');
+    }
+
+    console.log("booksInCart:", booksInCart);
+  } catch (error) {
+    console.error('Error al agregar al carrito:', error);
+    
+    // Handle different types of server errors
+    if (error.response) {
+      const { status, data } = error.response;
+      switch (status) {
+        case 400:
+          showToast(data.message || 'Datos inválidos o límites excedidos', 'error');
+          break;
+        case 401:
+          showToast('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.', 'error');
+          break;
+        case 403:
+          showToast('No tienes permisos para realizar esta acción', 'error');
+          break;
+        case 409:
+          showToast(data.message || 'Stock insuficiente o límites de carrito alcanzados', 'error');
+          break;
+        case 500:
+          showToast('Error interno del servidor. Intenta más tarde.', 'error');
+          break;
+        default:
+          showToast(data.message || 'Ocurrió un error al agregar el libro al carrito', 'error');
+      }
+    } else if (error.request) {
+      showToast('Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
+    } else {
+      showToast('Ocurrió un error inesperado', 'error');
+    }
+  } finally {
+    // Disable animation after a brief period
+    setTimeout(() => {
+      setAddingToCart(null);
+    }, 500);
+  }
+};
+ 
 
   return (
     <UserLayout>
@@ -225,7 +432,7 @@ const SearchResults = () => {
                               ${precioBase.toLocaleString('es-CO')}
                             </div>
                             <div className="text-xl font-bold text-red-600">
-                              ${(book.precio - (book.precio * (porcentajeDescuento / 100))).toLocaleString('es-CO')}
+                              ${(book.precio).toLocaleString('es-CO')}
                             </div>
                             <div className="bg-green-500 text-white text-xs px-2 py-1 rounded mt-1">
                               {porcentajeDescuento}% DCTO
@@ -241,15 +448,33 @@ const SearchResults = () => {
                       {/* Botones */}
                       <div className="space-y-2 w-full">
                         <button 
-                          className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors text-sm opacity-50 cursor-not-allowed"
-                          onClick={() => {
-                            console.log('Agregar al carrito:', book.titulo);
-                            // Aquí iría la lógica para agregar al carrito
-                          }}
-                          disabled
-                        >
-                          Agregar al carrito
-                        </button>
+      className={`w-full px-4 py-2 rounded transition-colors text-sm flex items-center justify-center ${
+        [...booksInCart].some(cartBook => cartBook._id === book._id)
+          ? 'bg-green-600 text-white cursor-default' 
+          : addingToCart === book._id 
+            ? 'bg-gray-400 text-white cursor-not-allowed' 
+            : 'bg-blue-600 text-white hover:bg-blue-700'
+      }`}
+      onClick={() => {
+        const isInCart = [...booksInCart].some(cartBook => cartBook._id === book._id);
+        if (!isInCart && addingToCart !== book._id) {
+          console.log('Agregar al carrito:', book.titulo);
+          handleAddToCart(book);
+        }
+      }}
+      disabled={[...booksInCart].some(cartBook => cartBook._id === book._id) || addingToCart === book._id}
+    >
+      {addingToCart === book._id ? (
+        <>
+          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+          Agregando...
+        </>
+      ) : [...booksInCart].some(cartBook => cartBook._id === book._id) ? (
+        'Agregado'
+      ) : (
+        'Agregar al carrito'
+      )}
+    </button>
                         <button 
                           className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 transition-colors text-sm"
                           onClick={() => goToBookDetails(book._id)}

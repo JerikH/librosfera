@@ -212,8 +212,6 @@ export const getUserDataFromCookie = () => {
 
 // Function to logout user
 export const logoutUser = () => {
-
-  localStorage.removeItem('shoppingCart');
   // Clear the auth cookie
   document.cookie = "data=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
   
@@ -231,16 +229,3 @@ export const formatDate = (dateString) => {
     day: 'numeric'
   });
 };
-
-export const getAuthToken = () => {
-    const dataCookie = getCookie("data");
-    if (!dataCookie) return '';
-    
-    try {
-      const parsedData = JSON.parse(dataCookie);
-      return parsedData.authToken || '';
-    } catch (e) {
-      console.error('Error parsing auth token:', e);
-      return '';
-    }
-  };
