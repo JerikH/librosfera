@@ -212,6 +212,8 @@ export const getUserDataFromCookie = () => {
 
 // Function to logout user
 export const logoutUser = () => {
+
+  localStorage.removeItem('shoppingCart');
   // Clear the auth cookie
   document.cookie = "data=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
   

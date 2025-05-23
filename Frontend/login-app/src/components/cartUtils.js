@@ -1,4 +1,11 @@
 // cartUtils.js - Funciones de utilidad para el carrito de compras
+import axios from "axios";
+import { getAuthToken } from "./UserProfilePageComponents/authUtils";
+
+// SOLUCIÓN: Cache para evitar múltiples llamadas simultáneas
+let fetchCartPromise = null;
+let lastFetchTime = 0;
+const FETCH_CACHE_DURATION = 5000; // 5 segundos de cache
 
 /**
  * Agrega un libro al carrito de compras
@@ -6,9 +13,6 @@
  * @param {Number} quantity - Cantidad a agregar (por defecto 1)
  * @returns {Object} - Estado de la operación y el número total de elementos en el carrito
  */
-import axios from "axios";
-import { getAuthToken } from "./UserProfilePageComponents/authUtils";
-
 export const addToCart = (book, quantity = 1) => {
   try {
     // Verificar si hay stock disponible
@@ -42,6 +46,9 @@ export const addToCart = (book, quantity = 1) => {
     // Guardar el carrito actualizado en localStorage
     localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
     
+    // Actualizar timestamp
+    localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+    
     // Calcular el total de items en el carrito
     const totalItems = currentCart.reduce((total, item) => total + item.quantity, 0);
     
@@ -63,6 +70,7 @@ export const addToCart = (book, quantity = 1) => {
 
 /**
  * Obtiene el número total de elementos en el carrito
+ * SOLUCIÓN: Simplificado para evitar errores
  * @returns {Number} - Cantidad total de elementos
  */
 export const getCartCount = () => {
@@ -70,9 +78,8 @@ export const getCartCount = () => {
     const storedCart = localStorage.getItem('shoppingCart');
     if (storedCart) {
       const parsedCart = JSON.parse(storedCart);
-      console.log("cart:", parsedCart.length);
-      // return parsedCart.reduce((total, item) => `${parsedCart.length()}`, 0);
-      return parsedCart.length;
+      // CORRIGIDO: Calcular correctamente la cantidad total
+      return parsedCart.reduce((total, item) => total + (item.quantity || 0), 0);
     }
     return 0;
   } catch (error) {
@@ -85,25 +92,44 @@ export const getCartCount = () => {
  * Vacía el carrito de compras
  * @returns {Boolean} - True si se vació correctamente
  */
-export const clearCart = () => {
+export const clearCart = async () => {
   try {
-    localStorage.removeItem('shoppingCart');
+    // Try API first
+    await clearCartAPI();
     return true;
   } catch (error) {
-    console.error('Error al vaciar el carrito:', error);
-    return false;
+    console.error('Error al vaciar el carrito via API:', error);
+    
+    // Fallback to local clear
+    try {
+      localStorage.removeItem('shoppingCart');
+      localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+      return true;
+    } catch (localError) {
+      console.error('Error al vaciar el carrito localmente:', localError);
+      return false;
+    }
   }
 };
 
-
+/**
+ * SOLUCIÓN: Función mejorada para actualizar cantidad
+ * @param {string} BookId - ID del libro
+ * @param {number} Quantity - Nueva cantidad
+ * @returns {Promise<string>} - Status de la operación
+ */
 export const UpdateQuantityBook = async (BookId, Quantity) => {
-  
   try {
     const updateData = {
-        "cantidad": Quantity
+      "cantidad": Quantity
     };
 
-    const response = await axios.put(`http://localhost:5000/api/v1/carrito/item/${BookId}`, updateData, {
+    console.log(`Updating quantity for book ${BookId} to ${Quantity}`);
+
+    const response = await axios.put(
+      `http://localhost:5000/api/v1/carrito/item/${BookId}`, 
+      updateData, 
+      {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json',
@@ -112,103 +138,272 @@ export const UpdateQuantityBook = async (BookId, Quantity) => {
           'X-Requested-With': 'XMLHttpRequest',
           'X-Update-Reason': 'user_modification'
         },
-        timeout: 30000, // 30 seconds max timeout
+        timeout: 30000,
       }
     );
 
-    console.log('Success quantity:', response.data);
+    console.log('Update quantity success:', response.data);
+    
+    // Actualizar timestamp para forzar sincronización
+    localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+    
     return response.data.status;
   } catch (error) {
-    console.error('Error:', error.response ? error.response.data : error.message);
+    console.error('Error updating quantity:', error.response ? error.response.data : error.message);
+    throw error;
+  }
+};
+
+/**
+ * SOLUCIÓN: Función optimizada para obtener carrito de la API
+ * Implementa cache para evitar múltiples llamadas simultáneas
+ * @returns {Promise<void>}
+ */
+export const fetchCartUtils = async () => {
+  // Verificar si ya hay una llamada en progreso o si es muy reciente
+  const now = Date.now();
+  if (fetchCartPromise && (now - lastFetchTime) < FETCH_CACHE_DURATION) {
+    console.log('Using cached cart fetch request');
+    return fetchCartPromise;
+  }
+
+  // Crear nueva promesa y actualizar timestamps
+  lastFetchTime = now;
+  fetchCartPromise = performCartFetch();
+
+  try {
+    await fetchCartPromise;
+  } finally {
+    // Limpiar la promesa después de 5 segundos
+    setTimeout(() => {
+      if (fetchCartPromise && (Date.now() - lastFetchTime) >= FETCH_CACHE_DURATION) {
+        fetchCartPromise = null;
+      }
+    }, FETCH_CACHE_DURATION);
+  }
+};
+
+/**
+ * Función interna que realiza el fetch del carrito
+ * @returns {Promise<void>}
+ */
+const performCartFetch = async () => {
+  console.log('Fetching cart from API...');
+  
+  // Limpiar cart actual antes de hacer la llamada
+  localStorage.removeItem('shoppingCart');
+  
+  try {
+    const API_BASE_URL = 'http://localhost:5000/api/v1';
+    const response = await axios.get(`${API_BASE_URL}/carrito`, {
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`
+      },
+      timeout: 15000 // Timeout más corto
+    });
+   
+    if (response.data.status === 'success' && response.data.data) {
+      const { carrito, items } = response.data.data;
+     
+      // Transformar datos de la API
+      const cartWithDetails = items.map(item => ({
+        bookId: item.id_libro,
+        quantity: item.cantidad,
+        bookDetails: {
+          id: item.id_libro,
+          titulo: item.metadatos.titulo_libro,
+          autor_nombre_completo: item.metadatos.autor_libro,
+          precio: item.precios.precio_base,
+          precio_info: {
+            descuentos: item.codigos_aplicados.map(codigo => ({
+              activo: true,
+              tipo: 'porcentaje',
+              valor: codigo.tipo_descuento === 'porcentaje' ? (codigo.descuento_aplicado / item.precios.precio_base) * 100 : 0
+            }))
+          },
+          imagenes: item.metadatos.imagen_portada ? [{ url: item.metadatos.imagen_portada }] : [],
+          stock: item.metadatos.disponible ? 10 : 0,
+          editorial: '',
+          estado: 'nuevo',
+          anio_publicacion: ''
+        },
+        itemId: item._id,
+        subtotal: item.subtotal
+      }));
+     
+      // Guardar en localStorage
+      const localStorageCart = cartWithDetails.map(item => ({
+        bookId: item.bookId,
+        quantity: item.quantity
+      }));
+      
+      localStorage.setItem('shoppingCart', JSON.stringify(localStorageCart));
+      localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+      
+      // Dispatch eventos de sincronización
+      const cartChangeEvent = new CustomEvent('cartUpdated', {
+        bubbles: true,
+        detail: {
+          action: 'sync',
+          timestamp: Date.now()
+        }
+      });
+      window.dispatchEvent(cartChangeEvent);
+      window.dispatchEvent(new Event('globalCartUpdate'));
+     
+      console.log(`Cart synchronized: ${carrito.n_item} items`);
+    } else {
+      // No hay datos del carrito
+      localStorage.removeItem('shoppingCart');
+      localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+      console.log('Cart is empty');
+    }
+  } catch (error) {
+    console.error('Error al cargar carrito desde API:', error);
+    
+    // En caso de error, no eliminar el cart local para no perder datos
+    if (error.response?.status !== 401) {
+      // Solo si no es error de autenticación, mantener cart local
+      console.log('Manteniendo carrito local debido a error de red');
+    }
+    
+    throw error; // Re-lanzar el error para que el componente pueda manejarlo
+  }
+};
+
+/**
+ * SOLUCIÓN: Función para verificar si el carrito necesita sincronización
+ * @returns {boolean} - True si necesita sincronización
+ */
+export const needsCartSync = () => {
+  const lastUpdated = localStorage.getItem('cartLastUpdated');
+  if (!lastUpdated) return true;
+  
+  const timeDiff = Date.now() - parseInt(lastUpdated);
+  return timeDiff > (60 * 1000); // Sincronizar si han pasado más de 1 minuto
+};
+
+/**
+ * SOLUCIÓN: Función para sincronizar cart solo cuando sea necesario
+ * @returns {Promise<void>}
+ */
+export const syncCartIfNeeded = async () => {
+  if (needsCartSync()) {
+    await fetchCartUtils();
   }
 };
 
 
-export const fetchCartUtils = async () => {
-      localStorage.removeItem('shoppingCart');
-      try {
-        // Get cart data from API
-        const API_BASE_URL = 'http://localhost:5000/api/v1';
-        const response = await axios.get(`${API_BASE_URL}/carrito`, {
-          headers: {
-            'Authorization': `Bearer ${getAuthToken()}`
-          }
-        });
-       
-        if (response.data.status === 'success' && response.data.data) {
-          const { carrito, items } = response.data.data;
-         
-          // Transform API data to match component structure
-          const cartWithDetails = items.map(item => ({
-            bookId: item.id_libro,
-            quantity: item.cantidad,
-            bookDetails: {
-              id: item.id_libro,
-              titulo: item.metadatos.titulo_libro,
-              autor_nombre_completo: item.metadatos.autor_libro,
-              precio: item.precios.precio_base,
-              precio_info: {
-                descuentos: item.codigos_aplicados.map(codigo => ({
-                  activo: true,
-                  tipo: 'porcentaje',
-                  valor: codigo.tipo_descuento === 'porcentaje' ? (codigo.descuento_aplicado / item.precios.precio_base) * 100 : 0
-                }))
-              },
-              imagenes: item.metadatos.imagen_portada ? [{ url: item.metadatos.imagen_portada }] : [],
-              stock: item.metadatos.disponible ? 10 : 0, // API doesn't provide stock, using placeholder
-              editorial: '', // Not provided in API
-              estado: 'nuevo', // Not provided in API
-              anio_publicacion: '' // Not provided in API
-            },
-            itemId: item._id,
-            subtotal: item.subtotal
-          }));
-         
-          // setCartItems(cartWithDetails);
-          
-          // Store cart data in localStorage
-          const localStorageCart = cartWithDetails.map(item => ({
-            bookId: item.bookId,
-            quantity: item.quantity
-          }));
-          
-          localStorage.setItem('shoppingCart', JSON.stringify(localStorageCart));
-          
-          // Update timestamp to force other components to check
-          localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
-          
-          // Dispatch synchronization events
-          const cartChangeEvent = new CustomEvent('cartUpdated', {
-            bubbles: true,
-            detail: {
-              action: 'sync',
-              timestamp: Date.now()
-            }
-          });
-          window.dispatchEvent(cartChangeEvent);
-          
-          // Generic cart update event
-          window.dispatchEvent(new Event('globalCartUpdate'));
-         
-          // Update cart count
-          // if (updateCartCount) {
-          //   updateCartCount(carrito.n_item);
-          // }
-        } else {
-          // setCartItems([]);
-          // Clear localStorage if no cart data
-          localStorage.removeItem('shoppingCart');
-          localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
-        }
-      } catch (error) {
-        console.error('Error al cargar carrito desde API:', error);
-        // if (error.response?.status === 401) {
-        //   setError('Sesión expirada. Por favor, inicia sesión nuevamente.');
-        // } else {
-        //   setError('Ocurrió un error al cargar los elementos del carrito. Por favor, intenta de nuevo más tarde.');
-        // }
-      } 
-      // finally {
-      //   setIsLoading(false);
-      // }
+export const removeCartItem = async (itemId) => {
+  try {
+    const response = await axios.delete(
+      `http://localhost:5000/api/v1/carrito/item/${itemId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        timeout: 15000
+      }
+    );
+
+    console.log('Remove item success:', response.data);
+    
+    // Update localStorage timestamp
+    localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+    
+    // Dispatch events
+    const cartChangeEvent = new CustomEvent('cartUpdated', {
+      bubbles: true,
+      detail: {
+        action: 'remove_item',
+        timestamp: Date.now()
+      }
+    });
+    window.dispatchEvent(cartChangeEvent);
+    window.dispatchEvent(new Event('globalCartUpdate'));
+    
+    return response.data.status;
+  } catch (error) {
+    console.error('Error removing cart item:', error.response ? error.response.data : error.message);
+    throw error;
+  }
+};
+
+// NEW function to clear entire cart via API
+export const clearCartAPI = async () => {
+  try {
+    const response = await axios.delete(
+      `http://localhost:5000/api/v1/carrito`,
+      {
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        timeout: 15000
+      }
+    );
+
+    console.log('Clear cart success:', response.data);
+    
+    // Clear localStorage
+    localStorage.removeItem('shoppingCart');
+    localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+    
+    // Dispatch events
+    const cartChangeEvent = new CustomEvent('cartUpdated', {
+      bubbles: true,
+      detail: {
+        action: 'clear_cart',
+        timestamp: Date.now()
+      }
+    });
+    window.dispatchEvent(cartChangeEvent);
+    window.dispatchEvent(new Event('globalCartUpdate'));
+    
+    return response.data.status;
+  } catch (error) {
+    console.error('Error clearing cart:', error.response ? error.response.data : error.message);
+    throw error;
+  }
+};
+
+// NEW function to get cart totals from API
+export const getCartTotals = async () => {
+  try {
+    const response = await axios.get(
+      `http://localhost:5000/api/v1/carrito/total`,
+      {
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        timeout: 15000
+      }
+    );
+
+    console.log('Get cart totals success:', response.data);
+    
+    if (response.data.status === 'success' && response.data.data) {
+      return {
+        status: 'success',
+        data: response.data.data
+      };
+    }
+    
+    return {
+      status: 'error',
+      data: null
     };
+  } catch (error) {
+    console.error('Error getting cart totals:', error.response ? error.response.data : error.message);
+    return {
+      status: 'error',
+      data: null,
+      error: error.response ? error.response.data : error.message
+    };
+  }
+};

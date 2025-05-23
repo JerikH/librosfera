@@ -14,6 +14,7 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
   const [isLoading, setIsLoading] = useState(false);
   const cartRef = useRef(null);
   const [updatingQuantity, setUpdatingQuantity] = useState({});
+  const [cartTotals, setCartTotals] = useState({});
   const navigate = useNavigate();
 
   // Efecto para cargar los elementos del carrito del localStorage
@@ -59,11 +60,12 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
           }));
           
           setCartItems(cartWithDetails);
+          setCartTotals(carrito);
           
           // Actualizar el contador del carrito en el componente padre si existe la función
           // updateCartCount(parsedCart.reduce((total, item) => total + item.quantity, 0));
           updateCartCount(carrito.n_libros_diferentes);
-          console.log(carrito);
+          console.log("carrito:", carrito);
         } else {
           setCartItems([]);
           updateCartCount(0);
@@ -157,7 +159,45 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
     }, [updateCartCount]);
 
   // Función para eliminar un item del carrito
-  const removeItem = (itemId) => {
+  const removeItem = async (itemId, bookId) => {
+  console.log("Delete:", itemId);
+  try {
+    // Call API to remove item from server
+    await axios.delete(`${API_BASE_URL}/carrito/item/${bookId}`, {
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`
+      }
+    });
+
+    // Update local state
+    const updatedCart = cartItems.filter(item => item.bookId._id !== itemId);
+    setCartItems(updatedCart);
+    
+    // Actualizar localStorage
+    const simplifiedCart = updatedCart.map(item => ({
+      bookId: item.bookDetails?._id,
+      quantity: item.quantity
+    }));
+    
+    localStorage.setItem('shoppingCart', JSON.stringify(simplifiedCart));
+    
+    // Actualizar el contador del carrito en el componente padre si existe la función
+    updateCartCount(simplifiedCart.reduce((total, item) => total + item.quantity, 0));
+
+    // Dispatch events
+    const cartChangeEvent = new CustomEvent('cartUpdated', {
+      bubbles: true,
+      detail: {
+        action: 'remove_item',
+        timestamp: Date.now()
+      }
+    });
+    window.dispatchEvent(cartChangeEvent);
+    window.dispatchEvent(new Event('globalCartUpdate'));
+
+  } catch (error) {
+    console.error('Error removing item from cart:', error);
+    // Still update UI even if API call fails to maintain consistency
     const updatedCart = cartItems.filter(item => item.bookDetails?._id !== itemId);
     setCartItems(updatedCart);
     
@@ -171,7 +211,8 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
     
     // Actualizar el contador del carrito en el componente padre si existe la función
     updateCartCount(simplifiedCart.reduce((total, item) => total + item.quantity, 0));
-  };
+  }
+};
 
   // Función para vaciar todo el carrito utilizando la utilidad importada
   const clearCart = () => {
@@ -264,7 +305,7 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
                       <h3 className="font-medium text-sm line-clamp-2">{item.bookDetails?.titulo}</h3>
                       <button 
                         className="text-gray-400 hover:text-red-500"
-                        onClick={() => removeItem(item.bookDetails?._id)}
+                        onClick={() => removeItem(item, item.bookId._id)}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -276,18 +317,19 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
                     
                     {/* Precio */}
                     <div className="flex items-center mb-2">
-                      {item.bookDetails?.precio_info?.descuentos?.some(d => d.activo) ? (
-                        <>
-                          <span className="text-xs line-through text-gray-500 mr-1">
-                            ${item.bookDetails?.precio?.toLocaleString('es-CO')}
+                      {item.bookId?.precio_info?.precio_base && 
+                      item.bookId.precio_info.precio_base !== item.bookId.precio ? (
+                        <div className="flex flex-col">
+                          <span className="text-xs line-through text-gray-500">
+                            ${item.bookId.precio_info.precio_base.toLocaleString('es-CO')}
                           </span>
                           <span className="text-sm font-bold text-red-600">
-                            ${(item.bookDetails?.precio - (item.bookDetails?.precio * (item.bookDetails?.precio_info?.descuentos?.find(d => d.activo && d.tipo === 'porcentaje')?.valor / 100))).toLocaleString('es-CO')}
+                            ${item.bookId.precio.toLocaleString('es-CO')}
                           </span>
-                        </>
+                        </div>
                       ) : (
                         <span className="text-sm font-bold">
-                          ${item.bookDetails?.precio?.toLocaleString('es-CO')}
+                          ${item.bookId?.precio?.toLocaleString('es-CO')}
                         </span>
                       )}
                     </div>
@@ -334,19 +376,32 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
             <>
               <div className="flex justify-between mb-2">
                 <span className="text-gray-600">Subtotal</span>
-                <span className="font-bold">${calculateSubtotal().toLocaleString('es-CO')}</span>
-              </div>
-              <div className="flex justify-between mb-4">
-                <span className="text-gray-600">Envío</span>
-                <span className="text-green-600 font-medium">Gratis</span>
-              </div>
-              <div className="h-px bg-gray-300 mb-4"></div>
-              <div className="flex justify-between mb-6">
-                <span className="text-lg font-bold">Total</span>
-                <span className="text-lg font-bold">${calculateSubtotal().toLocaleString('es-CO')}</span>
-              </div>
-            </>
+                <div className="flex flex-col items-end">
+          {/* Show base subtotal crossed out if there are any discounts */}
+          {cartItems.some(item => 
+            cartTotals.totales.subtotal_base && 
+            cartTotals.totales.subtotal_base !== cartTotals.totales.subtotal_con_descuentos
+          ) && (
+            <span className="text-xs line-through text-gray-500">
+              ${cartTotals.totales.subtotal_base.toLocaleString('es-CO')}
+            </span>
           )}
+          <span className="font-bold text-red-600">
+            ${cartTotals.totales.subtotal_con_descuentos.toLocaleString('es-CO')}
+          </span>
+        </div>
+      </div>
+      <div className="flex justify-between mb-4">
+        <span className="text-gray-600">Envío</span>
+        <span className="text-green-600 font-medium">Gratis</span>
+      </div>
+      <div className="h-px bg-gray-300 mb-4"></div>
+      <div className="flex justify-between mb-6">
+        <span className="text-lg font-bold">Total</span>
+        <span className="text-lg font-bold">${cartTotals.totales.subtotal_con_descuentos.toLocaleString('es-CO')}</span>
+      </div>
+    </>
+  )}
           
           <div className="grid grid-cols-2 gap-4">
             {cartItems.length > 0 ? (

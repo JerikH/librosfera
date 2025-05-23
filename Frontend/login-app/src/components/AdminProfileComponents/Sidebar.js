@@ -7,6 +7,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
   const [refreshing, setRefreshing] = useState(false);
   // Función para manejar el logout
   const handleLogout = async () => {
+    localStorage.removeItem('shoppingCart');
     await logoutUser();
     window.location.replace('/Login');
   };

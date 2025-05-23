@@ -128,6 +128,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
 
   // Función para cerrar sesión
   const handleLogout = () => {
+    localStorage.removeItem('shoppingCart');
     // Limpiar las cookies
     document.cookie.split(";").forEach((cookie) => {
       document.cookie = cookie
