@@ -1,4 +1,3 @@
-// Database/services/ventaService.js
 const mongoose = require('mongoose');
 const Venta = require('../models/ventaModel');
 const Devolucion = require('../models/devolucionModel');
@@ -107,17 +106,23 @@ class VentaService {
         })) || []
       });
       
+      // CORRECCIÓN: Primero guardar la venta en la base de datos
+      await nuevaVenta.save({ session });
+      
       // 7. Procesar el pago
       try {
         await this._procesarPago(tarjeta, carrito.totales.total_final, nuevaVenta.numero_venta);
-        await nuevaVenta.aprobarPago();
+        // CORRECCIÓN: Aplicar cambios al objeto en memoria sin guardar
+        nuevaVenta.aprobarPago();
+        // CORRECCIÓN: Luego guardar explícitamente con la sesión
+        await nuevaVenta.save({ session });
       } catch (errorPago) {
-        await nuevaVenta.rechazarPago(errorPago.message);
+        // En caso de error, rechazar el pago sin guardar
+        nuevaVenta.rechazarPago(errorPago.message);
+        // Guardar explícitamente con la sesión
         await nuevaVenta.save({ session });
         throw new Error(`Error procesando el pago: ${errorPago.message}`);
       }
-      
-      await nuevaVenta.save({ session });
       
       // 8. Actualizar inventario
       for (const item of items) {
@@ -313,8 +318,11 @@ class VentaService {
         throw new Error('No tienes permisos para cancelar esta venta');
       }
       
-      // Cancelar la venta
-      await venta.cancelarVenta(motivo, solicitadaPor, idUsuario);
+      // Cancelar la venta (sin guardar)
+      venta.cancelarVenta(motivo, solicitadaPor, idUsuario);
+      
+      // Guardar los cambios con la sesión
+      await venta.save({ session });
       
       // Si el pago fue aprobado, procesar reembolso
       if (venta.pago.estado_pago === 'reembolsado') {
@@ -384,41 +392,62 @@ class VentaService {
    * Actualizar estado de envío
    */
   async actualizarEstadoEnvio(numeroVenta, nuevoEstado, datosEnvio, idUsuario) {
-    const venta = await Venta.findOne({ numero_venta: numeroVenta });
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (!venta) {
-      throw new Error('Venta no encontrada');
-    }
-    
-    switch (nuevoEstado) {
-      case 'listo_para_envio':
-        await venta.marcarListoParaEnvio(idUsuario);
-        break;
-        
-      case 'enviado':
-        if (!datosEnvio.numero_guia) {
-          throw new Error('Se requiere número de guía para marcar como enviado');
-        }
-        await venta.marcarComoEnviado(datosEnvio, idUsuario);
-        // Enviar notificación de envío
+    try {
+      const venta = await Venta.findOne({ numero_venta: numeroVenta }).session(session);
+      
+      if (!venta) {
+        throw new Error('Venta no encontrada');
+      }
+      
+      switch (nuevoEstado) {
+        case 'listo_para_envio':
+          venta.marcarListoParaEnvio(idUsuario);
+          break;
+          
+        case 'enviado':
+          if (!datosEnvio.numero_guia) {
+            throw new Error('Se requiere número de guía para marcar como enviado');
+          }
+          venta.marcarComoEnviado(datosEnvio, idUsuario);
+          break;
+          
+        case 'entregado':
+          venta.marcarComoEntregado(idUsuario, datosEnvio.fecha_entrega);
+          break;
+          
+        default:
+          throw new Error('Estado de envío no válido');
+      }
+      
+      // Guardar con la sesión
+      await venta.save({ session });
+      
+      // Si el estado es "enviado", enviar notificación
+      if (nuevoEstado === 'enviado') {
         this._enviarNotificacionEnvio(venta).catch(err => 
           console.error('Error enviando notificación:', err)
         );
-        break;
-        
-      case 'entregado':
-        await venta.marcarComoEntregado(idUsuario, datosEnvio.fecha_entrega);
-        // Enviar notificación de entrega
+      }
+      
+      // Si el estado es "entregado", enviar notificación
+      if (nuevoEstado === 'entregado') {
         this._enviarNotificacionEntrega(venta).catch(err => 
           console.error('Error enviando notificación:', err)
         );
-        break;
-        
-      default:
-        throw new Error('Estado de envío no válido');
+      }
+      
+      await session.commitTransaction();
+      
+      return venta;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-    
-    return venta;
   }
   
   /**
