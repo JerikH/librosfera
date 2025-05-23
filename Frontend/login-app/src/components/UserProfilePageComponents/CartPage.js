@@ -193,7 +193,7 @@ useEffect(() => {
     setUpdatingQuantity(prev => ({ ...prev, [itemId]: true }));
     
     try {
-      const result = await UpdateQuantityBook(item.bookId, newQuantity);
+      const result = await UpdateQuantityBook(item.bookId._id, newQuantity);
 
       if(result === "success"){
         const updatedCart = cartItems.map(cartItem => 
@@ -331,9 +331,16 @@ useEffect(() => {
 
 
 
-  const goToCheckout = useCallback(() => {
+  const goToCheckout = useCallback(async () => {
+    // Always fetch fresh cart totals before saving
+    const freshCartTotals = await fetchCartTotals();
+    
+    // Save the fresh cart totals to localStorage
+    const dataToSave = freshCartTotals || cartTotals;
+    localStorage.setItem('CartPrices', JSON.stringify(dataToSave));
+    
     navigate('/checkout');
-  }, [navigate]);
+  }, [navigate, cartTotals, fetchCartTotals]);
 
   if (isLoading) {
     return (

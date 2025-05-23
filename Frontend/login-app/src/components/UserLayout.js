@@ -46,8 +46,10 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
         }
         
         console.log("User data loaded from cookie");
+        console.log(parsedData.Data);
         setUserData(parsedData.Data);
-        if (parsedData) {
+
+        if (parsedData && !(parsedData.Data.tipo_usuario == "administrador")&& !(parsedData.Data.tipo_usuario == "root")) {
           fetchCartUtils();
         }
         setIsLoading(false);
@@ -198,11 +200,11 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
                   </button>
                   
                   {/* Mostrar "Mis Pedidos" solo para usuarios regulares (clientes) */}
-                  {isRegularUser && (
+                  {/* {isRegularUser && (
                     <Link to="/mis-pedidos" className="text-sm hover:underline">
                       Mis Pedidos
                     </Link>
-                  )}
+                  )} */}
                   
                   <button 
                     onClick={handleLogout}
@@ -298,7 +300,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
         </div>
         
         {/* Navigation links - modificados para estar distribuidos uniformemente */}
-        <nav className="bg-gray-100">
+        {/* <nav className="bg-gray-100">
           <div className="container mx-auto">
             <ul className="flex justify-between items-center px-4 py-3 text-sm">
               {[
@@ -318,7 +320,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
               ))}
             </ul>
           </div>
-        </nav>
+        </nav> */}
       </header>
       
       {/* Main content */}

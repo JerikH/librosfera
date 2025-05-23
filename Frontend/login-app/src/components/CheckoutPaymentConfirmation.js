@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
+import axios from 'axios';
+import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 // Componente de confirmación previa al pago
 function CheckoutPaymentConfirmation() {
@@ -24,6 +26,7 @@ function CheckoutPaymentConfirmation() {
   // Estado para el total
   const [subtotal, setSubtotal] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
+  const [taxAmount, setTaxAmount] = useState(0); // Add this line
   const [total, setTotal] = useState(0);
   
   // Cargar datos al iniciar
@@ -37,43 +40,94 @@ function CheckoutPaymentConfirmation() {
           const parsedPaymentInfo = JSON.parse(storedPaymentInfo);
           setPaymentInfo(parsedPaymentInfo);
         } else {
-          // Si no hay información de pago, redirigir a la página de pago
           navigate('/checkout/payment');
           return;
         }
         
-        // Obtener carrito del localStorage
+        // Obtener carrito del localStorage - Fixed to match checkoutdeliverypage approach
         const storedCart = localStorage.getItem('shoppingCart');
+        const storedPrices = localStorage.getItem('CartPrices'); // Use correct key with capital C
+        
         if (storedCart) {
-          const parsedCart = JSON.parse(storedCart);
-          setCartItems(parsedCart);
-          
-          // Calcular subtotal (simulado, en realidad vendría de la API con detalles completos)
-          const calculatedSubtotal = parsedCart.reduce((total, item) => {
+          try {
+            const parsedCart = JSON.parse(storedCart);
+            if (Array.isArray(parsedCart) && parsedCart.length > 0) {
+              setCartItems(parsedCart);
+            }
+          } catch (error) {
+            console.error('Error parsing cart data:', error);
+          }
+        }
+
+        // Handle cart prices properly
+        if (storedPrices) {
+          try {
+            const parsedPrices = JSON.parse(storedPrices);
+            if (parsedPrices && typeof parsedPrices === 'object') {
+              // Use the pricing data from CartPrices
+              const calculatedSubtotal = parsedPrices.subtotal_con_descuentos || 0;
+              const taxAmount = parsedPrices.total_impuestos || 0;
+              const finalTotal = (calculatedSubtotal + taxAmount) || parsedPrices.total_final  ;
+              
+              setSubtotal(calculatedSubtotal);
+              setTaxAmount(taxAmount); // Add this line
+              setTotal(finalTotal);
+            }
+          } catch (error) {
+            console.error('Error parsing cart prices:', error);
+            // Fallback calculation if CartPrices fails
+            if (cartItems.length > 0) {
+              const calculatedSubtotal = cartItems.reduce((total, item) => {
+                return total + ((item.price || 35000) * item.quantity);
+              }, 0);
+              setSubtotal(calculatedSubtotal);
+            }
+          }
+        } else if (cartItems.length > 0) {
+          // No stored prices, calculate manually
+          const calculatedSubtotal = cartItems.reduce((total, item) => {
             return total + ((item.price || 35000) * item.quantity);
           }, 0);
-          
           setSubtotal(calculatedSubtotal);
-        } else {
-          // Si no hay carrito, redireccionar a la página de inicio
-          navigate('/Home');
-          return;
         }
         
-        // Cargar información de envío
+        // Cargar información de envío - Fixed to match checkoutdeliverypage structure
         const storedShippingInfo = localStorage.getItem('shippingPreferences');
         if (storedShippingInfo) {
-          const parsedShippingInfo = JSON.parse(storedShippingInfo);
-          setShippingInfo(parsedShippingInfo);
-          
-          // Establecer costo de envío
-          const cost = parsedShippingInfo.shippingCost || 0;
-          setShippingCost(cost);
-          
-          // Calcular total con envío
-          setTotal(subtotal + cost);
+          try {
+            const parsedShippingInfo = JSON.parse(storedShippingInfo);
+            setShippingInfo({
+              method: parsedShippingInfo.method,
+              storeName: parsedShippingInfo.storeName || '',
+              storeAddress: parsedShippingInfo.storeAddress || '',
+              shippingCost: parsedShippingInfo.shippingCost || 0,
+              locationCity: parsedShippingInfo.locationCity,
+              locationState: parsedShippingInfo.locationState
+            });
+            
+            const cost = parsedShippingInfo.shippingCost || 0;
+            setShippingCost(cost);
+            
+            // Use total from CartPrices if available, otherwise calculate
+            const storedPricesData = localStorage.getItem('CartPrices');
+            if (storedPricesData) {
+              const parsedPricesData = JSON.parse(storedPricesData);
+              setTotal(parsedPricesData.total_final + parsedPricesData.total_impuestos || (subtotal + cost));
+            } else {
+              setTotal(subtotal + cost);
+            }
+          } catch (error) {
+            console.error('Error parsing shipping info:', error);
+          }
         } else {
-          setTotal(subtotal);
+          // Use total from CartPrices if no shipping info
+          const storedPricesData = localStorage.getItem('CartPrices');
+          if (storedPricesData) {
+            const parsedPricesData = JSON.parse(storedPricesData);
+            setTotal(parsedPricesData.total_final + parsedPricesData.total_impuestos|| subtotal);
+          } else {
+            setTotal(subtotal);
+          }
         }
       } catch (error) {
         console.error('Error al cargar datos:', error);
@@ -83,47 +137,111 @@ function CheckoutPaymentConfirmation() {
     };
     
     loadData();
-  }, [navigate, subtotal]);
+  }, [navigate]);
   
   // Efecto para actualizar el total cuando cambia el subtotal o el costo de envío
   useEffect(() => {
-    setTotal(subtotal + shippingCost);
-  }, [subtotal, shippingCost]);
+    setTotal(subtotal + shippingCost + taxAmount);
+  }, [subtotal, shippingCost, taxAmount]);
   
   // Confirmar y procesar pago
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = async () => {
     try {
-      // Aquí iría la lógica para procesar el pago con un servicio de pagos
-      // Por ahora, simularemos un pago exitoso
+      setIsLoading(true);
       
-      // Guardar los datos del pago en localStorage para confirmar éxito
-      const paymentData = {
-        method: paymentInfo.method,
-        cardNumber: paymentInfo.cardNumber ? paymentInfo.cardNumber.replace(/\d(?=\d{4})/g, "*") : '',
-        cardholderName: paymentInfo.cardholderName,
-        total,
-        subtotal,
-        shippingCost,
-        shippingMethod: shippingInfo.method,
-        timestamp: new Date().toISOString()
+      // Get user data for shipping address
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      
+      // Get card data from tempPaymentInfo
+      const storedPaymentInfo = localStorage.getItem('tempPaymentInfo');
+      if (!storedPaymentInfo) {
+        alert('No se encontró información de pago. Por favor, vuelve a ingresar los datos de tu tarjeta.');
+        navigate('/checkout/payment');
+        return;
+      }
+      
+      const paymentData = JSON.parse(storedPaymentInfo);
+      console.log("payment:", paymentData);
+      
+      // Prepare the request payload based on the example
+      const requestPayload = {
+        id_tarjeta: paymentData.Id, // You might need to store this when saving payment info
+        tipo_envio: shippingInfo.method === 'tienda' ? 'tienda' : 'domicilio',
+        direccion_envio: {
+          calle: userData.direccion || "Dirección no especificada",
+          ciudad: shippingInfo.locationCity || userData.ciudad || "Pereira",
+          codigo_postal: userData.codigoPostal || "660001",
+          pais: "Colombia",
+          estado_provincia: shippingInfo.locationState || userData.departamento || "Risaralda",
+          referencias: userData.referencias || ""
+        },
+        notas_envio: shippingInfo.method === 'tienda' ? 
+          `Recoger en tienda: ${shippingInfo.storeName}` : 
+          "Entrega a domicilio"
       };
       
-      localStorage.setItem('paymentData', JSON.stringify(paymentData));
+      console.log('Enviando solicitud de pago:', requestPayload);
       
-      // Limpiar datos temporales de pago
-      localStorage.removeItem('tempPaymentInfo');
+      // Get auth token (you might need to adjust this based on how you store it)
+      const authToken = localStorage.getItem('authToken') || localStorage.getItem('token');
       
-      // Simular procesamiento de pago
-      alert('¡Pago procesado correctamente!');
+      // Make the API request
+      const response = await axios.post('http://localhost:5000/api/v1/ventas', requestPayload, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0',
+          'Cache-Control': 'no-cache'
+        },
+        timeout: 30000
+      });
       
-      // Limpiar carrito
-      localStorage.removeItem('shoppingCart');
-      
-      // Redirigir al home
-      navigate('/Home');
+      if (response.status === 200 || response.status === 201) {
+        // Pago exitoso
+        console.log('Pago procesado exitosamente:', response.data);
+        
+        // Guardar los datos del pago para confirmar éxito
+        const paymentConfirmation = {
+          method: paymentInfo.method,
+          cardNumber: paymentInfo.cardNumber ? paymentInfo.cardNumber.replace(/\d(?=\d{4})/g, "*") : '',
+          cardholderName: paymentInfo.cardholderName,
+          total,
+          subtotal,
+          shippingCost,
+          shippingMethod: shippingInfo.method,
+          timestamp: new Date().toISOString(),
+          transactionId: response.data.id || response.data.transactionId
+        };
+        
+        localStorage.setItem('paymentData', JSON.stringify(paymentConfirmation));
+        
+        // Limpiar datos temporales
+        localStorage.removeItem('tempPaymentInfo');
+        localStorage.removeItem('shoppingCart');
+        localStorage.removeItem('CartPrices');
+        localStorage.removeItem('shippingPreferences');
+        
+        alert('¡Pago procesado correctamente!');
+        navigate('/Home');
+      }
     } catch (error) {
       console.error('Error al procesar el pago:', error);
-      alert('Ha ocurrido un error al procesar el pago. Por favor intente nuevamente.');
+      
+      let errorMessage = 'Ha ocurrido un error al procesar el pago. Por favor intente nuevamente.';
+      
+      if (error.response) {
+        // Server responded with error status
+        console.error('Error response:', error.response.data);
+        errorMessage = error.response.data.message || errorMessage;
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'No se pudo conectar con el servidor. Verifique su conexión a internet.';
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -169,6 +287,10 @@ function CheckoutPaymentConfirmation() {
                         <div className="flex justify-between">
                           <span className="text-gray-600">Producto</span>
                           <span>$ {subtotal.toLocaleString('es-CO')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Impuestos</span>
+                          <span>$ {taxAmount.toLocaleString('es-CO')}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Envío</span>

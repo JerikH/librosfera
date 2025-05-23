@@ -79,19 +79,29 @@ const HomePage = () => {
 
   // Función para obtener los libros que están en el carrito
   const getBooksInCart = () => {
-    try {
-      const currentCart = localStorage.getItem('shoppingCart') 
-        ? JSON.parse(localStorage.getItem('shoppingCart')) 
-        : [];
-      const bookIds = new Set(currentCart.map(item => item.bookId));
-      console.log("ids in cart:", bookIds);
-      setBooksInCart(bookIds);
-      return bookIds;
-    } catch (error) {
-      console.error('Error al leer el carrito:', error);
-      return new Set();
-    }
-  };
+  try {
+    const currentCart = localStorage.getItem('shoppingCart') 
+      ? JSON.parse(localStorage.getItem('shoppingCart')) 
+      : [];
+    
+    // Extract book IDs properly, handling both full book objects and ID strings
+    const bookIds = new Set(currentCart.map(item => {
+      if (typeof item.bookId === 'string') {
+        return item.bookId;
+      } else if (item.bookId && typeof item.bookId === 'object') {
+        return item.bookId._id || item.bookId.id;
+      }
+      return null;
+    }).filter(id => id !== null));
+    
+    console.log("ids in cart:", Array.from(bookIds));
+    setBooksInCart(bookIds);
+    return bookIds;
+  } catch (error) {
+    console.error('Error al leer el carrito:', error);
+    return new Set();
+  }
+};
 
   useEffect(() => {
     // Cargar el contador inicial del carrito y los libros en el carrito
@@ -281,12 +291,12 @@ const BookCard = ({ book }) => {
   const [addingToCart, setAddingToCart] = useState(false); // Estado para animación al agregar al carrito
   
   // Verificar si este libro está en el carrito
-  const isInCart = [...booksInCart].some(cartBook => cartBook._id === book._id);
+  const isInCart = booksInCart.has(book._id);
 
-  // console.log(booksInCart);
-  // console.log(book.titulo);
-  // console.log(book._id);
-  // console.log(isInCart);
+  console.log(booksInCart);
+  console.log(book.titulo);
+  console.log(book._id);
+  console.log(isInCart);
   
   useEffect(() => {
     // Only run image verification once
@@ -332,133 +342,123 @@ const BookCard = ({ book }) => {
   };
 
   // Función para agregar al carrito
-  const handleAddToCart = async (e) => {
-    e.stopPropagation(); // Prevenir navegación a detalles
-    
-    // Si ya está en el carrito, no hacer nada
-    if (isInCart) {
-      return;
-    }
-    
-    // Comprobamos si hay stock disponible
-    if (!book.stock || book.stock <= 0) {
-      showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
-      return;
-    }
+const handleAddToCart = async (e, book) => {
+  e.preventDefault();
+  e.stopPropagation();
   
-    // Mostrar animación de carga
-    setAddingToCart(true);
+  // FIXED: Use the same logic as the isInCart check above
+  if (booksInCart.has(book._id)) {
+    return;
+  }
   
-    try {
-      console.log('HomePage: Adding book to cart...', { bookId: book._id, title: book.titulo });
-      
-      // Obtener token de autenticación
-      const token = getAuthToken();
-      if (!token) {
-        showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
-        return;
-      }
+  // Check if there's available stock
+  if (!book.stock || book.stock <= 0) {
+    showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
+    return;
+  }
 
-      // Realizar petición al endpoint de agregar al carrito
-      const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
-        id_libro: book._id,
-        cantidad: 1
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+  // Show loading animation
+  setAddingToCart(true); // FIXED: Changed from setAddingToCart(book._id) to setAddingToCart(true)
+
+  try {
+    console.log('HomePage: Adding book to cart...', { bookId: book._id, title: book.titulo });
+    
+    const token = getAuthToken();
+    if (!token) {
+      showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
+      return;
+    }
+
+    const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
+      id_libro: book._id,
+      cantidad: 1
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (response.data.status === 'success') {
+      const currentCart = localStorage.getItem('shoppingCart') 
+      ? JSON.parse(localStorage.getItem('shoppingCart')) 
+      : [];
+      
+      currentCart.push({
+        bookId: book,
+        quantity: 1
+      });
+      
+      localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
+
+      const newCount = response.data.data.carrito.n_item;
+      updateCartCount(newCount);
+
+      setBooksInCart(prevBooksInCart => {
+          const newBooksInCart = new Set(prevBooksInCart);
+          newBooksInCart.add(book._id);
+          return newBooksInCart;
+        });
+      
+      getBooksInCart();
+      
+      console.log('HomePage: Dispatching synchronization events...');
+      const cartChangeEvent = new CustomEvent('cartUpdated', {
+        bubbles: true,
+        detail: {
+          bookId: book._id,
+          action: 'add',
+          timestamp: Date.now(),
+          serverResponse: response.data
         }
       });
-
-      if (response.data.status === 'success') {
-        const currentCart = localStorage.getItem('shoppingCart') 
-        ? JSON.parse(localStorage.getItem('shoppingCart')) 
-        : [];
-        
-        currentCart.push({
-          bookId: book,
-          quantity: 1
-        });
-        
-        localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
-
-
-        // Actualizar el contador del carrito basado en la respuesta del servidor
-        const newCount = response.data.data.carrito.n_item;
-        updateCartCount(newCount);
-
-        
-        
-        
-        
-        // Actualizar el estado de libros en carrito
-        getBooksInCart();
-       
-        
-        
-        // Dispatch synchronization events
-        console.log('HomePage: Dispatching synchronization events...');
-        const cartChangeEvent = new CustomEvent('cartUpdated', {
-          bubbles: true,
-          detail: {
-            bookId: book._id,
-            action: 'add',
-            timestamp: Date.now(),
-            serverResponse: response.data
-          }
-        });
-        window.dispatchEvent(cartChangeEvent);
-        
-        // Update timestamp to force other components to check
-        localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
-        
-        // Generic cart update event
-        window.dispatchEvent(new Event('globalCartUpdate'));
-        
-        // Mostrar mensaje de éxito del servidor
-        showToast(response.data.message || `${book.titulo} agregado al carrito`);
-        
-        console.log('HomePage: All events dispatched successfully');
-      }
-    } catch (error) {
-      console.error('Error al agregar al carrito:', error);
+      window.dispatchEvent(cartChangeEvent);
       
-      // Manejar diferentes tipos de errores del servidor
-      if (error.response) {
-        const { status, data } = error.response;
-        switch (status) {
-          case 400:
-            showToast(data.message || 'Datos inválidos o límites excedidos', 'error');
-            break;
-          case 401:
-            showToast('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.', 'error');
-            break;
-          case 403:
-            showToast('No tienes permisos para realizar esta acción', 'error');
-            break;
-          case 409:
-            showToast(data.message || 'Stock insuficiente o límites de carrito alcanzados', 'error');
-            break;
-          case 500:
-            showToast('Error interno del servidor. Intenta más tarde.', 'error');
-            break;
-          default:
-            showToast(data.message || 'Ocurrió un error al agregar el libro al carrito', 'error');
-        }
-      } else if (error.request) {
-        showToast('Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
-      } else {
-        showToast('Ocurrió un error inesperado', 'error');
-      }
-    } finally {
-      // Desactivar la animación después de un breve periodo
-      setTimeout(() => {
-        setAddingToCart(false);
-      }, 500);
+      localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+      window.dispatchEvent(new Event('globalCartUpdate'));
+      
+      showToast(response.data.message || `${book.titulo} agregado al carrito`);
+      
+      console.log('HomePage: All events dispatched successfully');
     }
-  };
 
+    console.log("booksInCart:", booksInCart);
+  } catch (error) {
+    console.error('Error al agregar al carrito:', error);
+    
+    if (error.response) {
+      const { status, data } = error.response;
+      switch (status) {
+        case 400:
+          showToast(data.message || 'Datos inválidos o límites excedidos', 'error');
+          break;
+        case 401:
+          showToast('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.', 'error');
+          break;
+        case 403:
+          showToast('No tienes permisos para realizar esta acción', 'error');
+          break;
+        case 409:
+          showToast(data.message || 'Stock insuficiente o límites de carrito alcanzados', 'error');
+          break;
+        case 500:
+          showToast('Error interno del servidor. Intenta más tarde.', 'error');
+          break;
+        default:
+          showToast(data.message || 'Ocurrió un error inesperado al agregar el libro al carrito', 'error');
+      }
+    } else if (error.request) {
+      showToast('Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
+    } else {
+      showToast('Ocurrió un error inesperado', 'error');
+    }
+  } finally {
+    setTimeout(() => {
+      setAddingToCart(false); // FIXED: Changed from setAddingToCart(null) to setAddingToCart(false)
+    }, 500);
+  }
+};
   // Calcular precio con y sin descuento
   const precioBase = book.precio_info?.precio_base || book.precio;
   const tieneDescuento = book.precio_info?.descuentos?.some(d => d.activo);
@@ -599,41 +599,41 @@ const BookCard = ({ book }) => {
         {/* Botón Agregar al carrito */}
         <div className="mt-2 flex">
           <button 
-            className={`flex items-center justify-center px-3 py-1 rounded-full text-sm w-full transition-colors
-              ${stockDisponible <= 0 
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : isInCart
-                  ? 'bg-green-600 text-white cursor-default'
-                  : addingToCart 
-                    ? 'bg-gray-400 text-white cursor-wait' 
-                    : 'bg-red-600 text-white hover:bg-red-700 cursor-pointer'}`}
-            onClick={handleAddToCart}
-            disabled={stockDisponible <= 0 || addingToCart || isInCart}
-          >
-            {addingToCart ? (
-              <span className="flex items-center">
-                <svg className="w-4 h-4 mr-2 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Agregando...
-              </span>
-            ) : isInCart ? (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Agregado
-              </>
-            ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                Agregar al carrito
-              </>
-            )}
-          </button>
+    className={`flex items-center justify-center px-3 py-1 rounded-full text-sm w-full transition-colors
+      ${stockDisponible <= 0 
+        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+        : isInCart
+          ? 'bg-green-600 text-white cursor-default'
+          : addingToCart 
+            ? 'bg-gray-400 text-white cursor-wait' 
+            : 'bg-red-600 text-white hover:bg-red-700 cursor-pointer'}`}
+    onClick={(e) => handleAddToCart(e, book)}
+    disabled={stockDisponible <= 0 || addingToCart || isInCart}
+  >
+    {addingToCart ? (
+      <span className="flex items-center">
+        <svg className="w-4 h-4 mr-2 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Agregando...
+      </span>
+    ) : isInCart ? (
+      <>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+        Agregado
+      </>
+    ) : (
+      <>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+        Agregar al carrito
+      </>
+    )}
+  </button>
         </div>
 
         {/* Botón Ver detalles */}

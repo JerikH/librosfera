@@ -5,6 +5,7 @@ import UserLayout from './UserLayout';
 const CheckoutDeliveryPage = () => {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
+  const [cartPrices, setCartPrices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deliveryMethod, setDeliveryMethod] = useState('');
   const [redirectTo, setRedirectTo] = useState(null);
@@ -12,6 +13,7 @@ const CheckoutDeliveryPage = () => {
   // Resumen de compra
   const [subtotal, setSubtotal] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
+  const [Taxes, setTaxes] = useState(0);
   const [total, setTotal] = useState(0);
 
   // Ubicación del usuario
@@ -27,57 +29,183 @@ const CheckoutDeliveryPage = () => {
     }
   }, [redirectTo, navigate]);
 
-  // Cargar datos del carrito
-  useEffect(() => {
-    const fetchCartData = async () => {
-      setIsLoading(true);
-      try {
-        // Obtener carrito del localStorage
-        const storedCart = localStorage.getItem('shoppingCart');
-        if (storedCart) {
-          const parsedCart = JSON.parse(storedCart);
-          setCartItems(parsedCart);
+// Cargar datos del carrito
+useEffect(() => {
+  const fetchCartData = async () => {
+    setIsLoading(true);
+    
+    try {
+      // Debug: Log all localStorage contents
+      console.log("=== DEBUGGING LOCALSTORAGE ===");
+      console.log("All localStorage keys:", Object.keys(localStorage));
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        console.log(`${key}:`, localStorage.getItem(key));
+      }
+      console.log("==============================");
+      
+      // Get cart data from localStorage with correct key names
+      const storedCart = localStorage.getItem('shoppingCart');
+      const storedPrices = localStorage.getItem('CartPrices'); // Use the correct key name with capital C
+      
+      console.log("Stored Cart:", storedCart);
+      console.log("Stored Prices:", storedPrices);
+      
+      // Since cart is loaded from API, check if prices exist and wait for cart sync
+      if (storedPrices && storedPrices !== null && storedPrices !== undefined) {
+        try {
+          const parsedPrices = JSON.parse(storedPrices);
+          console.log("Parsed Prices:", parsedPrices);
           
-          // Calcular subtotal (simulado, en realidad vendría de la API con detalles completos)
-          const calculatedSubtotal = parsedCart.reduce((total, item) => {
-            // En un entorno real, obtendríamos el precio desde el detalle del libro
-            return total + ((item.price || 35000) * item.quantity);
-          }, 0);
-          
-          setSubtotal(calculatedSubtotal);
-          setTotal(calculatedSubtotal);
+          if (parsedPrices && typeof parsedPrices === 'object') {
+            setCartPrices(parsedPrices);
+            
+            // Use the pricing data that's available
+            if (parsedPrices.subtotal_con_descuentos !== undefined) {
+              setSubtotal(parsedPrices.subtotal_con_descuentos);
+              setTaxes(parsedPrices.total_impuestos);
+              setTotal(parsedPrices.subtotal_con_descuentos + parsedPrices.total_impuestos);
+              
+            }
+          }
+        } catch (priceParseError) {
+          console.error('Error parsing cart prices:', priceParseError);
         }
-        
-        // Obtener datos de usuario desde localStorage o API
-        const userData = localStorage.getItem('userData');
-        if (userData) {
+      }
+      
+      // Check for cart items (may come later from API)
+      if (storedCart && storedCart !== null && storedCart !== undefined) {
+        try {
+          const parsedCart = JSON.parse(storedCart);
+          console.log("Parsed Cart:", parsedCart);
+          
+          // Validate that parsedCart is an array
+          if (Array.isArray(parsedCart) && parsedCart.length > 0) {
+            setCartItems(parsedCart);
+            
+            // Handle prices separately with validation
+            if (storedPrices && storedPrices !== null && storedPrices !== undefined) {
+              try {
+                const parsedPrices = JSON.parse(storedPrices);
+                console.log("Parsed Prices:", parsedPrices);
+                
+                if (parsedPrices && typeof parsedPrices === 'object') {
+                  setCartPrices(parsedPrices);
+                  
+                  // Use the parsed data directly instead of state
+                  if (parsedPrices.subtotal_con_descuentos !== undefined) {
+                    setSubtotal(parsedPrices.subtotal_con_descuentos);
+                    setTotal(parsedPrices.subtotal_con_descuentos + parsedPrices.total_impuestos);
+                  }
+                }
+              } catch (priceParseError) {
+                console.error('Error parsing cart prices:', priceParseError);
+                // Fallback: calculate subtotal manually
+                const calculatedSubtotal = parsedCart.reduce((total, item) => {
+                  return total + ((item.price || 35000) * item.quantity);
+                }, 0);
+                setSubtotal(calculatedSubtotal);
+                // Fix: Use the current tax state value or 0
+                setTotal(calculatedSubtotal + (Taxes || 0));
+              }
+            } else {
+              // No stored prices, calculate manually
+              console.log("No stored prices found, calculating manually");
+              const calculatedSubtotal = parsedCart.reduce((total, item) => {
+                return total + ((item.price || 35000) * item.quantity);
+              }, 0);
+              setSubtotal(calculatedSubtotal);
+              setTotal(calculatedSubtotal + Taxes);
+            }
+          } else {
+            console.error('Cart data is not an array or is empty:', parsedCart);
+          }
+        } catch (cartParseError) {
+          console.error('Error parsing cart data:', cartParseError);
+        }
+      } else {
+        console.log("No cart data found in localStorage");
+      }
+      
+      // Handle user data
+      const userData = localStorage.getItem('userData');
+      if (userData && userData !== null && userData !== undefined) {
+        try {
           const parsedUserData = JSON.parse(userData);
+          if (parsedUserData && typeof parsedUserData === 'object') {
+            setUserLocation({
+              ciudad: parsedUserData.ciudad || 'Pereira',
+              departamento: parsedUserData.departamento || 'Risaralda'
+            });
+          }
+        } catch (userParseError) {
+          console.error('Error parsing user data:', userParseError);
+          // Set default values
           setUserLocation({
-            ciudad: parsedUserData.ciudad || 'Pereira',
-            departamento: parsedUserData.departamento || 'Risaralda'
+            ciudad: 'Pereira',
+            departamento: 'Risaralda'
           });
         }
-      } catch (error) {
-        console.error('Error al cargar datos del carrito:', error);
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    fetchCartData();
-  }, []);
+      
+    } catch (error) {
+      console.error('Error al cargar datos del carrito:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  fetchCartData();
+}, []);
+// Additional effect to listen for cart updates from API
+useEffect(() => {
+  const checkForCartUpdates = () => {
+    const storedCart = localStorage.getItem('shoppingCart');
+    const storedPrices = localStorage.getItem('CartPrices');
+    
+    if (storedCart && storedCart !== null) {
+      try {
+        const parsedCart = JSON.parse(storedCart);
+        if (Array.isArray(parsedCart) && parsedCart.length > 0) {
+          //console.log("Cart items found after API sync:", parsedCart);
+          setCartItems(parsedCart);
+          
+          // If no prices were loaded before, calculate from cart
+          if (cartPrices.length === 0 || Object.keys(cartPrices).length === 0) {
+            const calculatedSubtotal = parsedCart.reduce((total, item) => {
+              return total + ((item.price || 35000) * item.quantity);
+            }, 0);
+            setSubtotal(calculatedSubtotal);
+            setTotal(calculatedSubtotal + Taxes);
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing updated cart:', error);
+      }
+    }
+  };
+  
+  // Check immediately
+  checkForCartUpdates();
+  
+  // Set up an interval to check for updates (since cart loads from API)
+  const interval = setInterval(checkForCartUpdates, 1000);
+  
+  // Clean up
+  return () => clearInterval(interval);
+}, [cartPrices]); // Depend on cartPrices to avoid overwriting
 
   // Actualizar costos de envío y total cuando cambia el método
   useEffect(() => {
-    if (deliveryMethod === 'domicilio') {
-      const cost = userLocation.ciudad === 'Pereira' ? 7000 : 12000;
-      setShippingCost(cost);
-      setTotal(subtotal + cost);
-    } else if (deliveryMethod === 'tienda') {
-      setShippingCost(0);
-      setTotal(subtotal);
-    }
-  }, [deliveryMethod, subtotal, userLocation]);
+  if (deliveryMethod === 'domicilio') {
+    const cost = userLocation.ciudad === 'Pereira' ? 7000 : 12000;
+    setShippingCost(cost);
+    setTotal(subtotal + cost + (Taxes || 0)); // Fix: Add fallback for Taxes
+  } else if (deliveryMethod === 'tienda') {
+    setShippingCost(0);
+    setTotal(subtotal + (Taxes || 0)); // Fix: Add fallback for Taxes
+  }
+}, [deliveryMethod, subtotal, userLocation, Taxes]);
 
   // Manejar cambio en método de entrega
   const handleDeliveryMethodChange = (method) => {
@@ -86,6 +214,13 @@ const CheckoutDeliveryPage = () => {
 
   // Continuar al siguiente paso
   const handleContinue = () => {
+
+    console.log("Total:", total);
+    console.log(localStorage.getItem('CartPrices'));
+    const cartPrices = JSON.parse(localStorage.getItem('CartPrices'));
+    cartPrices.total_final = total;
+    localStorage.setItem('CartPrices', JSON.stringify(cartPrices));
+    
     // Verificar que se haya seleccionado un método de entrega
     if (!deliveryMethod) {
       alert('Por favor selecciona un método de entrega para continuar');
@@ -205,8 +340,13 @@ const CheckoutDeliveryPage = () => {
                 <h2 className="text-xl font-bold mb-4">Resumen de compra</h2>
                 <div className="border-b pb-4 mb-4">
                   <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Producto{cartItems.length !== 1 ? 's' : ''}</span>
+                    <span className="text-gray-600">Producto</span>
                     <span>$ {subtotal.toLocaleString('es-CO')}</span>
+                  </div>
+
+                  <div className="flex justify-between mb-2">
+                    <span className="text-gray-600">Impuestos</span>
+                    <span>$ {Taxes.toLocaleString('es-CO')}</span>
                   </div>
                   
                   <div className="flex justify-between">

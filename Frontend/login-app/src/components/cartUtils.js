@@ -1,6 +1,7 @@
 // cartUtils.js - Funciones de utilidad para el carrito de compras
 import axios from "axios";
 import { getAuthToken } from "./UserProfilePageComponents/authUtils";
+import { Await } from "react-router-dom";
 
 // SOLUCIÓN: Cache para evitar múltiples llamadas simultáneas
 let fetchCartPromise = null;
@@ -191,7 +192,7 @@ const performCartFetch = async () => {
   console.log('Fetching cart from API...');
   
   // Limpiar cart actual antes de hacer la llamada
-  localStorage.removeItem('shoppingCart');
+  //localStorage.removeItem('shoppingCart');
   
   try {
     const API_BASE_URL = 'http://localhost:5000/api/v1';

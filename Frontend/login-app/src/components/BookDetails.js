@@ -359,17 +359,17 @@ const BookDetails = () => {
   };
 
   const handleQuantityChange = (e) => {
-    const value = parseInt(e.target.value);
-    if (value > 0 && value <= (book?.stock || 1)) {
-      setQuantity(value);
-    }
-  };
+  const value = parseInt(e.target.value);
+  if (value > 0 && value <= Math.min((book?.stock || 1), 3)) {
+    setQuantity(value);
+  }
+};
 
-  const incrementQuantity = () => {
-    if (quantity < (book?.stock || 1)) {
-      setQuantity(quantity + 1);
-    }
-  };
+const incrementQuantity = () => {
+  if (quantity < Math.min((book?.stock || 1), 3)) {
+    setQuantity(quantity + 1);
+  }
+};
 
   const decrementQuantity = () => {
     if (quantity > 1) {
@@ -378,52 +378,108 @@ const BookDetails = () => {
   };
 
   // Enhanced addToCart function with better synchronization
-  const handleAddToCart = async () => {
+  const validateCartLimits = (bookId, requestedQuantity = 1) => {
+  try {
+    const currentCart = localStorage.getItem('shoppingCart') 
+      ? JSON.parse(localStorage.getItem('shoppingCart')) 
+      : [];
+    
+    // Count total books in cart
+    const totalBooks = currentCart.reduce((total, item) => total + item.quantity, 0);
+    
+    // Count different books in cart
+    const differentBooks = currentCart.length;
+    
+    // Find if this book is already in cart
+    const existingItem = currentCart.find(item => 
+      item.bookId === bookId || 
+      item.bookId?._id === bookId ||
+      item.bookId?.id === bookId
+    );
+    
+    const currentBookQuantity = existingItem ? existingItem.quantity : 0;
+    const newBookQuantity = currentBookQuantity + requestedQuantity;
+    
+    // Validation checks
+    if (newBookQuantity > 3) {
+      return { 
+        valid: false, 
+        message: 'No puedes agregar más de 3 unidades del mismo libro' 
+      };
+    }
+    
+    if (totalBooks + requestedQuantity > 15) {
+      return { 
+        valid: false, 
+        message: 'No puedes tener más de 15 libros en total en tu carrito' 
+      };
+    }
+    
+    if (!existingItem && differentBooks >= 5) {
+      return { 
+        valid: false, 
+        message: 'No puedes agregar más de 5 libros diferentes a tu carrito' 
+      };
+    }
+    
+    return { valid: true };
+    
+  } catch (error) {
+    console.error('Error validating cart limits:', error);
+    return { valid: false, message: 'Error al validar el carrito' };
+  }
+};
 
-    if (isInCart) {
-      showToast('Este libro ya está en tu carrito', 'info');
+// Modified handleAddToCart function for BookDetails component
+const handleAddToCart = async () => {
+  if (isInCart) {
+    showToast('Este libro ya está en tu carrito', 'info');
+    return;
+  }
+
+  // Check if there's stock available
+  if (!book.stock || book.stock <= 0) {
+    showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
+    return;
+  }
+
+  // Validate cart limits
+  const validation = validateCartLimits(book._id || book.id, quantity);
+  if (!validation.valid) {
+    showToast(validation.message, 'error');
+    return;
+  }
+  
+  // Show loading animation
+  setAddingToCart(true);
+  
+  try {
+    console.log('BookDetails: Adding book to cart...', { bookId: book._id || book.id, title: book.title });
+    
+    // Obtener token de autenticación
+    const token = getAuthToken();
+    if (!token) {
+      showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
       return;
     }
 
-    // Check if there's stock available
-    if (!book.stock || book.stock <= 0) {
-      showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
-      return;
-    }
+    const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
+      id_libro: book._id,
+      cantidad: Math.min(quantity, 3) // Ensure we don't exceed the limit
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (response.data.status === 'success') {
+      // Actualizar el contador del carrito basado en la respuesta del servidor
+      const newCount = response.data.data.carrito.n_item;
+
+      const result = addToCart(book, Math.min(quantity, 3));
     
-    // Show loading animation
-    setAddingToCart(true);
-    
-    try {
-      console.log('BookDetails: Adding book to cart...', { bookId: book._id || book.id, title: book.title });
-      
-      // Use the imported utility function
-      
-
-      // Obtener token de autenticación
-            const token = getAuthToken();
-            if (!token) {
-              showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
-              return;
-            }
-
-      const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
-        id_libro: book._id,
-        cantidad: 1
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-
-      if (response.data.status === 'success') {
-        // Actualizar el contador del carrito basado en la respuesta del servidor
-        const newCount = response.data.data.carrito.n_item;
-
-        const result = addToCart(book, quantity);
-      
       console.log('BookDetails: Cart update result:', result);
       
       // Update cart count
@@ -433,28 +489,28 @@ const BookDetails = () => {
       showToast(result.message, result.success ? 'success' : 'error');
       
       // If successful, update cart status and notify other components
-        console.log('BookDetails: Successfully added to cart, updating states...');
-        
-        // 1. Update local state immediately
-        setIsInCart(true);
-        setAddedToCart(true);
-        
-        // 2. Wait a moment to ensure localStorage is updated, then dispatch events
-        setTimeout(() => {
-          console.log('BookDetails: Dispatching synchronization events...');
-          dispatchCartChangeEvent();
-        }, 100);
-      }
-    } catch (error) {
-      console.error('Error al agregar al carrito:', error);
-      showToast('Ocurrió un error al agregar el libro al carrito', 'error');
-    } finally {
-      // Disable loading animation after a short period
+      console.log('BookDetails: Successfully added to cart, updating states...');
+      
+      // 1. Update local state immediately
+      setIsInCart(true);
+      setAddedToCart(true);
+      
+      // 2. Wait a moment to ensure localStorage is updated, then dispatch events
       setTimeout(() => {
-        setAddingToCart(false);
-      }, 500);
+        console.log('BookDetails: Dispatching synchronization events...');
+        dispatchCartChangeEvent();
+      }, 100);
     }
-  };
+  } catch (error) {
+    console.error('Error al agregar al carrito:', error);
+    showToast('Ocurrió un error al agregar el libro al carrito', 'error');
+  } finally {
+    // Disable loading animation after a short period
+    setTimeout(() => {
+      setAddingToCart(false);
+    }, 500);
+  }
+};
 
   const buyNow = () => {
     // Primero agregamos al carrito
@@ -822,7 +878,7 @@ const BookDetails = () => {
                     <input
                       type="number"
                       min="1"
-                      max={book.stock}
+                      max={Math.min(book.stock, 3)}
                       value={quantity}
                       onChange={handleQuantityChange}
                       className={`w-12 text-center border-x border-gray-300 py-1 ${book.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -830,12 +886,13 @@ const BookDetails = () => {
                     />
                     <button
                       onClick={incrementQuantity}
-                      className={`px-3 py-1 text-gray-600 hover:bg-gray-100 ${book.stock <= 0 || quantity >= book.stock ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      disabled={book.stock <= 0 || quantity >= book.stock}
+                      className={`px-3 py-1 text-gray-600 hover:bg-gray-100 ${book.stock <= 0 || quantity >= Math.min(book.stock, 3) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={book.stock <= 0 || quantity >= Math.min(book.stock, 3)}
                     >
                       +
                     </button>
                   </div>
+                  <span className="ml-2 text-sm text-gray-500">Máximo 3 por libro</span>
                 </div>
 
                 <div className="flex space-x-4">

@@ -335,7 +335,7 @@ const ManageBooks = () => {
             language: selectedBook.originalData?.idioma,
             publicationDate: selectedBook.originalData?.fecha_publicacion,
             condition: selectedBook.originalData?.estado,
-            price: selectedBook.price,
+            price: selectedBook.originalData.precio_info.precio_base,
             image: selectedBook.image,
             description: selectedBook.originalData?.descripcion,
             stock: selectedBook.stock,
