@@ -51,6 +51,8 @@ const LoginPage = () => {
     password: ''
   });
 
+  const [rememberMe, setRememberMe] = useState(false);
+
   // Check for existing token when component mounts
   useEffect(() => {
     const checkExistingToken = async () => {
@@ -83,6 +85,17 @@ const LoginPage = () => {
             }
           }
         }
+
+        const rememberedData = localStorage.getItem('rememberedLogin');
+        if (rememberedData) {
+          const parsedRememberedData = JSON.parse(rememberedData);
+          setFormData({
+            email: parsedRememberedData.email,
+            password: parsedRememberedData.password
+          });
+          setRememberMe(true);
+        }
+
       } catch (error) {
         console.error("Error checking existing token:", error);
       } finally {
@@ -134,6 +147,17 @@ const LoginPage = () => {
       
       // Print the response
       console.log('Login response received:', response.data);
+
+       if (rememberMe) {
+        // Save login data to localStorage
+        localStorage.setItem('rememberedLogin', JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        }));
+      } else {
+        // Remove remembered login data if checkbox is unchecked
+        localStorage.removeItem('rememberedLogin');
+      }
       
       // Clear form
       setFormData({
@@ -272,7 +296,12 @@ const LoginPage = () => {
               {/* Remember Me and Change Password */}
               <div className="flex items-center justify-between mb-6">
                 <label className="flex items-center select-none">
-                  <input type="checkbox" className="mr-2" />
+                  <input 
+                    type="checkbox" 
+                    className="mr-2"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                  />
                   Recordarme
                 </label>
                 <a 
