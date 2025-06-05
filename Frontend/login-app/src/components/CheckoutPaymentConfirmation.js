@@ -94,14 +94,16 @@ function CheckoutPaymentConfirmation() {
         const storedShippingInfo = localStorage.getItem('shippingPreferences');
         if (storedShippingInfo) {
           const parsedShippingInfo = JSON.parse(storedShippingInfo);
-          setShippingInfo({
+          setShippingInfo({ 
             method: parsedShippingInfo.method,
             storeId: parseInt(parsedShippingInfo.storeId),
             storeName: parsedShippingInfo.storeName || '',
-            storeAddress: parsedShippingInfo.storeAddress || '',
+            locationStreet: parsedShippingInfo.locationStreet || '',
             shippingCost: parsedShippingInfo.shippingCost || 0,
             locationCity: parsedShippingInfo.locationCity,
-            locationState: parsedShippingInfo.locationState
+            locationState: parsedShippingInfo.locationState,
+            locationPostalCode: parsedShippingInfo.locationPostalCode,
+            locationCountry: parsedShippingInfo.locationCountry
           });
           
           setShippingCost(parsedShippingInfo.shippingCost || 0);
@@ -152,10 +154,10 @@ function CheckoutPaymentConfirmation() {
         tipo_envio: shippingInfo.method === 'recogida_tienda' ? 'recogida_tienda' : 'domicilio',
       // id_tienda_recogida: shippingInfo.method === 'recogida_tienda' ? parseInt(shippingInfo.storeId) : '',
         direccion_envio: {
-          calle: userData.direccion || "Dirección no especificada",
+          calle: shippingInfo.locationStreet || "Dirección no especificada",
           ciudad: shippingInfo.locationCity || userData.ciudad || "Pereira",
-          codigo_postal: userData.codigoPostal || "660001",
-          pais: "Colombia",
+          codigo_postal: shippingInfo.locationPostalCode || "660001",
+          pais: shippingInfo.locationCountry,
           estado_provincia: shippingInfo.locationState || userData.departamento || "Risaralda",
           referencias: userData.referencias || ""
         },
@@ -541,8 +543,13 @@ function CheckoutPaymentConfirmation() {
                               <div>
                                 <span className="font-medium">Envío a domicilio</span>
                                 <p className="text-sm text-gray-600 mt-1">
-                                  {shippingInfo.locationCity}, {shippingInfo.locationState}
+                                  <span>
+                                    {shippingInfo.locationCity}, {shippingInfo.locationState}, {shippingInfo.locationStreet}
+                                    <br/>
+                                    {shippingInfo.locationPostalCode}
+                                  </span>
                                 </p>
+                                
                               </div>
                             )}
                           </label>
