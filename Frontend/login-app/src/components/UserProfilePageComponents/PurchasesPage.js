@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { getAuthToken } from './authUtils';
-
+import { useNavigate } from 'react-router-dom';
 
 const PurchasesPage = () => {
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [summary, setSummary] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchPurchases();
@@ -17,9 +18,6 @@ const PurchasesPage = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // Simulamos el token de autorización - en una app real vendría del estado de autenticación
-      const token = "eyJhbGciOiJIUzI1NiIsInR..."; // Token de ejemplo
       
       const response = await axios.get('http://localhost:5000/api/v1/ventas/mis-ventas', {
         headers: {
@@ -38,6 +36,11 @@ const PurchasesPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewDetails = (purchaseId) => {
+    // Navegar a la página de detalles con el ID de la compra
+    navigate(`/profile/purchases/${purchaseId}`);
   };
 
   const formatDate = (dateString) => {
@@ -248,6 +251,20 @@ const PurchasesPage = () => {
                         {purchase.envio.tipo} - {purchase.envio.estado_envio}
                       </p>
                     </div>
+                  </div>
+                  
+                  {/* Botón Ver Detalles (NUEVO) */}
+                  <div className="mt-4 pt-4 border-t border-gray-200 flex justify-end">
+                    <button
+                      onClick={() => handleViewDetails(purchase._id)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors text-sm flex items-center"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Ver detalles
+                    </button>
                   </div>
                 </div>
               ))}
