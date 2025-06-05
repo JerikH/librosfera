@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { getAuthToken } from './authUtils';
-import UserLayout from '../UserLayout';
 
 // Componentes auxiliares para diferentes tipos de seguimiento
-import DeliveryTracking from './TrackingComponents/DeliveryTracking';
-import StorePickupTracking from './TrackingComponents/StorePickupTracking';
+import DeliveryTracking from './DeliveryTracking';
+import StorePickupTracking from './StorePickupTracking';
 
 const PurchaseDetailsPage = () => {
   const { purchaseId } = useParams();
@@ -24,7 +23,6 @@ const PurchaseDetailsPage = () => {
       setLoading(true);
       setError(null);
       
-      // En un entorno real, esta llamada traería los detalles desde el backend
       const response = await axios.get(`http://localhost:5000/api/v1/ventas/${purchaseId}`, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -33,30 +31,21 @@ const PurchaseDetailsPage = () => {
       });
 
       if (response.data.status === 'success') {
-        setPurchase(response.data.data);
+        setPurchase(response.data.data.venta);
       }
     } catch (err) {
       console.error('Error fetching purchase details:', err);
-      
-      // Para propósitos de demostración, usamos datos simulados
       const mockData = generateMockPurchaseData(purchaseId);
       setPurchase(mockData);
-      
-      // En producción mostraríamos un error
-      // setError('No se pudieron cargar los detalles de la compra. Por favor intenta más tarde.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Función para generar datos de demostración
   const generateMockPurchaseData = (id) => {
-    // Definir si el ejemplo será envío a domicilio o recogida en tienda
     const isDelivery = Math.random() > 0.5;
-    
-    // Generar fechas lógicas para el seguimiento
     const orderDate = new Date();
-    orderDate.setDate(orderDate.getDate() - 3); // 3 días atrás
+    orderDate.setDate(orderDate.getDate() - 3);
     
     const processingDate = new Date(orderDate);
     processingDate.setHours(orderDate.getHours() + 2);
@@ -67,12 +56,10 @@ const PurchaseDetailsPage = () => {
     const deliveryDate = new Date(shippingDate);
     deliveryDate.setDate(shippingDate.getDate() + 1);
     
-    // Estado aleatorio del pedido
     const possibleStates = ['EN PREPARACION', 'ENVIADO', 'ENTREGADO'];
     const randomStateIndex = Math.floor(Math.random() * 3);
     const currentState = possibleStates[randomStateIndex];
     
-    // Historial de estados basado en el estado actual
     let stateHistory = [
       {
         estado_anterior: null,
@@ -175,17 +162,22 @@ const PurchaseDetailsPage = () => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Pendiente';
+    if (!dateString) return 'Fecha no disponible';
     
-    const options = { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'America/Mexico_City'
-    };
-    return new Date(dateString).toLocaleDateString('es-MX', options);
+    try {
+      const options = { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Mexico_City'
+      };
+      return new Date(dateString).toLocaleDateString('es-MX', options);
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Fecha inválida';
+    }
   };
 
   const formatCurrency = (amount) => {
@@ -212,214 +204,215 @@ const PurchaseDetailsPage = () => {
 
   if (loading) {
     return (
-      <UserLayout>
-        <div className="w-full p-6">
-          <div className="flex items-center mb-6">
-            <button 
-              onClick={() => navigate('/profile/purchases')}
-              className="mr-3 text-blue-500 hover:text-blue-700"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </button>
-            <h2 className="text-2xl font-bold">Cargando detalles...</h2>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="animate-pulse space-y-6">
-              <div className="h-8 bg-gray-200 rounded w-3/4"></div>
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="h-6 bg-gray-200 rounded col-span-1"></div>
-                  <div className="h-6 bg-gray-200 rounded col-span-2"></div>
-                </div>
-                <div className="h-24 bg-gray-200 rounded"></div>
-                <div className="h-64 bg-gray-200 rounded"></div>
+      <div className="w-full p-6">
+        <div className="flex items-center mb-6">
+          <button 
+            onClick={() => navigate('/profile/purchases')}
+            className="mr-3 text-blue-500 hover:text-blue-700"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+          <h2 className="text-2xl font-bold">Cargando detalles...</h2>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="h-6 bg-gray-200 rounded col-span-1"></div>
+                <div className="h-6 bg-gray-200 rounded col-span-2"></div>
               </div>
+              <div className="h-24 bg-gray-200 rounded"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
             </div>
           </div>
         </div>
-      </UserLayout>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <UserLayout>
-        <div className="w-full p-6">
-          <div className="flex items-center mb-6">
-            <button 
-              onClick={() => navigate('/profile/purchases')}
-              className="mr-3 text-blue-500 hover:text-blue-700"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      <div className="w-full p-6">
+        <div className="flex items-center mb-6">
+          <button 
+            onClick={() => navigate('/profile/purchases')}
+            className="mr-3 text-blue-500 hover:text-blue-700"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+          <h2 className="text-2xl font-bold">Detalles de la compra</h2>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="text-center py-12">
+            <div className="text-red-500 mb-4">
+              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-            </button>
-            <h2 className="text-2xl font-bold">Detalles de la compra</h2>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-center py-12">
-              <div className="text-red-500 mb-4">
-                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <p className="text-gray-600 mb-4">{error}</p>
-              <button
-                onClick={fetchPurchaseDetails}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Reintentar
-              </button>
             </div>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <button
+              onClick={fetchPurchaseDetails}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              Reintentar
+            </button>
           </div>
         </div>
-      </UserLayout>
+      </div>
     );
   }
 
-  if (!purchase) {
+  // Verificación adicional para prevenir errores de estructura de datos
+  if (!purchase || !purchase.envio) {
     return (
-      <UserLayout>
-        <div className="w-full p-6">
-          <div className="flex items-center mb-6">
-            <button 
-              onClick={() => navigate('/profile/purchases')}
-              className="mr-3 text-blue-500 hover:text-blue-700"
+      <div className="w-full p-6">
+        <div className="flex items-center mb-6">
+          <button 
+            onClick={() => navigate('/profile/purchases')}
+            className="mr-3 text-blue-500 hover:text-blue-700"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+          <h2 className="text-2xl font-bold">Detalles de la compra</h2>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="text-center py-12">
+            <p className="text-gray-600 mb-4">Datos de la compra incompletos</p>
+            <button
+              onClick={fetchPurchaseDetails}
+              className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
+              Recargar
             </button>
-            <h2 className="text-2xl font-bold">Detalles de la compra</h2>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-center py-12">
-              <p className="text-gray-600">No se encontró la información de la compra</p>
-              <button
-                onClick={() => navigate('/profile/purchases')}
-                className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Volver a mis compras
-              </button>
-            </div>
           </div>
         </div>
-      </UserLayout>
+      </div>
     );
   }
 
   return (
-    <UserLayout>
-      <div className="w-full p-6">
-        {/* Encabezado con botón de regreso */}
-        <div className="flex items-center mb-6">
-          <button 
-            onClick={() => navigate('/profile/purchases')}
-            className="mr-3 text-blue-500 hover:text-blue-700 flex items-center"
-          >
-            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span>Volver</span>
-          </button>
-          <h2 className="text-2xl font-bold">Seguimiento de Compra #{purchase.numero_venta}</h2>
-        </div>
-        
-        {/* Información general del pedido */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex flex-col md:flex-row justify-between md:items-center mb-4">
-              <div>
-                <h3 className="text-xl font-bold">Orden #{purchase.numero_venta}</h3>
-                <p className="text-gray-600">Realizada el {formatDate(purchase.fecha_creacion)}</p>
-              </div>
-              <div className="mt-4 md:mt-0">
-                <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                  {purchase.envio.tipo === 'domicilio' ? 'Envío a Domicilio' : 'Recogida en Tienda'}
-                </div>
-              </div>
+    <div className="w-full p-6">
+      {/* Encabezado con botón de regreso */}
+      <div className="flex items-center mb-6">
+        <button 
+          onClick={() => navigate('/profile')}
+          className="mr-3 text-blue-500 hover:text-blue-700 flex items-center"
+        >
+          <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          <span>Volver</span>
+        </button>
+        <h2 className="text-2xl font-bold">Seguimiento de Compra #{purchase.numero_venta}</h2>
+      </div>
+      
+      {/* Información general del pedido */}
+      <div className="bg-white rounded-lg shadow mb-6">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex flex-col md:flex-row justify-between md:items-center mb-4">
+            <div>
+              <h3 className="text-xl font-bold">Orden #{purchase.numero_venta}</h3>
+              <p className="text-gray-600">Realizada el {formatDate(purchase.fecha_creacion)}</p>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-              {/* Información de pago */}
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">Método de pago</h4>
-                <p className="text-sm text-gray-600">
-                  {getPaymentMethodText(purchase.pago.metodo)}
-                  {purchase.pago.ultimos_digitos && ` ****${purchase.pago.ultimos_digitos}`}
-                </p>
-              </div>
-              
-              {/* Dirección de envío o tienda de recogida */}
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">
-                  {purchase.envio.tipo === 'domicilio' ? 'Dirección de envío' : 'Tienda de recogida'}
-                </h4>
-                {purchase.envio.tipo === 'domicilio' ? (
-                  <p className="text-sm text-gray-600">
-                    {purchase.envio.direccion.calle}, {purchase.envio.direccion.ciudad}, {purchase.envio.direccion.estado_provincia}
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-600">
-                    {purchase.envio.tienda.nombre}, {purchase.envio.tienda.direccion}
-                  </p>
-                )}
-              </div>
-              
-              {/* Fecha estimada */}
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">
-                  {purchase.envio.estado_envio === 'ENTREGADO' 
-                    ? 'Entregado el' 
-                    : 'Fecha estimada de entrega'}
-                </h4>
-                <p className="text-sm text-gray-600">
-                  {purchase.envio.estado_envio === 'ENTREGADO' 
-                    ? formatDate(purchase.envio.fechas.entrega_real)
-                    : formatDate(purchase.envio.fechas.entrega_estimada)}
-                </p>
+            <div className="mt-4 md:mt-0">
+              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                {purchase.envio.tipo === 'domicilio' ? 'Envío a Domicilio' : 'Recogida en Tienda'}
               </div>
             </div>
           </div>
           
-          {/* Productos en el pedido */}
-          <div className="p-6">
-            <h4 className="font-medium text-gray-700 mb-4">Productos en tu pedido</h4>
-            <div className="space-y-4">
-              {purchase.items.map((item, index) => (
-                <div key={index} className="flex flex-col sm:flex-row justify-between border-b border-gray-100 pb-4 last:border-0 last:pb-0">
-                  <div className="flex items-start mb-3 sm:mb-0">
-                    {/* Aquí podría ir una imagen del libro */}
-                    <div className="w-12 h-16 bg-gray-200 rounded mr-3 flex-shrink-0"></div>
-                    <div>
-                      <p className="font-medium">{item.snapshot.titulo}</p>
-                      <p className="text-sm text-gray-600">por {item.snapshot.autor}</p>
-                      <p className="text-xs text-gray-500">ISBN: {item.snapshot.isbn}</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between sm:flex-col sm:items-end">
-                    <p className="text-sm text-gray-600 sm:mb-1">Cantidad: {item.cantidad}</p>
-                    <p className="font-medium">{formatCurrency(item.precio_unitario * item.cantidad)}</p>
-                  </div>
-                </div>
-              ))}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+            {/* Información de pago */}
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">Método de pago</h4>
+              <p className="text-sm text-gray-600">
+                {getPaymentMethodText(purchase.pago?.metodo)}
+                {purchase.pago?.ultimos_digitos && ` ****${purchase.pago.ultimos_digitos}`}
+              </p>
             </div>
             
-            {/* Resumen de costos */}
+            {/* Dirección de envío o tienda de recogida */}
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">
+                {purchase.envio.tipo === 'domicilio' ? 'Dirección de envío' : 'Tienda de recogida'}
+              </h4>
+              {purchase.envio.tipo === 'domicilio' ? (
+                <p className="text-sm text-gray-600">
+                  {purchase.envio.direccion ? 
+                    `${purchase.envio.direccion.calle}, ${purchase.envio.direccion.ciudad}, ${purchase.envio.direccion.estado_provincia}` :
+                    'Dirección no disponible'
+                  }
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  {purchase.envio.tienda ? 
+                    `${purchase.envio.tienda.nombre}, ${purchase.envio.tienda.direccion}` :
+                    'Información de tienda no disponible'
+                  }
+                </p>
+              )}
+            </div>
+            
+            {/* Fecha estimada - SECCIÓN CORREGIDA */}
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">
+                {purchase.envio.estado_envio === 'ENTREGADO' 
+                  ? 'Entregado el' 
+                  : 'Fecha estimada de entrega'}
+              </h4>
+              <p className="text-sm text-gray-600">
+                {purchase.envio.estado_envio === 'ENTREGADO' 
+                  ? formatDate(purchase.envio.fechas?.entrega_real)
+                  : formatDate(purchase.envio.fechas?.entrega_estimada)}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Productos en el pedido */}
+        <div className="p-6">
+          <h4 className="font-medium text-gray-700 mb-4">Productos en tu pedido</h4>
+          <div className="space-y-4">
+            {purchase.items?.map((item, index) => (
+              <div key={index} className="flex flex-col sm:flex-row justify-between border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                <div className="flex items-start mb-3 sm:mb-0">
+                  {/* Placeholder para imagen del libro */}
+                  <div className="w-12 h-16 bg-gray-200 rounded mr-3 flex-shrink-0"></div>
+                  <div>
+                    <p className="font-medium">{item.snapshot?.titulo || 'Título no disponible'}</p>
+                    <p className="text-sm text-gray-600">por {item.snapshot?.autor || 'Autor no disponible'}</p>
+                    <p className="text-xs text-gray-500">ISBN: {item.snapshot?.isbn || 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="flex justify-between sm:flex-col sm:items-end">
+                  <p className="text-sm text-gray-600 sm:mb-1">Cantidad: {item.cantidad || 0}</p>
+                  <p className="font-medium">{formatCurrency((item.precio_unitario || 0) * (item.cantidad || 0))}</p>
+                </div>
+              </div>
+            )) || <p className="text-gray-500">No hay productos disponibles</p>}
+          </div>
+          
+          {/* Resumen de costos */}
+          {purchase.totales && (
             <div className="mt-6 pt-4 border-t border-gray-200">
               <div className="flex justify-between mb-2">
                 <span className="text-gray-600">Subtotal</span>
-                <span>{formatCurrency(purchase.totales.subtotal)}</span>
+                <span>{formatCurrency(purchase.totales.subtotal || 0)}</span>
               </div>
               <div className="flex justify-between mb-2">
                 <span className="text-gray-600">Impuestos</span>
-                <span>{formatCurrency(purchase.totales.impuestos)}</span>
+                <span>{formatCurrency(purchase.totales.impuestos || 0)}</span>
               </div>
               <div className="flex justify-between mb-2">
                 <span className="text-gray-600">Envío</span>
-                {purchase.totales.envio > 0 ? (
+                {(purchase.totales.envio || 0) > 0 ? (
                   <span>{formatCurrency(purchase.totales.envio)}</span>
                 ) : (
                   <span className="text-green-600">Gratis</span>
@@ -427,34 +420,35 @@ const PurchaseDetailsPage = () => {
               </div>
               <div className="flex justify-between pt-2 border-t border-gray-200 font-bold">
                 <span>Total</span>
-                <span>{formatCurrency(purchase.totales.total_final)}</span>
+                <span>{formatCurrency(purchase.totales.total_final || 0)}</span>
               </div>
             </div>
-          </div>
-        </div>
-        
-        {/* Componente de seguimiento según tipo de envío */}
-        {purchase.envio.tipo === 'domicilio' ? (
-          <DeliveryTracking envio={purchase.envio} />
-        ) : (
-          <StorePickupTracking envio={purchase.envio} />
-        )}
-        
-        {/* Botones de acción */}
-        <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6">
-          {/* Mostrar botón de devolución solo si el pedido está entregado y tiene menos de 8 días */}
-          {purchase.envio.estado_envio === 'ENTREGADO' && 
-            new Date() - new Date(purchase.envio.fechas.entrega_real) < 8 * 24 * 60 * 60 * 1000 && (
-            <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded transition-colors">
-              Solicitar Devolución
-            </button>
           )}
-          <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded transition-colors">
-            Contactar Soporte
-          </button>
         </div>
       </div>
-    </UserLayout>
+      
+      {/* Componente de seguimiento según tipo de envío */}
+      {purchase.envio.tipo === 'domicilio' ? (
+        <DeliveryTracking envio={purchase.envio} />
+      ) : (
+        <StorePickupTracking envio={purchase.envio} />
+      )}
+      
+      {/* Botones de acción - SECCIÓN CORREGIDA */}
+      <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6">
+        {/* Mostrar botón de devolución solo si el pedido está entregado y tiene menos de 8 días */}
+        {purchase.envio.estado_envio === 'ENTREGADO' && 
+          purchase.envio.fechas?.entrega_real &&
+          new Date() - new Date(purchase.envio.fechas.entrega_real) < 8 * 24 * 60 * 60 * 1000 && (
+          <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded transition-colors">
+            Solicitar Devolución
+          </button>
+        )}
+        <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded transition-colors">
+          Contactar Soporte
+        </button>
+      </div>
+    </div>
   );
 };
 
