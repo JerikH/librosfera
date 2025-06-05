@@ -40,6 +40,18 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
       hideForRoot: true // hidden for root
     },
     { 
+      id: 'administrar-ventas', 
+      name: 'Administrar Ventas', 
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="9" cy="21" r="1"></circle>
+          <circle cx="20" cy="21" r="1"></circle>
+          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+        </svg>
+      ),
+      hideForRoot: true // hidden for root
+    },
+    { 
       id: 'gestionar-usuarios', 
       name: 'Gestionar Usuarios', 
       icon: (
@@ -122,7 +134,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
   // If current activeTab is now hidden for root users, reset to 'inicio'
   React.useEffect(() => {
     // Only reset the tab if the user is root and is on a tab that's hidden for root users
-    if (isRootUser && ['administrar-libro', 'gestionar-mensajes', 'administrar-tiendas'].includes(activeTab)) {
+    if (isRootUser && ['administrar-libro', 'administrar-ventas', 'gestionar-mensajes', 'administrar-tiendas'].includes(activeTab)) {
       setActiveTab('inicio');
     }
   }, [isRootUser, activeTab, setActiveTab]);
