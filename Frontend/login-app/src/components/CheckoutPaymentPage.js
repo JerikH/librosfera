@@ -414,7 +414,11 @@ function CheckoutPaymentPage() {
                           <span>{shippingInfo.storeName}, {shippingInfo.storeAddress || 'dirección disponible en tu email'}</span>
                         )}
                         {shippingInfo.method === 'domicilio' && (
-                          <span>{shippingInfo.locationCity}, {shippingInfo.locationState}</span>
+                          <span>
+                            {shippingInfo.locationCity}, {shippingInfo.locationState}, {shippingInfo.locationStreet}
+                            <br />
+                            {shippingInfo.locationPostalCode}
+                          </span>
                         )}
                       </div>
                     </div>

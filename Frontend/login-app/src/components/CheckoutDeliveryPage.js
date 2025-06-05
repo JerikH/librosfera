@@ -15,10 +15,18 @@ const CheckoutDeliveryPage = () => {
   const [taxes, setTaxes] = useState(0);
   const [total, setTotal] = useState(0);
 
+  const getCookie = (name) => {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  };
+
   // Ubicación del usuario
   const [userLocation, setUserLocation] = useState({
-    ciudad: 'Pereira',
-    departamento: 'Risaralda'
+    City: '',
+    State: '',
+    Country: '',
+    Postal: '',
+    Street: '',
   });
 
   // Load data from localStorage - simplified and consistent
@@ -88,7 +96,7 @@ const CheckoutDeliveryPage = () => {
   // Update shipping cost and total when delivery method changes
   useEffect(() => {
     if (deliveryMethod === 'domicilio') {
-      const cost = userLocation.ciudad === 'Pereira' ? 7000 : 12000;
+      const cost = 7000;
       setShippingCost(cost);
       setTotal(subtotal + cost + taxes);
     } else if (deliveryMethod === 'recogida_tienda') {
@@ -99,6 +107,38 @@ const CheckoutDeliveryPage = () => {
 
   // Handle delivery method change
   const handleDeliveryMethodChange = (method) => {
+    if(method == 'domicilio'){
+      const Usdata = getCookie('data');
+     
+      // console.log("usdata:", Usdata);
+
+      // Parse the user data if it's a string
+      let userData;
+      try {
+        userData = typeof Usdata === 'string' ? JSON.parse(Usdata) : Usdata;
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        userData = null;
+      }
+
+      // Extract address information from user data
+      if (userData && userData.Data && userData.Data.direcciones && userData.Data.direcciones.length > 0) {
+        // Get the first address from the user's addresses array
+        const firstAddress = userData.Data.direcciones[0];
+
+        console.log("First:", firstAddress);
+
+        setUserLocation({
+          City: firstAddress.ciudad || '',
+          State: '', // Not available in the cookie data
+          Country: firstAddress.pais || '',
+          Postal: firstAddress.codigo_postal || '',
+          Street: firstAddress.calle || ''
+        });
+      }
+    }
+
+
     setDeliveryMethod(method);
   };
 
@@ -121,16 +161,21 @@ const CheckoutDeliveryPage = () => {
       // Update CartPrices with final total
       const updatedCartPrices = { ...cartPrices, total_final: total };
       localStorage.setItem('CartPrices', JSON.stringify(updatedCartPrices));
-      
-      // Save shipping preferences
+    
+
+      console.log("userLocation: ", userLocation);
+      // Save shipping preferences with user address data
       const shippingPreferences = {
         method: deliveryMethod,
         storeId: null,
         shippingCost,
-        locationCity: userLocation.ciudad,
-        locationState: userLocation.departamento
+        locationCity: userLocation.City || userLocation.ciudad,
+        locationState: userLocation.State,
+        locationStreet: userLocation.Street || '',
+        locationCountry: userLocation.Country || '',
+        locationPostalCode: userLocation.Postal || ''
       };
-      
+          
       localStorage.setItem('shippingPreferences', JSON.stringify(shippingPreferences));
       
       // Navigate based on delivery method
@@ -180,7 +225,7 @@ const CheckoutDeliveryPage = () => {
                   
                   {deliveryMethod === 'domicilio' && (
                     <div className="mt-3 ml-8 text-gray-600">
-                      {userLocation.ciudad}, {userLocation.departamento}
+                      {userLocation.City}, {userLocation.Country}
                     </div>
                   )}
                 </div>
