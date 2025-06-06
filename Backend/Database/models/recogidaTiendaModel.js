@@ -90,9 +90,7 @@ const recogidaTiendaSchema = new Schema({
   // Código único para la recogida
   codigo_recogida: {
     type: String,
-    unique: true,
     sparse: true,
-    index: true
   },
   
   // QR code para facilitar la recogida
@@ -283,11 +281,9 @@ const recogidaTiendaSchema = new Schema({
 // ÍNDICES
 recogidaTiendaSchema.index({ id_cliente: 1, estado: 1 });
 recogidaTiendaSchema.index({ id_tienda: 1, estado: 1 });
-recogidaTiendaSchema.index({ codigo_recogida: 1 });
 recogidaTiendaSchema.index({ 'fechas.fecha_limite': 1 });
 recogidaTiendaSchema.index({ 'fechas.fecha_expiracion': 1 });
 recogidaTiendaSchema.index({ fecha_creacion: -1 });
-recogidaTiendaSchema.index({ 'qr_code.codigo': 1 });
 
 // MIDDLEWARE
 recogidaTiendaSchema.pre('save', function(next) {

@@ -10,6 +10,10 @@ const catchAsync = require('../utils/catchAsync');
  */
 const crearVenta = catchAsync(async (req, res, next) => {
   try {
+    if (req.body.direccion_envio) {
+      req.body.direccion_envio = mapearDireccionEnvio(req.body.direccion_envio);
+      console.log('Dirección mapeada:', req.body.direccion_envio);
+    }
     const {
       id_tarjeta,
       tipo_envio,
@@ -390,6 +394,38 @@ const crearDevolucion = catchAsync(async (req, res, next) => {
     return next(new AppError('Error al crear la solicitud de devolución', 500));
   }
 });
+
+const mapearDireccionEnvio = (direccionEnvio) => {
+  if (!direccionEnvio) {
+    throw new Error('La dirección de envío es obligatoria');
+  }
+
+  // Mapear campos que pueden venir con nombres diferentes
+  const direccionMapeada = {
+    direccion_completa: direccionEnvio.calle || direccionEnvio.direccion_completa || direccionEnvio.direccion,
+    ciudad: direccionEnvio.ciudad,
+    departamento: direccionEnvio.departamento || direccionEnvio.estado_provincia || direccionEnvio.estado,
+    codigo_postal: direccionEnvio.codigo_postal,
+    pais: direccionEnvio.pais || 'Colombia',
+    referencia: direccionEnvio.referencias || direccionEnvio.referencia,
+    telefono_contacto: direccionEnvio.telefono_contacto || direccionEnvio.telefono
+  };
+
+  // Validar campos obligatorios
+  if (!direccionMapeada.direccion_completa) {
+    throw new Error('La dirección completa es obligatoria (calle, carrera, etc.)');
+  }
+
+  if (!direccionMapeada.ciudad) {
+    throw new Error('La ciudad es obligatoria');
+  }
+
+  if (!direccionMapeada.departamento) {
+    throw new Error('El departamento/estado es obligatorio');
+  }
+
+  return direccionMapeada;
+};
 
 // CONTROLADORES ADMINISTRATIVOS
 

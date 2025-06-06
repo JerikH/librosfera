@@ -25,7 +25,6 @@ const tiendaFisicaSchema = new Schema({
   codigo: {
     type: String,
     required: [true, 'El código de la tienda es obligatorio'],
-    unique: true,
     trim: true,
     uppercase: true,
     maxlength: [10, 'El código no puede exceder 10 caracteres'],
