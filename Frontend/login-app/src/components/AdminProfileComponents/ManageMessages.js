@@ -28,6 +28,10 @@ const AdminMessagesPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showConversationActions, setShowConversationActions] = useState(false);
   
+  // Admin list state - now fetched from API
+  const [adminList, setAdminList] = useState([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(false);
+  
   // Filter states
   const [filters, setFilters] = useState({
     page: 1,
@@ -53,12 +57,38 @@ const AdminMessagesPage = () => {
 
   const messagesEndRef = useRef(null);
 
-  // Mock admin list for assignment
-  const [adminList] = useState([
-    { _id: '60d85e3a9f15d71f5019e126', nombres: 'María', apellidos: 'González', usuario: 'admin_soporte' },
-    { _id: '60d85e3a9f15d71f5019e127', nombres: 'Carlos', apellidos: 'Ruiz', usuario: 'admin_ventas' },
-    { _id: '60d85e3a9f15d71f5019e128', nombres: 'Ana', apellidos: 'López', usuario: 'admin_tecnico' }
-  ]);
+  // Fetch administrators from API
+  const fetchAdmins = async () => {
+    setLoadingAdmins(true);
+    const token = getAuthToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/v1/users?tipo_usuario=administrador&activo=true`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("response:", response.data);
+        setAdminList(data.data || data.users || data); // Handle different possible response structures
+        
+      } else {
+        console.error('Error fetching admins:', response.statusText);
+        // Fallback to empty array
+        setAdminList([]);
+      }
+    } catch (error) {
+      console.error('Error fetching admins:', error);
+      // Fallback to empty array
+      setAdminList([]);
+    } finally {
+      setLoadingAdmins(false);
+    }
+  };
 
   // Fetch conversations with filters
   const fetchConversations = async () => {
@@ -310,6 +340,12 @@ const AdminMessagesPage = () => {
     fetchConversations();
   }, [filters]);
 
+  // Fetch admin list on component mount
+  useEffect(() => {
+    fetchAdmins();
+    console.log("Admins", adminList);
+  }, []);
+
   // Format date
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -361,8 +397,8 @@ const AdminMessagesPage = () => {
 
   return (
     <div className="h-full flex bg-white">
-      {/* Conversations List */}
-      <div className={`${selectedConversation ? 'hidden lg:block' : 'block'} w-full lg:w-1/3 border-r border-gray-200 flex flex-col`}>
+      {/* Conversations List - 40% width */}
+      <div className={`${selectedConversation ? 'hidden lg:block' : 'block'} w-full lg:w-2/5 border-r border-gray-200 flex flex-col`}>
         {/* Header */}
         <div className="p-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between mb-4">
@@ -580,9 +616,9 @@ const AdminMessagesPage = () => {
         )}
       </div>
 
-      {/* Chat Area */}
+      {/* Chat Area - 60% width */}
       {selectedConversation ? (
-        <div className="flex-1 flex flex-col">
+        <div className="w-full lg:w-3/5 flex flex-col">
           {/* Chat Header */}
           <div className="p-4 border-b border-gray-200 bg-gray-50">
             <div className="flex items-center justify-between">
@@ -642,18 +678,29 @@ const AdminMessagesPage = () => {
                       {/* Admin Assignment */}
                       <div className="mb-3">
                         <label className="block text-sm text-gray-700 mb-1">Asignar Admin</label>
-                        <select
-                          onChange={(e) => e.target.value && assignAdmin(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                          defaultValue=""
-                        >
-                          <option value="">Seleccionar admin</option>
-                          {adminList.map(admin => (
-                            <option key={admin._id} value={admin._id}>
-                              {admin.nombres} {admin.apellidos} ({admin.usuario})
-                            </option>
-                          ))}
-                        </select>
+                        {loadingAdmins ? (
+                          <div className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-500">
+                            Cargando administradores...
+                          </div>
+                        ) : (
+                          <select
+                            onChange={(e) => e.target.value && assignAdmin(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                            defaultValue=""
+                          >
+                            <option value="">Seleccionar admin</option>
+                            {adminList.map(admin => (
+                              <option key={admin._id} value={admin._id}>
+                                {admin.nombres} {admin.apellidos} ({admin.usuario})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {adminList.length === 0 && !loadingAdmins && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            No hay administradores disponibles
+                          </div>
+                        )}
                       </div>
                       
                       <button
@@ -730,7 +777,7 @@ const AdminMessagesPage = () => {
           </div>
         </div>
       ) : (
-        <div className="hidden lg:flex flex-1 items-center justify-center bg-gray-50">
+        <div className="hidden lg:flex w-3/5 items-center justify-center bg-gray-50">
           <div className="text-center text-gray-500">
             <MessageCircle className="w-16 h-16 mx-auto mb-4 text-gray-300" />
             <p className="text-lg font-medium mb-2">Selecciona una conversación</p>
