@@ -154,11 +154,11 @@ function CheckoutPaymentConfirmation() {
         tipo_envio: shippingInfo.method === 'recogida_tienda' ? 'recogida_tienda' : 'domicilio',
       // id_tienda_recogida: shippingInfo.method === 'recogida_tienda' ? parseInt(shippingInfo.storeId) : '',
         direccion_envio: {
-          calle: shippingInfo.locationStreet || "Dirección no especificada",
+          direccion_completa: shippingInfo.locationStreet || "Dirección no especificada",
           ciudad: shippingInfo.locationCity || userData.ciudad || "Pereira",
           codigo_postal: shippingInfo.locationPostalCode || "660001",
           pais: shippingInfo.locationCountry,
-          estado_provincia: shippingInfo.locationState || userData.departamento || "Risaralda",
+          departamento: shippingInfo.locationState || userData.departamento || "Risaralda",
           referencias: userData.referencias || ""
         },
         notas_envio: shippingInfo.method === 'recogida_tienda' ? 
