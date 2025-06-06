@@ -130,7 +130,7 @@ const crearVenta = catchAsync(async (req, res, next) => {
 });
 
 /**
- * @desc    Obtener ventas del cliente
+ * @desc    Obtener ventas del cliente ACTUALIZADO CON INFORMACIÓN DE DEVOLUCIONES
  * @route   GET /api/v1/ventas/mis-ventas
  * @access  Private/Cliente
  */
@@ -139,13 +139,15 @@ const obtenerMisVentas = catchAsync(async (req, res, next) => {
     const {
       page = 1,
       limit = 10,
-      estado
+      estado,
+      incluir_devoluciones = 'true' // Incluir por defecto
     } = req.query;
 
     const resultado = await ventaService.obtenerVentasCliente(req.user._id, {
       page: parseInt(page),
       limit: parseInt(limit),
-      estado
+      estado,
+      incluir_devoluciones: incluir_devoluciones === 'true'
     });
 
     res.status(200).json({
@@ -242,7 +244,7 @@ const calcularPreviewVenta = catchAsync(async (req, res, next) => {
 });
 
 /**
- * @desc    Obtener detalle de una venta
+ * @desc    Obtener detalle de una venta ACTUALIZADO CON INFORMACIÓN COMPLETA DE DEVOLUCIONES
  * @route   GET /api/v1/ventas/:numeroVenta
  * @access  Private/Cliente
  */
@@ -257,7 +259,12 @@ const obtenerDetalleVenta = catchAsync(async (req, res, next) => {
 
     res.status(200).json({
       status: 'success',
-      data: resultado
+      data: {
+        venta: resultado.venta,
+        devoluciones: resultado.devoluciones,
+        puede_solicitar_devolucion: resultado.puede_solicitar_devolucion,
+        resumen_devoluciones: resultado.venta.resumen_devoluciones
+      }
     });
   } catch (error) {
     console.error('Error obteniendo detalle de venta:', error);
@@ -329,7 +336,7 @@ const cancelarVentaCliente = catchAsync(async (req, res, next) => {
 });
 
 /**
- * @desc    Crear solicitud de devolución
+ * @desc    Crear solicitud de devolución ACTUALIZADO
  * @route   POST /api/v1/ventas/:numeroVenta/devolucion
  * @access  Private/Cliente
  */
@@ -347,9 +354,15 @@ const crearDevolucion = catchAsync(async (req, res, next) => {
       if (!item.id_item_venta || !item.cantidad || !item.motivo || !item.descripcion) {
         return next(new AppError('Cada item debe tener id, cantidad, motivo y descripción', 400));
       }
+      
+      if (item.cantidad <= 0) {
+        return next(new AppError('La cantidad a devolver debe ser mayor que cero', 400));
+      }
     }
 
-    const devolucion = await ventaService.crearDevolucion(
+    // USAR EL SERVICIO ACTUALIZADO CON SINCRONIZACIÓN
+    const devolucionService = require('../../Database/services/devolucionService');
+    const devolucion = await devolucionService.crearDevolucionDesdeVenta(
       numeroVenta,
       items,
       req.user._id
@@ -377,7 +390,10 @@ const crearDevolucion = catchAsync(async (req, res, next) => {
         estado: devolucion.estado,
         fecha_limite: devolucion.fecha_limite_envio,
         qr_code: devolucion.qr_code.imagen_base64,
-        url_rastreo: devolucion.qr_code.url_rastreo
+        url_rastreo: devolucion.qr_code.url_rastreo,
+        // NUEVA INFORMACIÓN
+        estado_venta_actualizado: true,
+        items_procesados: items.length
       }
     });
   } catch (error) {
@@ -389,6 +405,10 @@ const crearDevolucion = catchAsync(async (req, res, next) => {
     
     if (error.message.includes('debe estar entregada')) {
       return next(new AppError(error.message, 400));
+    }
+    
+    if (error.message.includes('no encontrada')) {
+      return next(new AppError(error.message, 404));
     }
     
     return next(new AppError('Error al crear la solicitud de devolución', 500));
@@ -430,7 +450,7 @@ const mapearDireccionEnvio = (direccionEnvio) => {
 // CONTROLADORES ADMINISTRATIVOS
 
 /**
- * @desc    Obtener todas las ventas (admin)
+ * @desc    Obtener todas las ventas (admin) ACTUALIZADO CON FILTROS DE DEVOLUCIÓN
  * @route   GET /api/v1/ventas
  * @access  Private/Admin
  */
@@ -444,25 +464,41 @@ const obtenerVentas = catchAsync(async (req, res, next) => {
       numero_venta,
       fecha_desde,
       fecha_hasta,
+      // NUEVOS FILTROS DE DEVOLUCIÓN
+      estado_devolucion,
+      tiene_devoluciones,
+      incluir_devoluciones = 'true',
       ordenar = '-fecha_creacion'
     } = req.query;
 
-    const ventas = await ventaService.obtenerVentasAdmin({
+    const filtros = {
       estado,
       cliente,
       numero_venta,
       fecha_desde,
-      fecha_hasta
-    }, {
+      fecha_hasta,
+      estado_devolucion,
+      tiene_devoluciones: tiene_devoluciones ? tiene_devoluciones === 'true' : undefined
+    };
+
+    // Remover filtros undefined
+    Object.keys(filtros).forEach(key => 
+      filtros[key] === undefined && delete filtros[key]
+    );
+
+    const resultado = await ventaService.obtenerVentasAdmin(filtros, {
       page: parseInt(page),
       limit: parseInt(limit),
-      ordenar
+      ordenar,
+      incluir_devoluciones: incluir_devoluciones === 'true'
     });
 
     res.status(200).json({
       status: 'success',
-      resultados: ventas.length,
-      data: ventas
+      resultados: resultado.ventas.length,
+      resumen: resultado.resumen,
+      filtros_aplicados: filtros,
+      data: resultado.ventas
     });
   } catch (error) {
     console.error('Error obteniendo ventas:', error);
@@ -574,7 +610,7 @@ const cancelarVentaAdmin = catchAsync(async (req, res, next) => {
 });
 
 /**
- * @desc    Obtener estadísticas de ventas
+ * @desc    Obtener estadísticas de ventas ACTUALIZADO CON MÉTRICAS DE DEVOLUCIONES
  * @route   GET /api/v1/ventas/estadisticas
  * @access  Private/Admin
  */
@@ -592,7 +628,13 @@ const obtenerEstadisticas = catchAsync(async (req, res, next) => {
 
     res.status(200).json({
       status: 'success',
-      data: estadisticas
+      data: {
+        ...estadisticas,
+        periodo: {
+          fecha_inicio,
+          fecha_fin
+        }
+      }
     });
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);

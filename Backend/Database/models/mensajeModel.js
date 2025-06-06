@@ -1,114 +1,254 @@
+//Database/models/mensajeModel.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
+const archivoMensajeSchema = require('./schemas/archivoMensajeSchema');
 
 const mensajeSchema = new Schema({
+  // Identificador único del mensaje
   id_mensaje: {
     type: String,
     default: function() {
-      return new mongoose.Types.ObjectId().toString();
+      return `MSG${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     },
     unique: true,
     index: true
   },
   
-  // Participantes
-  id_cliente: {
-    type: Schema.Types.ObjectId,
-    ref: 'Cliente',
+  // Conversación a la que pertenece el mensaje
+  conversacion: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Conversacion',
     required: true,
     index: true
   },
   
-  id_admin: {
-    type: Schema.Types.ObjectId,
-    ref: 'Administrador',
-    index: true
+  // Remitente del mensaje
+  remitente: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Usuario',
+    required: true
   },
   
-  // Contenid
-  mensaje: {
+  // Información del remitente para queries más rápidas
+  remitente_info: {
+    tipo: {
+      type: String,
+      enum: ['cliente', 'administrador'],
+      required: true
+    },
+    nombre: String,
+    email: String,
+    id_cliente: String // Solo para clientes
+  },
+  
+  // Contenido del mensaje
+  contenido: {
     type: String,
-    required: true
+    required: true,
+    trim: true,
+    maxlength: 5000
+  },
+  
+  // Tipo de mensaje
+  tipo: {
+    type: String,
+    enum: ['mensaje', 'nota_interna', 'cambio_estado', 'asignacion'],
+    default: 'mensaje'
+  },
+  
+  // Archivos adjuntos
+  archivos: [archivoMensajeSchema],
+  
+  // Control de lectura
+  leido_por: [{
+    usuario: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Usuario'
+    },
+    fecha_lectura: {
+      type: Date,
+      default: Date.now
+    },
+    tipo_usuario: {
+      type: String,
+      enum: ['cliente', 'administrador']
+    }
+  }],
+  
+  // Respuesta a otro mensaje (threading)
+  respuesta_a: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Mensaje',
+    sparse: true
+  },
+  
+  // Mensaje editado
+  editado: {
+    type: Boolean,
+    default: false
+  },
+  
+  fecha_edicion: {
+    type: Date
+  },
+  
+  contenido_original: {
+    type: String
   },
   
   // Metadatos
   fecha_envio: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   },
   
-  leido: {
-    type: Boolean,
-    default: false
-  },
-  
-  // Direccionalidad
-  direccion: {
+  // Estado del mensaje
+  estado: {
     type: String,
-    enum: ['cliente_a_admin', 'admin_a_cliente'],
-    required: true
+    enum: ['enviado', 'entregado', 'leido', 'eliminado'],
+    default: 'enviado'
   },
   
-  // Adjuntos (opcional)
-  adjuntos: [{
-    nombre: String,
-    url: String,
-    tipo: String
-  }]
+  // Metadata adicional
+  metadata: {
+    ip_remitente: String,
+    user_agent: String,
+    dispositivo: String
+  },
+  
+  // Control de versiones
+  version: {
+    type: Number,
+    default: 0
+  }
 });
 
-// ÍNDICES COMPUESTOS
-mensajeSchema.index({ id_cliente: 1, fecha_envio: -1 });
-mensajeSchema.index({ id_admin: 1, fecha_envio: -1 });
+// ÍNDICES
+mensajeSchema.index({ conversacion: 1, fecha_envio: 1 });
+mensajeSchema.index({ remitente: 1, fecha_envio: -1 });
+mensajeSchema.index({ 'remitente_info.tipo': 1, fecha_envio: -1 });
+mensajeSchema.index({ estado: 1 });
+mensajeSchema.index({ tipo: 1 });
+
+// Índice de texto para búsquedas
+mensajeSchema.index({
+  contenido: 'text',
+  'remitente_info.nombre': 'text'
+}, {
+  weights: {
+    contenido: 5,
+    'remitente_info.nombre': 2
+  },
+  name: 'mensaje_text_index'
+});
+
+// MIDDLEWARES
+mensajeSchema.pre('save', function(next) {
+  if (this.isModified('contenido') && !this.isNew) {
+    this.editado = true;
+    this.fecha_edicion = new Date();
+  }
+  this.version += 1;
+  next();
+});
+
+// MÉTODOS DE INSTANCIA
+mensajeSchema.methods.marcarComoLeido = function(usuarioId, tipoUsuario) {
+  const yaLeido = this.leido_por.find(l => l.usuario.toString() === usuarioId.toString());
+  
+  if (!yaLeido) {
+    this.leido_por.push({
+      usuario: usuarioId,
+      fecha_lectura: new Date(),
+      tipo_usuario: tipoUsuario
+    });
+    
+    // Actualizar estado si es necesario
+    if (this.estado === 'enviado' || this.estado === 'entregado') {
+      this.estado = 'leido';
+    }
+    
+    return this.save();
+  }
+  
+  return Promise.resolve(this);
+};
+
+mensajeSchema.methods.editarContenido = function(nuevoContenido) {
+  if (!this.contenido_original) {
+    this.contenido_original = this.contenido;
+  }
+  
+  this.contenido = nuevoContenido;
+  return this.save();
+};
+
+mensajeSchema.methods.agregarArchivo = function(archivoData) {
+  this.archivos.push(archivoData);
+  return this.save();
+};
 
 // MÉTODOS ESTÁTICOS
-
-// Obtener conversación completa
-mensajeSchema.statics.obtenerConversacion = function(idCliente, idAdmin = null) {
-  const query = { id_cliente: idCliente };
+mensajeSchema.statics.buscarEnConversacion = function(conversacionId, criterios = {}) {
+  const query = { conversacion: conversacionId };
   
-  if (idAdmin) {
-    query.id_admin = idAdmin;
+  if (criterios.tipo) {
+    query.tipo = criterios.tipo;
+  }
+  
+  if (criterios.remitente_tipo) {
+    query['remitente_info.tipo'] = criterios.remitente_tipo;
+  }
+  
+  if (criterios.buscar_texto) {
+    query.$text = { $search: criterios.buscar_texto };
+  }
+  
+  if (criterios.desde) {
+    if (!query.fecha_envio) query.fecha_envio = {};
+    query.fecha_envio.$gte = new Date(criterios.desde);
+  }
+  
+  if (criterios.hasta) {
+    if (!query.fecha_envio) query.fecha_envio = {};
+    query.fecha_envio.$lte = new Date(criterios.hasta);
   }
   
   return this.find(query)
-    .sort({ fecha_envio: 1 });
+             .populate('remitente', 'nombres apellidos usuario email id_cliente')
+             .populate('respuesta_a', 'contenido remitente_info fecha_envio')
+             .sort({ fecha_envio: 1 });
 };
 
-// Obtener mensajes no leídos
-mensajeSchema.statics.obtenerNoLeidos = function(idUsuario, esAdmin = false) {
-  const query = esAdmin 
-    ? { id_admin: idUsuario, leido: false, direccion: 'cliente_a_admin' }
-    : { id_cliente: idUsuario, leido: false, direccion: 'admin_a_cliente' };
+mensajeSchema.statics.obtenerNoLeidos = function(usuarioId, tipoUsuario) {
+  const query = {
+    'leido_por.usuario': { $ne: usuarioId },
+    estado: { $in: ['enviado', 'entregado'] }
+  };
   
-  return this.find(query)
-    .sort({ fecha_envio: 1 });
-};
-
-// Marcar como leídos
-mensajeSchema.statics.marcarComoLeidos = function(idUsuario, esAdmin = false) {
-  const query = esAdmin 
-    ? { id_admin: idUsuario, leido: false, direccion: 'cliente_a_admin' }
-    : { id_cliente: idUsuario, leido: false, direccion: 'admin_a_cliente' };
+  // Si es cliente, solo sus conversaciones
+  if (tipoUsuario === 'cliente') {
+    // Necesitamos hacer un populate o lookup para filtrar por cliente
+    return this.aggregate([
+      {
+        $lookup: {
+          from: 'conversacions',
+          localField: 'conversacion',
+          foreignField: '_id',
+          as: 'conv_info'
+        }
+      },
+      {
+        $match: {
+          'conv_info.cliente': mongoose.Types.ObjectId(usuarioId),
+          'leido_por.usuario': { $ne: mongoose.Types.ObjectId(usuarioId) },
+          'estado': { $in: ['enviado', 'entregado'] }
+        }
+      }
+    ]);
+  }
   
-  return this.updateMany(
-    query,
-    { leido: true }
-  );
-};
-
-// Enviar mensaje
-mensajeSchema.statics.enviarMensaje = async function(emisor, receptor, contenido, adjuntos = []) {
-  const esCliente = emisor.tipo_usuario === 'cliente';
-  
-  return new this({
-    id_cliente: esCliente ? emisor._id : receptor._id,
-    id_admin: esCliente ? receptor._id : emisor._id,
-    mensaje: contenido,
-    direccion: esCliente ? 'cliente_a_admin' : 'admin_a_cliente',
-    adjuntos: adjuntos
-  }).save();
+  return this.find(query).populate('conversacion');
 };
 
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);

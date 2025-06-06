@@ -6,6 +6,7 @@ import ProfilePage from './UserProfilePageComponents/ProfilePage';
 import PurchasesPage from './UserProfilePageComponents/PurchasesPage';
 import CartPage from './UserProfilePageComponents/CartPage';
 import CardPage from './UserProfilePageComponents/CardPage';
+import MessagesPage from './UserProfilePageComponents/MessagesPage'; // Import the new MessagesPage
 import EditProfile from './EditProfile';
 import { fetchUserData, logoutUser } from './UserProfilePageComponents/authUtils';
 import { getCartCount } from './cartUtils';
@@ -213,6 +214,7 @@ const UserProfile = () => {
             <div className="h-full">
               {activeTab === 'home' && <Dashboard userData={userData} onEditProfile={handleEditProfile} />}
               {activeTab === 'profile' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
+              {activeTab === 'mensajes' && <MessagesPage />}
               {activeTab === 'compras' && <PurchasesPage />}
               {activeTab === 'carrito' && <CartPage updateCartCount={updateCartCount} />}
               {activeTab === 'tarjeta' && <CardPage />}
