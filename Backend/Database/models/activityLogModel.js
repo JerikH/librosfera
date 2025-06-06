@@ -36,7 +36,7 @@ const activityLogSchema = new Schema({
   entidad_afectada: {
     tipo: {
       type: String,
-      enum: ['libro', 'usuario', 'inventario', 'venta', 'sistema', 'otro'],
+      enum: ['libro', 'usuario', 'inventario', 'venta', 'sistema', 'otro', 'devolucion'],
       required: true
     },
     id: Schema.Types.ObjectId,
