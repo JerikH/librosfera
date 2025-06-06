@@ -14,46 +14,174 @@ const carritoService = {
    * @returns {Promise<Object>} Carrito del usuario
    */
   async obtenerCarritoUsuario(idUsuario) {
+    return await this.ejecutarConRetry(async () => {
+      try {
+        console.log('Obteniendo carrito para usuario:', idUsuario);
+        
+        if (!mongoose.Types.ObjectId.isValid(idUsuario)) {
+          throw new Error('ID de usuario inválido');
+        }
+        
+        // Verificar que el usuario existe y es cliente
+        const usuario = await Cliente.findById(idUsuario);
+        if (!usuario) {
+          throw new Error('Usuario no encontrado o no es cliente');
+        }
+        
+        let carrito = await Carrito.obtenerCarritoActivo(idUsuario);
+        
+        // Obtener items del carrito
+        const items = await CarritoItem.obtenerItemsCarrito(carrito._id);
+        
+        // CORREGIDO: Verificar items solo si hay items Y el carrito está activo
+        if (items.length > 0 && carrito.estado === 'activo') {
+          console.log(`Verificando ${items.length} items del carrito`);
+          await this._verificarYLimpiarItemsCarritoSeguro(carrito._id, items);
+        }
+        
+        // CORREGIDO: Verificar problemas solo si el carrito tiene items activos
+        const itemsActuales = await CarritoItem.find({ id_carrito: carrito._id });
+        if (itemsActuales.length > 0) {
+          try {
+            await carrito.verificarProblemas();
+          } catch (problemasError) {
+            console.warn('Error verificando problemas (no crítico):', problemasError.message);
+            // No propagar el error, continuar con el carrito
+          }
+        }
+        
+        // Actualizar totales
+        try {
+          await carrito.actualizarTotales();
+        } catch (totalesError) {
+          console.warn('Error actualizando totales (no crítico):', totalesError.message);
+          // No propagar el error, continuar con el carrito
+        }
+        
+        // Volver a obtener los items después de la limpieza
+        const itemsFinales = await CarritoItem.obtenerItemsCarrito(carrito._id);
+        
+        return {
+          carrito: carrito.toObject(),
+          items: itemsFinales.map(item => item.toObject())
+        };
+      } catch (error) {
+        console.error('Error obteniendo carrito:', error);
+        throw error;
+      }
+    }, 3, 150); // 3 reintentos con delay base de 150ms
+  },
+
+  async _verificarYLimpiarItemsCarritoSeguro(idCarrito, items) {
     try {
-      console.log('Obteniendo carrito para usuario:', idUsuario);
+      console.log(`Verificando ${items.length} items del carrito ${idCarrito} de forma segura`);
       
-      if (!mongoose.Types.ObjectId.isValid(idUsuario)) {
-        throw new Error('ID de usuario inválido');
+      // Procesar items uno por uno para evitar conflictos masivos
+      for (const item of items) {
+        try {
+          // Verificar que el item aún existe antes de procesarlo
+          const itemActual = await CarritoItem.findById(item._id);
+          
+          if (!itemActual) {
+            console.log(`Item ${item._id} ya no existe, saltando verificación`);
+            continue;
+          }
+          
+          // Verificar si el libro sigue existiendo y activo
+          const libro = await Libro.findById(itemActual.id_libro);
+          
+          if (!libro || !libro.activo) {
+            console.log(`Eliminando item de libro inactivo/eliminado: ${itemActual.id_libro}`);
+            await this._liberarReservaCompleta(idCarrito, itemActual.id_libro, null, null);
+            await CarritoItem.findByIdAndDelete(itemActual._id);
+            continue;
+          }
+          
+          // Verificar si aún hay reserva válida
+          const reservaInfo = await this._obtenerReservaExistente(idCarrito, itemActual.id_libro, null);
+          
+          if (!reservaInfo || reservaInfo.cantidad < itemActual.cantidad) {
+            console.log(`Problema con reserva del item ${itemActual.id_libro}: reservado=${reservaInfo?.cantidad || 0}, necesario=${itemActual.cantidad}`);
+            
+            // Intentar re-reservar la diferencia si es posible
+            const diferencia = itemActual.cantidad - (reservaInfo?.cantidad || 0);
+            if (diferencia > 0) {
+              const inventarioDisponible = await this._obtenerMejorInventarioDisponible(itemActual.id_libro, diferencia, null);
+              
+              if (inventarioDisponible && inventarioDisponible.stock_disponible >= diferencia) {
+                try {
+                  // Asegurar que idCarrito sea ObjectId
+                  let carritoObjectId;
+                  if (mongoose.Types.ObjectId.isValid(idCarrito)) {
+                    carritoObjectId = typeof idCarrito === 'string' ? new mongoose.Types.ObjectId(idCarrito) : idCarrito;
+                  } else {
+                    carritoObjectId = new mongoose.Types.ObjectId(idCarrito);
+                  }
+                  
+                  await inventarioDisponible.reservarEjemplares(
+                    diferencia,
+                    null,
+                    carritoObjectId,
+                    'Re-reserva automática al verificar carrito'
+                  );
+                  
+                  console.log(`Re-reservados ${diferencia} ejemplares para mantener consistencia`);
+                  
+                  // Actualizar estado del item
+                  itemActual.estado = 'activo';
+                  itemActual.mensaje_precio = '';
+                  await itemActual.save();
+                } catch (reserveError) {
+                  console.error('Error re-reservando:', reserveError);
+                  // Marcar item con problemas
+                  itemActual.estado = 'sin_stock';
+                  itemActual.mensaje_precio = 'Problema con la reserva - verificar disponibilidad';
+                  await itemActual.save();
+                }
+              } else {
+                // No hay stock suficiente, marcar item con problemas
+                itemActual.estado = 'sin_stock';
+                itemActual.mensaje_precio = 'Stock insuficiente - producto no disponible';
+                await itemActual.save();
+              }
+            }
+          } else {
+            // Reserva está bien, asegurar que el estado del item sea activo
+            if (itemActual.estado !== 'activo') {
+              itemActual.estado = 'activo';
+              itemActual.mensaje_precio = '';
+              await itemActual.save();
+            }
+          }
+        } catch (itemError) {
+          console.error(`Error verificando item ${item._id}:`, itemError);
+          
+          // Si el error indica que el documento no existe, simplemente continuar
+          if (itemError.message.includes('No document found') || 
+              itemError.message.includes('document not found') ||
+              itemError.message.includes('Cast to ObjectId failed')) {
+            console.log(`Item ${item._id} ya no existe, continuando con siguiente item`);
+            continue;
+          }
+          
+          // Para otros errores, marcar item con error general si aún existe
+          try {
+            const itemExistente = await CarritoItem.findById(item._id);
+            if (itemExistente) {
+              itemExistente.estado = 'removido';
+              itemExistente.mensaje_precio = 'Error verificando disponibilidad';
+              await itemExistente.save();
+            }
+          } catch (saveError) {
+            console.error('Error guardando estado de error del item:', saveError);
+          }
+        }
       }
       
-      // Verificar que el usuario existe y es cliente
-      const usuario = await Cliente.findById(idUsuario);
-      if (!usuario) {
-        throw new Error('Usuario no encontrado o no es cliente');
-      }
-      
-      let carrito = await Carrito.obtenerCarritoActivo(idUsuario);
-      
-      // Obtener items del carrito
-      const items = await CarritoItem.obtenerItemsCarrito(carrito._id);
-      
-      // CORREGIDO: Verificar y limpiar items expirados o con problemas (sin transacción automática)
-      if (items.length > 0) {
-        console.log(`Verificando ${items.length} items del carrito`);
-        await this._verificarYLimpiarItemsCarrito(carrito._id, items);
-      }
-      
-      // Verificar problemas en items
-      await carrito.verificarProblemas();
-      
-      // Actualizar totales
-      await carrito.actualizarTotales();
-      
-      // Volver a obtener los items después de la limpieza
-      const itemsActualizados = await CarritoItem.obtenerItemsCarrito(carrito._id);
-      
-      return {
-        carrito: carrito.toObject(),
-        items: itemsActualizados.map(item => item.toObject())
-      };
+      console.log('Verificación segura de items del carrito completada');
     } catch (error) {
-      console.error('Error obteniendo carrito:', error);
-      throw error;
+      console.error('Error en verificación segura de items del carrito:', error);
+      // No propagar el error para no romper el flujo principal
     }
   },
 
@@ -342,210 +470,213 @@ const carritoService = {
    * @returns {Promise<Object>} Resultado de la operación
    */
   async agregarLibroAlCarrito(idUsuario, idLibro, cantidad = 1) {
-    try {
-      console.log(`Agregando ${cantidad} del libro ${idLibro} al carrito del usuario ${idUsuario}`);
+    return await this.ejecutarConRetry(async () => {
+      try {
+        console.log(`Agregando ${cantidad} del libro ${idLibro} al carrito del usuario ${idUsuario}`);
       
-      // Validaciones básicas
-      if (!mongoose.Types.ObjectId.isValid(idUsuario) || !mongoose.Types.ObjectId.isValid(idLibro)) {
-        throw new Error('IDs inválidos');
-      }
-      
-      if (cantidad < 1 || cantidad > 3) {
-        throw new Error('La cantidad debe estar entre 1 y 3');
-      }
-      
-      // Verificar que el libro existe y está disponible
-      const libro = await Libro.findById(idLibro);
-      if (!libro) {
-        throw new Error('Libro no encontrado');
-      }
-      
-      if (!libro.activo) {
-        throw new Error('El libro no está disponible');
-      }
+        // Validaciones básicas
+        if (!mongoose.Types.ObjectId.isValid(idUsuario) || !mongoose.Types.ObjectId.isValid(idLibro)) {
+          throw new Error('IDs inválidos');
+        }
+        
+        if (cantidad < 1 || cantidad > 3) {
+          throw new Error('La cantidad debe estar entre 1 y 3');
+        }
+        
+        // Verificar que el libro existe y está disponible
+        const libro = await Libro.findById(idLibro);
+        if (!libro) {
+          throw new Error('Libro no encontrado');
+        }
+        
+        if (!libro.activo) {
+          throw new Error('El libro no está disponible');
+        }
 
-      // Verificar stock consolidado real
-      const stockConsolidado = await this._verificarStockConsolidadoDisponible(idLibro, cantidad, null);
-      if (!stockConsolidado.suficiente) {
-        throw new Error(`Stock insuficiente. Disponible: ${stockConsolidado.disponible}, solicitado: ${cantidad}`);
-      }
-      
-      // Obtener carrito del usuario
-      const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
-      const carritoObjectId = new mongoose.Types.ObjectId(carrito._id);
-      
-      // Verificar límite de libros diferentes
-      const librosDiferentes = await CarritoItem.distinct('id_libro', { id_carrito: carrito._id });
-      if (librosDiferentes.length >= 5 && !librosDiferentes.some(id => id.equals(idLibro))) {
-        throw new Error('No se pueden agregar más de 5 libros diferentes al carrito');
-      }
-      
-      // Verificar si el libro ya está en el carrito
-      const itemExistente = await CarritoItem.findOne({ 
-        id_carrito: carrito._id, 
-        id_libro: idLibro 
-      });
-      
-      let inventario = null;
-      
-      if (itemExistente) {
-        console.log(`Item existente encontrado con cantidad: ${itemExistente.cantidad}`);
-        
-        // Actualizar cantidad del item existente
-        const nuevaCantidad = itemExistente.cantidad + cantidad;
-        if (nuevaCantidad > 3) {
-          throw new Error('No se pueden tener más de 3 ejemplares del mismo libro');
+        // Verificar stock consolidado real
+        const stockConsolidado = await this._verificarStockConsolidadoDisponible(idLibro, cantidad, null);
+        if (!stockConsolidado.suficiente) {
+          throw new Error(`Stock insuficiente. Disponible: ${stockConsolidado.disponible}, solicitado: ${cantidad}`);
         }
         
-        // Obtener inventario para reservar stock adicional
-        inventario = await this._obtenerMejorInventarioDisponible(idLibro, cantidad, null);
+        // Obtener carrito del usuario
+        const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
+        const carritoObjectId = new mongoose.Types.ObjectId(carrito._id);
         
-        if (!inventario) {
-          throw new Error(`No hay tiendas activas con stock suficiente para aumentar la cantidad`);
+        // Verificar límite de libros diferentes
+        const librosDiferentes = await CarritoItem.distinct('id_libro', { id_carrito: carrito._id });
+        if (librosDiferentes.length >= 5 && !librosDiferentes.some(id => id.equals(idLibro))) {
+          throw new Error('No se pueden agregar más de 5 libros diferentes al carrito');
         }
         
-        if (inventario.stock_disponible < cantidad) {
-          throw new Error(`Stock insuficiente para aumentar cantidad. Disponible: ${inventario.stock_disponible}, necesario: ${cantidad}`);
-        }
+        // Verificar si el libro ya está en el carrito
+        const itemExistente = await CarritoItem.findOne({ 
+          id_carrito: carrito._id, 
+          id_libro: idLibro 
+        });
         
-        // Reservar stock adicional
-        await inventario.reservarEjemplares(
-          cantidad,
-          idUsuario,
-          carritoObjectId,
-          `Carrito - aumentar cantidad de ${itemExistente.cantidad} a ${nuevaCantidad}`
-        );
+        let inventario = null;
         
-        console.log(`Stock reservado: ${cantidad} unidades en tienda ${inventario.id_tienda.nombre}`);
-        
-        // Calcular nuevo subtotal
-        const precioUnitario = itemExistente.precios.precio_con_impuestos;
-        const nuevoSubtotal = precioUnitario * nuevaCantidad;
-        
-        // Actualizar cantidad del item
-        await CarritoItem.updateOne(
-          { _id: itemExistente._id },
-          {
-            $set: {
-              cantidad: nuevaCantidad,
-              subtotal: nuevoSubtotal,
-              fecha_actualizado: new Date()
-            }
+        if (itemExistente) {
+          console.log(`Item existente encontrado con cantidad: ${itemExistente.cantidad}`);
+          
+          // Actualizar cantidad del item existente
+          const nuevaCantidad = itemExistente.cantidad + cantidad;
+          if (nuevaCantidad > 3) {
+            throw new Error('No se pueden tener más de 3 ejemplares del mismo libro');
           }
-        );
-        
-        console.log(`Cantidad actualizada a ${nuevaCantidad} correctamente`);
-        
-      } else {
-        console.log('Creando nuevo item en el carrito');
-        
-        // Obtener inventario con mejor disponibilidad
-        inventario = await this._obtenerMejorInventarioDisponible(idLibro, cantidad, null);
-        
-        if (!inventario) {
-          throw new Error(`No hay tiendas activas con stock suficiente de "${libro.titulo}"`);
-        }
-        
-        // Reservar stock
-        await inventario.reservarEjemplares(
-          cantidad,
-          idUsuario,
-          carritoObjectId,
-          `Carrito - agregar ${cantidad} ejemplar(es) de "${libro.titulo}"`
-        );
-        
-        console.log(`Stock reservado: ${cantidad} unidades en tienda ${inventario.id_tienda.nombre}`);
-        
-        // Calcular precios
-        const precioBase = libro.precio_info?.precio_base || libro.precio;
-        const impuesto = Math.round(precioBase * 0.19); // IVA 19%
-        const precioConImpuesto = precioBase + impuesto;
-        const subtotal = precioConImpuesto * cantidad;
-        
-        // Crear item con TODOS los campos requeridos
-        const nuevoItemData = {
-          id_carrito: carrito._id,
-          id_libro: idLibro,
-          cantidad: cantidad,
-          precios: {
-            precio_base: precioBase,
-            precio_con_descuentos: precioBase,
-            precio_con_impuestos: precioConImpuesto,
-            impuesto: {
-              tipo: 'IVA',
-              porcentaje: 19,
-              valor_impuesto: impuesto
-            },
-            total_descuentos: 0
-          },
-          reserva_info: {
-            cantidad_reservada: cantidad,
-            estado_reserva: 'RESERVADO',
-            fecha_reserva: new Date()
-          },
-          precio_cambiado: false,
-          mensaje_precio: '',
-          estado: 'activo',
-          metadatos: {
-            titulo_libro: libro.titulo,
-            autor_libro: libro.autor_nombre_completo,
-            imagen_portada: libro.imagen_portada,
-            isbn: libro.ISBN,
-            disponible: true,
-            tiendas_disponibles: [inventario.id_tienda._id],
-            id_tienda_reservado: inventario.id_tienda._id,
-            nombre_tienda_reservado: inventario.id_tienda.nombre
-          },
-          id_item: new mongoose.Types.ObjectId().toString(),
-          codigos_aplicados: [],
-          fecha_agregado: new Date(),
-          fecha_actualizado: new Date(),
-          subtotal: subtotal // ← CAMPO REQUERIDO
-        };
-        
-        // Crear el item
-        const resultado = await CarritoItem.create(nuevoItemData);
-        
-        if (!resultado) {
-          // Si falla, liberar la reserva
-          await inventario.liberarReserva(
+          
+          // Obtener inventario para reservar stock adicional
+          inventario = await this._obtenerMejorInventarioDisponible(idLibro, cantidad, null);
+          
+          if (!inventario) {
+            throw new Error(`No hay tiendas activas con stock suficiente para aumentar la cantidad`);
+          }
+          
+          if (inventario.stock_disponible < cantidad) {
+            throw new Error(`Stock insuficiente para aumentar cantidad. Disponible: ${inventario.stock_disponible}, necesario: ${cantidad}`);
+          }
+          
+          // Reservar stock adicional
+          await inventario.reservarEjemplares(
             cantidad,
             idUsuario,
             carritoObjectId,
-            'Error creando item - liberando reserva'
+            `Carrito - aumentar cantidad de ${itemExistente.cantidad} a ${nuevaCantidad}`
           );
-          throw new Error('Error creando el item en el carrito');
+          
+          console.log(`Stock reservado: ${cantidad} unidades en tienda ${inventario.id_tienda.nombre}`);
+          
+          // Calcular nuevo subtotal
+          const precioUnitario = itemExistente.precios.precio_con_impuestos;
+          const nuevoSubtotal = precioUnitario * nuevaCantidad;
+          
+          // Actualizar cantidad del item
+          await CarritoItem.updateOne(
+            { _id: itemExistente._id },
+            {
+              $set: {
+                cantidad: nuevaCantidad,
+                subtotal: nuevoSubtotal,
+                fecha_actualizado: new Date()
+              }
+            }
+          );
+          
+          console.log(`Cantidad actualizada a ${nuevaCantidad} correctamente`);
+          
+        } else {
+          console.log('Creando nuevo item en el carrito');
+          
+          // Obtener inventario con mejor disponibilidad
+          inventario = await this._obtenerMejorInventarioDisponible(idLibro, cantidad, null);
+          
+          if (!inventario) {
+            throw new Error(`No hay tiendas activas con stock suficiente de "${libro.titulo}"`);
+          }
+          
+          // Reservar stock
+          await inventario.reservarEjemplares(
+            cantidad,
+            idUsuario,
+            carritoObjectId,
+            `Carrito - agregar ${cantidad} ejemplar(es) de "${libro.titulo}"`
+          );
+          
+          console.log(`Stock reservado: ${cantidad} unidades en tienda ${inventario.id_tienda.nombre}`);
+          
+          // Calcular precios
+          const precioBase = libro.precio_info?.precio_base || libro.precio;
+          const impuesto = Math.round(precioBase * 0.19); // IVA 19%
+          const precioConImpuesto = precioBase + impuesto;
+          const subtotal = precioConImpuesto * cantidad;
+          
+          // Crear item con TODOS los campos requeridos
+          const nuevoItemData = {
+            id_carrito: carrito._id,
+            id_libro: idLibro,
+            cantidad: cantidad,
+            precios: {
+              precio_base: precioBase,
+              precio_con_descuentos: precioBase,
+              precio_con_impuestos: precioConImpuesto,
+              impuesto: {
+                tipo: 'IVA',
+                porcentaje: 19,
+                valor_impuesto: impuesto
+              },
+              total_descuentos: 0
+            },
+            reserva_info: {
+              cantidad_reservada: cantidad,
+              estado_reserva: 'RESERVADO',
+              fecha_reserva: new Date()
+            },
+            precio_cambiado: false,
+            mensaje_precio: '',
+            estado: 'activo',
+            metadatos: {
+              titulo_libro: libro.titulo,
+              autor_libro: libro.autor_nombre_completo,
+              imagen_portada: libro.imagen_portada,
+              isbn: libro.ISBN,
+              disponible: true,
+              tiendas_disponibles: [inventario.id_tienda._id],
+              id_tienda_reservado: inventario.id_tienda._id,
+              nombre_tienda_reservado: inventario.id_tienda.nombre
+            },
+            id_item: new mongoose.Types.ObjectId().toString(),
+            codigos_aplicados: [],
+            fecha_agregado: new Date(),
+            fecha_actualizado: new Date(),
+            subtotal: subtotal // ← CAMPO REQUERIDO
+          };
+          
+          // Crear el item
+          const resultado = await CarritoItem.create(nuevoItemData);
+          
+          if (!resultado) {
+            // Si falla, liberar la reserva
+            await inventario.liberarReserva(
+              cantidad,
+              idUsuario,
+              carritoObjectId,
+              'Error creando item - liberando reserva'
+            );
+            throw new Error('Error creando el item en el carrito');
+          }
+          
+          console.log('Nuevo item creado correctamente');
         }
         
-        console.log('Nuevo item creado correctamente');
-      }
-      
-      // Actualizar totales del carrito
-      try {
-        await carrito.actualizarTotales();
-        console.log('Totales del carrito actualizados');
-      } catch (totalError) {
-        console.warn('Error actualizando totales (no crítico):', totalError.message);
-      }
-      
-      return {
-        exito: true,
-        mensaje: `${cantidad} ejemplar(es) agregado(s) al carrito y reservado(s)`,
-        carrito: carrito.toObject(),
-        stock_info: {
-          stock_reservado: cantidad,
-          tienda_reserva: inventario ? {
-            id: inventario.id_tienda._id,
-            nombre: inventario.id_tienda.nombre,
-            codigo: inventario.id_tienda.codigo
-          } : null
+        // Actualizar totales del carrito
+        try {
+          await carrito.actualizarTotales();
+          console.log('Totales del carrito actualizados');
+        } catch (totalError) {
+          console.warn('Error actualizando totales (no crítico, continuando):', totalError.message);
+          // No fallar por esto, el carrito sigue siendo funcional
         }
-      };
-      
-    } catch (error) {
-      console.error('Error agregando libro al carrito:', error);
-      throw error;
-    }
+        
+        return {
+          exito: true,
+          mensaje: `${cantidad} ejemplar(es) agregado(s) al carrito y reservado(s)`,
+          carrito: carrito.toObject(),
+          stock_info: {
+            stock_reservado: cantidad,
+            tienda_reserva: inventario ? {
+              id: inventario.id_tienda._id,
+              nombre: inventario.id_tienda.nombre,
+              codigo: inventario.id_tienda.codigo
+            } : null
+          }
+        };
+        
+      } catch (error) {
+        console.error('Error agregando libro al carrito:', error);
+        throw error;
+      }
+    }, 3, 200);
   },
 
   /**
@@ -606,108 +737,110 @@ const carritoService = {
    * @returns {Promise<Object>} Resultado de la operación
    */
   async actualizarCantidadItem(idUsuario, idLibro, nuevaCantidad) {
-    try {
-      console.log(`Actualizando cantidad del libro ${idLibro} a ${nuevaCantidad} para usuario ${idUsuario}`);
-      
-      if (nuevaCantidad < 0 || nuevaCantidad > 3) {
-        throw new Error('La cantidad debe estar entre 0 y 3');
-      }
-      
-      const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
-      const carritoObjectId = new mongoose.Types.ObjectId(carrito._id);
-      
-      // Buscar item
-      const item = await CarritoItem.findOne({ 
-        id_carrito: carrito._id, 
-        id_libro: idLibro 
-      });
-      
-      if (!item) {
-        throw new Error('Item no encontrado en el carrito');
-      }
-      
-      const cantidadAnterior = item.cantidad;
-      console.log(`Cantidad anterior: ${cantidadAnterior}, Nueva cantidad: ${nuevaCantidad}`);
-      
-      if (nuevaCantidad === 0) {
-        // Eliminar item del carrito - LIBERAR TODA LA RESERVA
-        await this._liberarReservaCompleta(carritoObjectId, idLibro, idUsuario, null);
+    return await this.ejecutarConRetry(async () => {
+      try {
+        console.log(`Actualizando cantidad del libro ${idLibro} a ${nuevaCantidad} para usuario ${idUsuario}`);
         
-        // Eliminar item
-        await CarritoItem.findByIdAndDelete(item._id);
-        console.log('Item eliminado del carrito y reserva liberada');
-      } else {
-        // Actualizar cantidad - AJUSTAR RESERVA
-        const diferencia = nuevaCantidad - cantidadAnterior;
-        
-        if (diferencia > 0) {
-          // Aumentar cantidad - necesita más reserva
-          const inventario = await this._obtenerMejorInventarioDisponible(idLibro, diferencia, null);
-          if (!inventario || inventario.stock_disponible < diferencia) {
-            throw new Error(`Stock insuficiente para aumentar cantidad. Disponible: ${inventario?.stock_disponible || 0}`);
-          }
-          
-          await inventario.reservarEjemplares(
-            diferencia,
-            idUsuario,
-            carritoObjectId,
-            `Carrito - aumentar de ${cantidadAnterior} a ${nuevaCantidad}`
-          );
-          
-          console.log(`Stock adicional reservado: ${diferencia} unidades`);
-        } else if (diferencia < 0) {
-          // Disminuir cantidad - liberar parte de la reserva
-          const cantidadALiberar = Math.abs(diferencia);
-          const inventario = await this._obtenerInventarioDeReserva(carritoObjectId, idLibro, null);
-          
-          if (inventario) {
-            await inventario.liberarReserva(
-              cantidadALiberar,
-              idUsuario,
-              carritoObjectId,
-              `Carrito - disminuir de ${cantidadAnterior} a ${nuevaCantidad}`
-            );
-            
-            console.log(`Stock liberado: ${cantidadALiberar} unidades`);
-          }
+        if (nuevaCantidad < 0 || nuevaCantidad > 3) {
+          throw new Error('La cantidad debe estar entre 0 y 3');
         }
         
-        // Calcular nuevo subtotal
-        const precioUnitario = item.precios.precio_con_impuestos;
-        const nuevoSubtotal = precioUnitario * nuevaCantidad;
+        const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
+        const carritoObjectId = new mongoose.Types.ObjectId(carrito._id);
         
-        // Actualizar cantidad directamente
-        await CarritoItem.updateOne(
-          { _id: item._id },
-          {
-            $set: {
-              cantidad: nuevaCantidad,
-              subtotal: nuevoSubtotal,
-              fecha_actualizado: new Date()
+        // Buscar item
+        const item = await CarritoItem.findOne({ 
+          id_carrito: carrito._id, 
+          id_libro: idLibro 
+        });
+        
+        if (!item) {
+          throw new Error('Item no encontrado en el carrito');
+        }
+        
+        const cantidadAnterior = item.cantidad;
+        console.log(`Cantidad anterior: ${cantidadAnterior}, Nueva cantidad: ${nuevaCantidad}`);
+        
+        if (nuevaCantidad === 0) {
+          // Eliminar item del carrito - LIBERAR TODA LA RESERVA
+          await this._liberarReservaCompleta(carritoObjectId, idLibro, idUsuario, null);
+          
+          // Eliminar item
+          await CarritoItem.findByIdAndDelete(item._id);
+          console.log('Item eliminado del carrito y reserva liberada');
+        } else {
+          // Actualizar cantidad - AJUSTAR RESERVA
+          const diferencia = nuevaCantidad - cantidadAnterior;
+          
+          if (diferencia > 0) {
+            // Aumentar cantidad - necesita más reserva
+            const inventario = await this._obtenerMejorInventarioDisponible(idLibro, diferencia, null);
+            if (!inventario || inventario.stock_disponible < diferencia) {
+              throw new Error(`Stock insuficiente para aumentar cantidad. Disponible: ${inventario?.stock_disponible || 0}`);
+            }
+            
+            await inventario.reservarEjemplares(
+              diferencia,
+              idUsuario,
+              carritoObjectId,
+              `Carrito - aumentar de ${cantidadAnterior} a ${nuevaCantidad}`
+            );
+            
+            console.log(`Stock adicional reservado: ${diferencia} unidades`);
+          } else if (diferencia < 0) {
+            // Disminuir cantidad - liberar parte de la reserva
+            const cantidadALiberar = Math.abs(diferencia);
+            const inventario = await this._obtenerInventarioDeReserva(carritoObjectId, idLibro, null);
+            
+            if (inventario) {
+              await inventario.liberarReserva(
+                cantidadALiberar,
+                idUsuario,
+                carritoObjectId,
+                `Carrito - disminuir de ${cantidadAnterior} a ${nuevaCantidad}`
+              );
+              
+              console.log(`Stock liberado: ${cantidadALiberar} unidades`);
             }
           }
-        );
+          
+          // Calcular nuevo subtotal
+          const precioUnitario = item.precios.precio_con_impuestos;
+          const nuevoSubtotal = precioUnitario * nuevaCantidad;
+          
+          // Actualizar cantidad directamente
+          await CarritoItem.updateOne(
+            { _id: item._id },
+            {
+              $set: {
+                cantidad: nuevaCantidad,
+                subtotal: nuevoSubtotal,
+                fecha_actualizado: new Date()
+              }
+            }
+          );
+          
+          console.log(`Cantidad actualizada a ${nuevaCantidad} y reserva ajustada`);
+        }
         
-        console.log(`Cantidad actualizada a ${nuevaCantidad} y reserva ajustada`);
+        // CORREGIDO: Actualizar totales del carrito con manejo de errores
+        try {
+          await carrito.actualizarTotales();
+          console.log('Totales del carrito actualizados');
+        } catch (totalError) {
+          console.warn('Error actualizando totales (no crítico, continuando):', totalError.message);
+        }
+        
+        return {
+          exito: true,
+          mensaje: nuevaCantidad === 0 ? 'Item eliminado del carrito' : `Cantidad actualizada a ${nuevaCantidad}`,
+          carrito: carrito.toObject()
+        };
+      } catch (error) {
+        console.error('Error actualizando cantidad:', error);
+        throw error;
       }
-      
-      // Actualizar totales del carrito
-      try {
-        await carrito.actualizarTotales();
-        console.log('Totales del carrito actualizados');
-      } catch (totalError) {
-        console.warn('Error actualizando totales (no crítico):', totalError.message);
-      }
-      
-      return {
-        exito: true,
-        mensaje: nuevaCantidad === 0 ? 'Item eliminado del carrito' : `Cantidad actualizada a ${nuevaCantidad}`,
-        carrito: carrito.toObject()
-      };
-    } catch (error) {
-      console.error('Error actualizando cantidad:', error);
-      throw error;
-    }
+    }, 3, 150); // 3 reintentos con delay base de 150ms
   },
 
   /**
@@ -726,22 +859,30 @@ const carritoService = {
   },
 
   /**
-   * Envolver operaciones críticas con retry automático
+   * Ejecutar operaciones críticas con retry automático para WriteConflicts
    * @param {Function} operacion - Función a ejecutar
    * @param {Number} maxReintentos - Máximo número de reintentos
+   * @param {Number} delayBase - Delay base en milisegundos
    * @returns {Promise} Resultado de la operación
    */
-  async ejecutarConRetry(operacion, maxReintentos = 3) {
+  async ejecutarConRetry(operacion, maxReintentos = 3, delayBase = 100) {
     for (let intento = 1; intento <= maxReintentos; intento++) {
       try {
         return await operacion();
       } catch (error) {
-        if (error.code === 112 && intento < maxReintentos) { // WriteConflict
-          console.log(`WriteConflict detectado, reintentando (${intento}/${maxReintentos})...`);
-          await new Promise(resolve => setTimeout(resolve, 100 * intento)); // Delay creciente
+        // Si es WriteConflict y no es el último intento, reintentar
+        if (error.code === 112 && intento < maxReintentos) {
+          console.log(`WriteConflict detectado en carritoService (intento ${intento}/${maxReintentos}), reintentando...`);
+          
+          // Delay exponencial con jitter para evitar thundering herd
+          const delay = delayBase * Math.pow(2, intento - 1) + Math.random() * 100;
+          await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        throw error; // Si no es WriteConflict o se agotaron los reintentos
+        
+        // Si no es WriteConflict o se agotaron los reintentos, propagar error
+        console.error(`Error en carritoService después de ${intento} intento(s):`, error.message);
+        throw error;
       }
     }
   },
@@ -752,40 +893,42 @@ const carritoService = {
    * @returns {Promise<Object>} Resultado de la operación
    */
   async vaciarCarrito(idUsuario) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    return await this.ejecutarConRetry(async () => {
+      const session = await mongoose.startSession();
+      session.startTransaction();
 
-    try {
-      console.log('Vaciando carrito del usuario:', idUsuario);
-      
-      const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
-      const items = await CarritoItem.find({ id_carrito: carrito._id }).session(session);
-      
-      // Liberar todas las reservas
-      for (const item of items) {
-        await this._liberarReservaCompleta(carrito._id, item.id_libro, idUsuario, session);
+      try {
+        console.log('Vaciando carrito del usuario:', idUsuario);
+        
+        const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
+        const items = await CarritoItem.find({ id_carrito: carrito._id }).session(session);
+        
+        // Liberar todas las reservas
+        for (const item of items) {
+          await this._liberarReservaCompleta(carrito._id, item.id_libro, idUsuario, session);
+        }
+        
+        // Vaciar carrito
+        await carrito.vaciar();
+        
+        await session.commitTransaction();
+        
+        console.log(`Carrito vaciado y ${items.length} reservas liberadas`);
+        
+        return {
+          exito: true,
+          mensaje: 'Carrito vaciado exitosamente y reservas liberadas',
+          reservas_liberadas: items.length,
+          carrito: carrito.toObject()
+        };
+      } catch (error) {
+        await session.abortTransaction();
+        console.error('Error vaciando carrito:', error);
+        throw error;
+      } finally {
+        session.endSession();
       }
-      
-      // Vaciar carrito
-      await carrito.vaciar();
-      
-      await session.commitTransaction();
-      
-      console.log(`Carrito vaciado y ${items.length} reservas liberadas`);
-      
-      return {
-        exito: true,
-        mensaje: 'Carrito vaciado exitosamente y reservas liberadas',
-        reservas_liberadas: items.length,
-        carrito: carrito.toObject()
-      };
-    } catch (error) {
-      await session.abortTransaction();
-      console.error('Error vaciando carrito:', error);
-      throw error;
-    } finally {
-      session.endSession();
-    }
+    }, 3, 200); // 3 reintentos con delay base de 200ms
   },
 
   /**
