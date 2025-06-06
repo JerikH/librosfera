@@ -613,7 +613,7 @@ const PurchasesPage = () => {
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-end">
                     <p className="text-sm text-gray-600 sm:mb-1">Cantidad: {item.cantidad || 0}</p>
-                    <p className="font-medium text-gray-800">{formatCurrency((item.precio_unitario || 0) * (item.cantidad || 0))}</p>
+                    <p className="font-medium text-gray-800">{formatCurrency(selectedPurchase.totales.total_final || 0)}</p>
                   </div>
                 </div>
               )) || <p className="text-gray-500">No hay productos disponibles</p>}
@@ -624,11 +624,11 @@ const PurchasesPage = () => {
               <div className="mt-6 pt-4 border-t border-gray-200">
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-600">Subtotal</span>
-                  <span>{formatCurrency(selectedPurchase.totales.subtotal || 0)}</span>
+                  <span>{formatCurrency(selectedPurchase.totales.total_final || 0)}</span>
                 </div>
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-600">Impuestos</span>
-                  <span>{formatCurrency(selectedPurchase.totales.impuestos || 0)}</span>
+                  <span><span>{formatCurrency((selectedPurchase.totales.total_final * 0.19) || 0)}</span></span>
                 </div>
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-600">Envío</span>
