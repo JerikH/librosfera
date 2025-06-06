@@ -6,13 +6,10 @@ import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 const API_BASE_URL = 'http://localhost:5000/api/v1';
 
-// Componente de página de pago
 function CheckoutPaymentPage() {
-  console.log("Renderizando CheckoutPaymentPage");
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [cartItems, setCartItems] = useState([]);
-  const [bookDetails, setBookDetails] = useState([]);
   const [shippingInfo, setShippingInfo] = useState({
     method: '',
     storeName: '',
@@ -28,11 +25,10 @@ function CheckoutPaymentPage() {
   const [cardid, setCardId] = useState('');
   const [cardholderName, setCardholderName] = useState('');
   
-  // Estado para el total
+  // Estado para el total - Only read from localStorage
   const [subtotal, setSubtotal] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
-  const [cartPrices, setCartPrices] = useState([]);
-  const [Taxes, setTaxes] = useState(0);
+  const [taxes, setTaxes] = useState(0);
   const [total, setTotal] = useState(0);
 
   const [cards, setCards] = useState([]);
@@ -49,216 +45,148 @@ function CheckoutPaymentPage() {
   };
 
   const fetchCards = async () => {
-  try {
-    setLoading(true);
-    setError(null);
-    
-    const response = await axios.get(`${API_BASE_URL}/tarjetas`, axiosConfig);
-    
-    if (response.data.status === 'success') {
-      // Transformar los datos de la API al formato que espera el componente
-      const transformedCards = response.data.data.map(card => ({
-        id: card.id_tarjeta,
-        type: card.marca === 'visa' ? 'Visa' : 'Mastercard',
-        bank: `${card.tipo.charAt(0).toUpperCase() + card.tipo.slice(1)} ${card.marca.toUpperCase()}`,
-        lastFour: card.ultimos_digitos,
-        cardholderName: card.nombre_titular,
-        expiryMonth: card.fecha_expiracion.mes.toString().padStart(2, '0'),
-        expiryYear: card.fecha_expiracion.anio.toString().slice(-2),
-        isDefault: card.predeterminada,
-        isActive: card.activa,
-        cardType: card.tipo,
-        balance: card.saldo || 0 // Show 0 instead of null for all cards
-      }));
-      
-      setCards(transformedCards);
-    }
-  } catch (err) {
-    console.error('Error fetching cards:', err);
-    setError('Error al cargar las tarjetas. Por favor, intenta de nuevo.');
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Cargar datos al iniciar
-  useEffect(() => {
-  const fetchCartData = async () => {
-    setIsLoading(true);
-    
     try {
-      // Debug: Log all localStorage contents
-      console.log("=== DEBUGGING LOCALSTORAGE ===");
-      console.log("All localStorage keys:", Object.keys(localStorage));
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        console.log(`${key}:`, localStorage.getItem(key));
-      }
-      console.log("==============================");
+      setLoading(true);
+      setError(null);
       
-      // Get cart data from localStorage with correct key names
-      const storedCart = localStorage.getItem('shoppingCart');
-      const storedPrices = localStorage.getItem('CartPrices'); // Use the correct key name with capital C
+      const response = await axios.get(`${API_BASE_URL}/tarjetas`, axiosConfig);
       
-      console.log("Stored Cart:", storedCart);
-      console.log("Stored Prices:", storedPrices);
-      
-      // Since cart is loaded from API, check if prices exist and wait for cart sync
-      if (storedPrices && storedPrices !== null && storedPrices !== undefined) {
-        try {
-          const parsedPrices = JSON.parse(storedPrices);
-          console.log("Parsed Prices:", parsedPrices);
-          
-          if (parsedPrices && typeof parsedPrices === 'object') {
-            setCartPrices(parsedPrices);
-            
-            // Use the pricing data that's available
-            if (parsedPrices.subtotal_con_descuentos !== undefined) {
-              setSubtotal(parsedPrices.subtotal_con_descuentos);
-              setTaxes(parsedPrices.total_impuestos);
-              setTotal((parsedPrices.subtotal_con_descuentos + parsedPrices.total_impuestos) || parsedPrices.total_final);
-            }
-          }
-        } catch (priceParseError) {
-          console.error('Error parsing cart prices:', priceParseError);
+      if (response.data.status === 'success') {
+        const transformedCards = response.data.data.map(card => ({
+          id: card.id_tarjeta,
+          type: card.marca === 'visa' ? 'Visa' : 'Mastercard',
+          bank: `${card.tipo.charAt(0).toUpperCase() + card.tipo.slice(1)} ${card.marca.toUpperCase()}`,
+          lastFour: card.ultimos_digitos,
+          cardholderName: card.nombre_titular,
+          expiryMonth: card.fecha_expiracion.mes.toString().padStart(2, '0'),
+          expiryYear: card.fecha_expiracion.anio.toString().slice(-2),
+          isDefault: card.predeterminada,
+          isActive: card.activa,
+          cardType: card.tipo,
+          balance: card.saldo || 0
+        }));
+        
+        setCards(transformedCards);
+
+        const defaultCard = transformedCards.find(card => card.isDefault && card.isActive);
+        if (defaultCard) {
+          setSelectedCard(defaultCard.id);
+          setCardId(defaultCard.id);
+          setCardNumber(`**** **** **** ${defaultCard.lastFour}`);
+          setExpiry(`${defaultCard.expiryMonth}/${defaultCard.expiryYear}`);
+          setCvc('***');
+          setCardholderName(defaultCard.cardholderName);
         }
       }
+    } catch (err) {
+      console.error('Error fetching cards:', err);
+      setError('Error al cargar las tarjetas. Por favor, intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load data from localStorage - simplified and consistent with enhanced validation
+  useEffect(() => {
+    const loadPaymentData = () => {
+      setIsLoading(true);
       
-      // Check for cart items (may come later from API)
-      if (storedCart && storedCart !== null && storedCart !== undefined) {
-        try {
-          const parsedCart = JSON.parse(storedCart);
-          console.log("Parsed Cart:", parsedCart);
+      try {
+        // Get cart items first
+        const storedCart = localStorage.getItem('shoppingCart');
+        if (!storedCart || storedCart === "[]") {
+          navigate('/home');
+          return;
+        }
+        
+        const parsedCart = JSON.parse(storedCart);
+        if (Array.isArray(parsedCart)) {
+          setCartItems(parsedCart);
+        }
+        
+        // VALIDATION: Check if shippingPreferences exists - THIS IS THE ONLY REQUIREMENT
+        const storedShippingInfo = localStorage.getItem('shippingPreferences');
+        if (!storedShippingInfo) {
+          // No shipping preferences, check what data exists and navigate accordingly
+          const storedPrices = localStorage.getItem('CartPrices');
           
-          // Validate that parsedCart is an array
-          if (Array.isArray(parsedCart) && parsedCart.length > 0) {
-            setCartItems(parsedCart);
-            
-            // Handle prices separately with validation
-            if (storedPrices && storedPrices !== null && storedPrices !== undefined) {
-              try {
-                const parsedPrices = JSON.parse(storedPrices);
-                console.log("Parsed Prices:", parsedPrices);
-                
-                if (parsedPrices && typeof parsedPrices === 'object') {
-                  setCartPrices(parsedPrices);
-                  
-                  // Use the parsed data directly instead of state
-                  if (parsedPrices.subtotal_con_descuentos !== undefined) {
-                    setSubtotal(parsedPrices.subtotal_con_descuentos);
-                    setTotal((parsedPrices.subtotal_con_descuentos + parsedPrices.total_impuestos) || parsedPrices.total_final);
-                  }
-                }
-              } catch (priceParseError) {
-                console.error('Error parsing cart prices:', priceParseError);
-                // Fallback: calculate subtotal manually
-                const calculatedSubtotal = parsedCart.reduce((total, item) => {
-                  return total + ((item.price || 35000) * item.quantity);
-                }, 0);
-                setSubtotal(calculatedSubtotal);
-                // Fix: Use the current tax state value or 0
-                setTotal(calculatedSubtotal + (Taxes));
-              }
-            } else {
-              // No stored prices, calculate manually
-              console.log("No stored prices found, calculating manually");
-              const calculatedSubtotal = parsedCart.reduce((total, item) => {
-                return total + ((item.price || 35000) * item.quantity);
-              }, 0);
-              setSubtotal(calculatedSubtotal);
-              setTotal(calculatedSubtotal + Taxes);
-            }
+          if (storedCart && storedCart !== "[]" && storedPrices) {
+            // Has cart data, go back to delivery page
+            navigate('/checkout');
+            return;
           } else {
-            console.error('Cart data is not an array or is empty:', parsedCart);
+            // No cart data, go to home
+            navigate('/home');
+            return;
           }
-        } catch (cartParseError) {
-          console.error('Error parsing cart data:', cartParseError);
         }
-      } else {
-        console.log("No cart data found in localStorage");
-      }
-      
-      // Cargar información de envío
-      const storedShippingInfo = localStorage.getItem('shippingPreferences');
-      if (storedShippingInfo) {
+
         const parsedShippingInfo = JSON.parse(storedShippingInfo);
         setShippingInfo(parsedShippingInfo);
+        setShippingCost(parsedShippingInfo.shippingCost || 0);
         
-        // Establecer costo de envío
-        const cost = parsedShippingInfo.shippingCost || 0;
-        setShippingCost(cost);
-      }
-      
-    } catch (error) {
-      console.error('Error al cargar datos del carrito:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  fetchCartData();
-  fetchCards(); // Load cards when component mounts
-}, [navigate]);
-
-useEffect(() => {
-  const checkForCartUpdates = () => {
-    const storedCart = localStorage.getItem('shoppingCart');
-    const storedPrices = localStorage.getItem('CartPrices');
-    
-    if (storedCart && storedCart !== null) {
-      try {
-        const parsedCart = JSON.parse(storedCart);
-        if (Array.isArray(parsedCart) && parsedCart.length > 0) {
-          setCartItems(parsedCart);
-          
-          // If no prices were loaded before, calculate from cart
-          if (cartPrices.length === 0 || Object.keys(cartPrices).length === 0) {
-            const calculatedSubtotal = parsedCart.reduce((total, item) => {
-              return total + ((item.price || 35000) * item.quantity);
-            }, 0);
-            setSubtotal(calculatedSubtotal);
-            setTotal(calculatedSubtotal + Taxes);
-          }
+        // Get prices from CartPrices - SINGLE SOURCE OF TRUTH
+        const storedPrices = localStorage.getItem('CartPrices');
+        if (storedPrices) {
+          const parsedPrices = JSON.parse(storedPrices);
+          setSubtotal(parsedPrices.subtotal_con_descuentos || 0);
+          setTaxes(parsedPrices.total_impuestos || 0);
+          setTotal(parsedPrices.total_final || (parsedPrices.subtotal_con_descuentos + parsedPrices.total_impuestos));
         }
+        
       } catch (error) {
-        console.error('Error parsing updated cart:', error);
+        console.error('Error loading payment data:', error);
+        navigate('/home');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadPaymentData();
+    fetchCards();
+  }, [navigate]);
+
+  // Back button function - goes back to previous page based on shipping method
+  const handleBack = () => {
+    // Delete tempPaymentInfo since we're going back
+    localStorage.removeItem('tempPaymentInfo');
+    
+    // Navigate based on shipping method
+    if (shippingInfo.method === 'recogida_tienda') {
+      navigate('/checkout/store-selection');
+    } else {
+      navigate('/checkout');
+    }
+  };
+
+  // Cancel button function
+  const handleCancel = () => {
+    // Delete required data and navigate to home
+    localStorage.removeItem('shippingPreferences');
+    localStorage.removeItem('tempPaymentInfo');
+    navigate('/home');
+  };
+
+  const handleCardSelection = (cardId) => {
+    setSelectedCard(cardId);
+    
+    if (cardId === '') {
+      setCardNumber('');
+      setExpiry('');
+      setCvc('');
+      setCardholderName('');
+    } else {
+      const card = cards.find(c => c.id === cardId);
+      if (card) {
+        setCardId(cardId);
+        setCardNumber(`**** **** **** ${card.lastFour}`);
+        setExpiry(`${card.expiryMonth}/${card.expiryYear}`);
+        setCvc('***');
+        setCardholderName(card.cardholderName);
       }
     }
   };
-  
-  // Check immediately
-  checkForCartUpdates();
-  
-  // Set up an interval to check for updates (since cart loads from API)
-  const interval = setInterval(checkForCartUpdates, 1000);
-  
-  // Clean up
-  return () => clearInterval(interval);
-}, [cartPrices]);
 
-const handleCardSelection = (cardId) => {
-  setSelectedCard(cardId);
-  
-  if (cardId === '') {
-    // Clear form if no card selected
-    setCardNumber('');
-    setExpiry('');
-    setCvc('');
-    setCardholderName('');
-  } else {
-    // Find selected card and populate form
-    const card = cards.find(c => c.id === cardId);
-    if (card) {
-      setCardId(cardId);
-      setCardNumber(`**** **** **** ${card.lastFour}`);
-      setExpiry(`${card.expiryMonth}/${card.expiryYear}`);
-      setCvc('***');
-      setCardholderName(card.cardholderName);
-    }
-  }
-};
-
-  // Validar el formulario
   const validateForm = () => {
     if (!cardNumber) {
       alert('Por favor, ingresa el número de tarjeta');
@@ -279,14 +207,12 @@ const handleCardSelection = (cardId) => {
     return true;
   };
   
-  // Continuar a la confirmación de pago
   const handleContinuePayment = () => {
     if (!validateForm()) {
       return;
     }
     
     try {
-      // Guardar los datos del pago en localStorage temporalmente
       const paymentInfo = {
         Id: cardid,
         method: paymentMethod,
@@ -297,8 +223,6 @@ const handleCardSelection = (cardId) => {
       };
       
       localStorage.setItem('tempPaymentInfo', JSON.stringify(paymentInfo));
-      
-      // Redirigir a la página de confirmación de pago
       navigate('/checkout/confirm-payment');
     } catch (error) {
       console.error('Error al procesar los datos:', error);
@@ -306,7 +230,6 @@ const handleCardSelection = (cardId) => {
     }
   };
   
-  // Si está cargando, mostrar indicador
   if (isLoading) {
     return (
       <UserLayout>
@@ -320,7 +243,6 @@ const handleCardSelection = (cardId) => {
     );
   }
   
-  // Si no hay información de envío, redireccionar
   if (!shippingInfo.method) {
     return (
       <UserLayout>
@@ -344,7 +266,17 @@ const handleCardSelection = (cardId) => {
       <div className="bg-gray-100 min-h-screen py-8">
         <div className="container mx-auto px-4">
           <div className="max-w-6xl mx-auto">
-            {/* Contenido principal */}
+            {/* Navigation Buttons */}
+            <div className="mb-4 flex gap-3">
+              <button 
+                onClick={handleBack}
+                className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                ← Volver
+              </button>
+
+            </div>
+
             <div className="flex flex-col md:flex-row gap-8">
               {/* Columna izquierda - Información de envío y producto */}
               <div className="md:w-2/3">
@@ -429,7 +361,7 @@ const handleCardSelection = (cardId) => {
                           />
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                             <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2v6a2 2 0 002 2z" />
                             </svg>
                           </div>
                         </div>
@@ -448,7 +380,6 @@ const handleCardSelection = (cardId) => {
                       />
                     </div>
                   </div>
-
                 </div>
                 
                 {/* Método de envío */}
@@ -466,9 +397,9 @@ const handleCardSelection = (cardId) => {
                         />
                         <label className="ml-3">
                           <div className="flex justify-between w-full items-center">
-                            <span className="font-medium">{shippingInfo.method === 'tienda' ? 'Recoger en tienda' : 'Envío a domicilio '}</span>
+                            <span className="font-medium">{shippingInfo.method === 'recogida_tienda' ? 'Recoger en tienda' : 'Envío a domicilio '}</span>
                             <div className="">
-                              {shippingInfo.method === 'tienda' ? (
+                              {shippingInfo.method === 'recogida_tienda' ? (
                                 <p className="text-green-600 font-bold">Gratis</p>
                               ) : (
                                 <span><p className="font-bold"> ${shippingCost.toLocaleString('es-CO')}</p></span>
@@ -479,16 +410,26 @@ const handleCardSelection = (cardId) => {
                       </div>
                       
                       <div className="mt-2 ml-7 text-sm text-gray-600">
-                        {shippingInfo.method === 'tienda' && shippingInfo.storeName && (
+                        {shippingInfo.method === 'recogida_tienda' && shippingInfo.storeName && (
                           <span>{shippingInfo.storeName}, {shippingInfo.storeAddress || 'dirección disponible en tu email'}</span>
                         )}
                         {shippingInfo.method === 'domicilio' && (
-                          <span>{shippingInfo.locationCity}, {shippingInfo.locationState}</span>
+                          <span>
+                            {shippingInfo.locationCity}, {shippingInfo.locationState}, {shippingInfo.locationStreet}
+                            <br />
+                            {shippingInfo.locationPostalCode}
+                          </span>
                         )}
                       </div>
                     </div>
                   </div>
                 </div>
+                <button 
+                onClick={handleCancel}
+                className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                Cancelar compra
+              </button>
               </div>
               
               {/* Columna derecha - Resumen y botón de pago */}
@@ -503,11 +444,11 @@ const handleCardSelection = (cardId) => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Impuestos</span>
-                      <span>$ {Taxes.toLocaleString('es-CO')}</span>
+                      <span>$ {taxes.toLocaleString('es-CO')}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Envío</span>
-                      {shippingInfo.method === 'tienda' ? (
+                      {shippingInfo.method === 'recogida_tienda' ? (
                         <span className="text-green-600">Gratis</span>
                       ) : (
                         <span>$ {shippingCost.toLocaleString('es-CO')}</span>

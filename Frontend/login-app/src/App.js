@@ -17,6 +17,7 @@ import CheckoutStoreSelectionPage from './components/CheckoutStoreSelectionPage'
 import CheckoutPaymentPage from './components/CheckoutPaymentPage';
 import CheckoutPaymentConfirmation from './components/CheckoutPaymentConfirmation';
 import BookItemsList from './components/AdminProfileComponents/BookItemsList'; // Ruta corregida
+import PurchaseDetailsPage from "./components/UserProfilePageComponents/PurchaseDetailsPage";
 
 // Wrapper para el checkout para manejar más fácilmente cualquier estado compartido
 const CheckoutWrapper = () => {
@@ -54,6 +55,7 @@ const App = () => {
         <Route path="/Home" element={<HomePage />} />
         <Route path="/search" element={<SearchResults />} />
         <Route path="/libro/:bookId" element={<BookDetails />} />
+        <Route path="/Profile/purchases/:purchaseId" element={<PurchaseDetailsPage />} />
         
         {/* Nuevas rutas para categorías de libros */}
         <Route path="/libros/destacados" element={<BookListPage category="destacados" />} />

@@ -4,7 +4,6 @@ import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
-// Componente de confirmación previa al pago
 function CheckoutPaymentConfirmation() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -23,136 +22,124 @@ function CheckoutPaymentConfirmation() {
     shippingCost: 0
   });
   
-  // Estado para el total
+  // Estado para el total - Only read from localStorage
   const [subtotal, setSubtotal] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
-  const [taxAmount, setTaxAmount] = useState(0); // Add this line
+  const [taxAmount, setTaxAmount] = useState(0);
   const [total, setTotal] = useState(0);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(null);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [paymentError, setPaymentError] = useState(null);
   
-  // Cargar datos al iniciar
+  // Load data from localStorage - simplified and consistent with enhanced validation
   useEffect(() => {
-    const loadData = async () => {
+    const loadConfirmationData = () => {
       setIsLoading(true);
+      
       try {
-        // Obtener información de pago de localStorage
+        // VALIDATION: Check if tempPaymentInfo exists - THIS IS THE ONLY REQUIREMENT
         const storedPaymentInfo = localStorage.getItem('tempPaymentInfo');
-        if (storedPaymentInfo) {
-          const parsedPaymentInfo = JSON.parse(storedPaymentInfo);
-          setPaymentInfo(parsedPaymentInfo);
-        } else {
-          navigate('/checkout/payment');
-          return;
-        }
-        
-        // Obtener carrito del localStorage - Fixed to match checkoutdeliverypage approach
-        const storedCart = localStorage.getItem('shoppingCart');
-        const storedPrices = localStorage.getItem('CartPrices'); // Use correct key with capital C
-        
-        if (storedCart) {
-          try {
-            const parsedCart = JSON.parse(storedCart);
-            if (Array.isArray(parsedCart) && parsedCart.length > 0) {
-              setCartItems(parsedCart);
+        if (!storedPaymentInfo) {
+          // No payment info, check what data exists and navigate accordingly
+          const shippingPrefs = localStorage.getItem('shippingPreferences');
+          
+          if (shippingPrefs) {
+            // Has shipping preferences, go to payment page
+            navigate('/checkout/payment');
+            return;
+          } else {
+            // Check for cart data
+            const storedCart = localStorage.getItem('shoppingCart');
+            const storedPrices = localStorage.getItem('CartPrices');
+            
+            if (storedCart && storedCart !== "[]" && storedPrices) {
+              // Has cart data, go back to delivery page
+              navigate('/checkout');
+              return;
+            } else {
+              // No cart data, go to home
+              navigate('/home');
+              return;
             }
-          } catch (error) {
-            console.error('Error parsing cart data:', error);
           }
         }
 
-        // Handle cart prices properly
-        if (storedPrices) {
-          try {
-            const parsedPrices = JSON.parse(storedPrices);
-            if (parsedPrices && typeof parsedPrices === 'object') {
-              // Use the pricing data from CartPrices
-              const calculatedSubtotal = parsedPrices.subtotal_con_descuentos || 0;
-              const taxAmount = parsedPrices.total_impuestos || 0;
-              const finalTotal = (calculatedSubtotal + taxAmount) || parsedPrices.total_final  ;
-              
-              setSubtotal(calculatedSubtotal);
-              setTaxAmount(taxAmount); // Add this line
-              setTotal(finalTotal);
-            }
-          } catch (error) {
-            console.error('Error parsing cart prices:', error);
-            // Fallback calculation if CartPrices fails
-            if (cartItems.length > 0) {
-              const calculatedSubtotal = cartItems.reduce((total, item) => {
-                return total + ((item.price || 35000) * item.quantity);
-              }, 0);
-              setSubtotal(calculatedSubtotal);
-            }
+        const parsedPaymentInfo = JSON.parse(storedPaymentInfo);
+        setPaymentInfo(parsedPaymentInfo);
+        
+        // Get cart items
+        const storedCart = localStorage.getItem('shoppingCart');
+        if (storedCart) {
+          const parsedCart = JSON.parse(storedCart);
+          if (Array.isArray(parsedCart)) {
+            setCartItems(parsedCart);
           }
-        } else if (cartItems.length > 0) {
-          // No stored prices, calculate manually
-          const calculatedSubtotal = cartItems.reduce((total, item) => {
-            return total + ((item.price || 35000) * item.quantity);
-          }, 0);
+        }
+
+        // Get prices from CartPrices - SINGLE SOURCE OF TRUTH
+        const storedPrices = localStorage.getItem('CartPrices');
+        if (storedPrices) {
+          const parsedPrices = JSON.parse(storedPrices);
+          const calculatedSubtotal = parsedPrices.subtotal_con_descuentos || 0;
+          const taxAmount = parsedPrices.total_impuestos || 0;
+          const finalTotal = parsedPrices.total_final || (calculatedSubtotal + taxAmount);
+          
           setSubtotal(calculatedSubtotal);
+          setTaxAmount(taxAmount);
+          setTotal(finalTotal);
         }
         
-        // Cargar información de envío - Fixed to match checkoutdeliverypage structure
+        // Get shipping info
         const storedShippingInfo = localStorage.getItem('shippingPreferences');
         if (storedShippingInfo) {
-          try {
-            const parsedShippingInfo = JSON.parse(storedShippingInfo);
-            setShippingInfo({
-              method: parsedShippingInfo.method,
-              storeName: parsedShippingInfo.storeName || '',
-              storeAddress: parsedShippingInfo.storeAddress || '',
-              shippingCost: parsedShippingInfo.shippingCost || 0,
-              locationCity: parsedShippingInfo.locationCity,
-              locationState: parsedShippingInfo.locationState
-            });
-            
-            const cost = parsedShippingInfo.shippingCost || 0;
-            setShippingCost(cost);
-            
-            // Use total from CartPrices if available, otherwise calculate
-            const storedPricesData = localStorage.getItem('CartPrices');
-            if (storedPricesData) {
-              const parsedPricesData = JSON.parse(storedPricesData);
-              setTotal(parsedPricesData.total_final + parsedPricesData.total_impuestos || (subtotal + cost));
-            } else {
-              setTotal(subtotal + cost);
-            }
-          } catch (error) {
-            console.error('Error parsing shipping info:', error);
-          }
-        } else {
-          // Use total from CartPrices if no shipping info
-          const storedPricesData = localStorage.getItem('CartPrices');
-          if (storedPricesData) {
-            const parsedPricesData = JSON.parse(storedPricesData);
-            setTotal(parsedPricesData.total_final + parsedPricesData.total_impuestos|| subtotal);
-          } else {
-            setTotal(subtotal);
-          }
+          const parsedShippingInfo = JSON.parse(storedShippingInfo);
+          setShippingInfo({ 
+            method: parsedShippingInfo.method,
+            storeId: parseInt(parsedShippingInfo.storeId),
+            storeName: parsedShippingInfo.storeName || '',
+            locationStreet: parsedShippingInfo.locationStreet || '',
+            shippingCost: parsedShippingInfo.shippingCost || 0,
+            locationCity: parsedShippingInfo.locationCity,
+            locationState: parsedShippingInfo.locationState,
+            locationPostalCode: parsedShippingInfo.locationPostalCode,
+            locationCountry: parsedShippingInfo.locationCountry
+          });
+          
+          setShippingCost(parsedShippingInfo.shippingCost || 0);
         }
+        
       } catch (error) {
-        console.error('Error al cargar datos:', error);
+        console.error('Error loading confirmation data:', error);
+        navigate('/home');
       } finally {
         setIsLoading(false);
       }
     };
     
-    loadData();
+    loadConfirmationData();
   }, [navigate]);
+
+  // Back button function - goes back to payment page
+  const handleBack = () => {
+    navigate('/checkout/payment');
+  };
+
+  // Cancel button function
+  const handleCancel = () => {
+    // Delete required data and navigate to home
+    localStorage.removeItem('shippingPreferences');
+    localStorage.removeItem('tempPaymentInfo');
+    navigate('/home');
+  };
   
-  // Efecto para actualizar el total cuando cambia el subtotal o el costo de envío
-  useEffect(() => {
-    setTotal(subtotal + shippingCost + taxAmount);
-  }, [subtotal, shippingCost, taxAmount]);
-  
-  // Confirmar y procesar pago
+  // Confirm and process payment
   const handleConfirmPayment = async () => {
     try {
       setIsLoading(true);
       
-      // Get user data for shipping address
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       
-      // Get card data from tempPaymentInfo
       const storedPaymentInfo = localStorage.getItem('tempPaymentInfo');
       if (!storedPaymentInfo) {
         alert('No se encontró información de pago. Por favor, vuelve a ingresar los datos de tu tarjeta.');
@@ -161,31 +148,24 @@ function CheckoutPaymentConfirmation() {
       }
       
       const paymentData = JSON.parse(storedPaymentInfo);
-      console.log("payment:", paymentData);
       
-      // Prepare the request payload based on the example
       const requestPayload = {
-        id_tarjeta: paymentData.Id, // You might need to store this when saving payment info
-        tipo_envio: shippingInfo.method === 'tienda' ? 'tienda' : 'domicilio',
+        id_tarjeta: paymentData.Id,
+        tipo_envio: shippingInfo.method === 'recogida_tienda' ? 'recogida_tienda' : 'domicilio',
+      // id_tienda_recogida: shippingInfo.method === 'recogida_tienda' ? parseInt(shippingInfo.storeId) : '',
         direccion_envio: {
-          calle: userData.direccion || "Dirección no especificada",
+          calle: shippingInfo.locationStreet || "Dirección no especificada",
           ciudad: shippingInfo.locationCity || userData.ciudad || "Pereira",
-          codigo_postal: userData.codigoPostal || "660001",
-          pais: "Colombia",
+          codigo_postal: shippingInfo.locationPostalCode || "660001",
+          pais: shippingInfo.locationCountry,
           estado_provincia: shippingInfo.locationState || userData.departamento || "Risaralda",
           referencias: userData.referencias || ""
         },
-        notas_envio: shippingInfo.method === 'tienda' ? 
+        notas_envio: shippingInfo.method === 'recogida_tienda' ? 
           `Recoger en tienda: ${shippingInfo.storeName}` : 
           "Entrega a domicilio"
       };
       
-      console.log('Enviando solicitud de pago:', requestPayload);
-      
-      // Get auth token (you might need to adjust this based on how you store it)
-      const authToken = localStorage.getItem('authToken') || localStorage.getItem('token');
-      
-      // Make the API request
       const response = await axios.post('http://localhost:5000/api/v1/ventas', requestPayload, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -198,10 +178,7 @@ function CheckoutPaymentConfirmation() {
       });
       
       if (response.status === 200 || response.status === 201) {
-        // Pago exitoso
-        console.log('Pago procesado exitosamente:', response.data);
-        
-        // Guardar los datos del pago para confirmar éxito
+        // Payment successful - Show custom modal instead of alert
         const paymentConfirmation = {
           method: paymentInfo.method,
           cardNumber: paymentInfo.cardNumber ? paymentInfo.cardNumber.replace(/\d(?=\d{4})/g, "*") : '',
@@ -214,16 +191,37 @@ function CheckoutPaymentConfirmation() {
           transactionId: response.data.id || response.data.transactionId
         };
         
-        localStorage.setItem('paymentData', JSON.stringify(paymentConfirmation));
+        //localStorage.setItem('paymentData', JSON.stringify(paymentConfirmation));
         
-        // Limpiar datos temporales
+        // Clear temporary data
         localStorage.removeItem('tempPaymentInfo');
         localStorage.removeItem('shoppingCart');
         localStorage.removeItem('CartPrices');
+        localStorage.removeItem('paymentData');
         localStorage.removeItem('shippingPreferences');
         
-        alert('¡Pago procesado correctamente!');
-        navigate('/Home');
+        // Set success modal data and show it
+        setPaymentSuccess({
+          transactionId: response.data.data.numero_venta || 'N/A',
+          total: total,
+          paymentMethod: paymentInfo.method === 'credit_card' ? 'Tarjeta de crédito' : paymentInfo.method,
+          shippingMethod: shippingInfo.method === 'recogida_tienda' ? 'Recoger en tienda' : 'Envío a domicilio',
+          cardNumber: paymentInfo.cardNumber ? paymentInfo.cardNumber.replace(/\d(?=\d{4})/g, "*") : '',
+          timestamp: new Date().toLocaleString('es-CO', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        });
+        setShowSuccessModal(true);
+        console.log("success response", response.data);
+        
+        // Auto redirect after 5 seconds
+        // setTimeout(() => {
+        //   handleContinueShopping();
+        // }, 10000);
       }
     } catch (error) {
       console.error('Error al procesar el pago:', error);
@@ -231,33 +229,227 @@ function CheckoutPaymentConfirmation() {
       let errorMessage = 'Ha ocurrido un error al procesar el pago. Por favor intente nuevamente.';
       
       if (error.response) {
-        // Server responded with error status
         console.error('Error response:', error.response.data);
         errorMessage = error.response.data.message || errorMessage;
       } else if (error.request) {
-        // Request was made but no response received
         errorMessage = 'No se pudo conectar con el servidor. Verifique su conexión a internet.';
       }
       
-      alert(errorMessage);
+      setPaymentError({
+      message: errorMessage,
+      timestamp: new Date().toLocaleString('es-CO', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      });
+    setShowErrorModal(true);
+    console.log("cart Prices",localStorage.getItem('CartPrices'));
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleGoToProfile = () => {
+    setShowErrorModal(false);
+    navigate('/profile');
+  };
   
-  // Volver a la página de pago para modificar datos
   const handleEditPayment = () => {
     navigate('/checkout/payment');
   };
   
-  // Si está cargando, mostrar indicador
+  const handleContinueShopping = () => {
+    setShowSuccessModal(false);
+    navigate('/Home');
+  };
+
+  // Custom Success Modal - displays in the middle of the screen
+  const SuccessModal = () => {
+    if (!showSuccessModal || !paymentSuccess) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+          {/* Header with success animation */}
+          <div className="bg-gradient-to-r from-green-400 to-green-600 p-6 text-center">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">¡Pago Exitoso!</h2>
+            <p className="text-green-100">Tu compra ha sido procesada correctamente</p>
+          </div>
+          
+          {/* Payment details */}
+          <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-gray-600">💳 Método de pago:</span>
+              <span className="font-semibold">{paymentSuccess.paymentMethod}</span>
+            </div>
+            
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-gray-600">💰 Total pagado:</span>
+              <span className="font-bold text-green-600 text-lg">
+                ${paymentSuccess.total.toLocaleString('es-CO')} COP
+              </span>
+            </div>
+            
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-gray-600">📦 Envío:</span>
+              <span className="font-semibold">{paymentSuccess.shippingMethod}</span>
+            </div>
+            
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-gray-600">🏷️ ID Transacción:</span>
+              <span className="font-mono text-sm">{paymentSuccess.transactionId}</span>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">📅 Fecha:</span>
+              <span className="text-sm">{paymentSuccess.timestamp}</span>
+            </div>
+          </div>
+          
+          {/* Footer message */}
+          <div className="bg-gray-50 p-4 text-center">
+            <p className="text-sm text-gray-600 mb-4">
+              📧 Recibirás un email de confirmación con todos los detalles de tu pedido.
+            </p>
+            <button
+              onClick={handleContinueShopping}
+              className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105"
+            >
+              Continuar comprando 🛍️
+            </button>
+            <p className="text-xs text-gray-500 mt-2">
+              {/* Serás redirigido automáticamente en unos segundos... */}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ErrorModal = () => {
+  if (!showErrorModal || !paymentError) return null;
+  
+  // Check if it's a credit/balance error and parse the amounts
+  const isCreditError = paymentError.message.toLowerCase().includes('saldo insuficiente');
+  let availableAmount = '';
+  let requiredAmount = '';
+  
+  if (isCreditError) {
+    // Extract amounts from message like "Saldo insuficiente. Disponible: $0, Requerido: $43,051.82"
+    const availableMatch = paymentError.message.match(/Disponible:\s*\$?([\d,]+(?:\.\d{2})?)/);
+    const requiredMatch = paymentError.message.match(/Requerido:\s*\$?([\d,]+(?:\.\d{2})?)/);
+    
+    if (availableMatch) availableAmount = availableMatch[1].replace(/,$/, '');
+    if (requiredMatch) requiredAmount = requiredMatch[1].replace(/,$/, '');
+  }
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+        {/* Header with error animation */}
+        <div className="bg-gradient-to-r from-red-400 to-red-600 p-6 text-center relative">
+          {/* Close button */}
+          <button
+            onClick={() => setShowErrorModal(false)}
+            className="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+          
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Error en el Pago</h2>
+          <p className="text-red-100">No se pudo procesar tu compra</p>
+        </div>
+        
+        {/* Error details */}
+        <div className="p-6 space-y-4">
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-red-400 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z"></path>
+              </svg>
+              <div className="w-full">
+                {isCreditError ? (
+                  <div>
+                    <p className="text-sm text-red-700 font-medium mb-3">
+                      Saldo insuficiente
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-red-600">💰 Disponible:</span>
+                        <span className="text-sm font-semibold text-red-700">
+                          ${availableAmount} COP
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-red-600">🏷️ Requerido:</span>
+                        <span className="text-sm font-semibold text-red-700">
+                          ${requiredAmount} COP
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-red-700 font-medium">
+                    {paymentError.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-gray-600">📅 Fecha del error:</span>
+            <span className="text-sm">{paymentError.timestamp}</span>
+          </div>
+        </div>
+        
+        {/* Footer message */}
+        <div className="bg-gray-50 p-4 text-center">
+          <p className="text-sm text-gray-600 mb-4">
+            Puedes intentar nuevamente o revisar tu información de pago en tu perfil.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowErrorModal(false)}
+              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold py-3 px-6 rounded-lg transition-all duration-200"
+            >
+              Intentar de nuevo
+            </button>
+            <button
+              onClick={handleGoToProfile}
+              className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105"
+            >
+              Ir a perfil
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+  
   if (isLoading) {
     return (
       <UserLayout>
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-700">Cargando información de pago...</p>
+            <p className="text-gray-700">Procesando pago...</p>
           </div>
         </div>
       </UserLayout>
@@ -266,9 +458,28 @@ function CheckoutPaymentConfirmation() {
   
   return (
     <UserLayout>
+      {/* Success Modal */}
+      <SuccessModal />
+      <ErrorModal />
       <div className="bg-gray-100 min-h-screen py-8">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
+            {/* Navigation Buttons */}
+            <div className="mb-4 flex gap-3">
+              <button 
+                onClick={handleBack}
+                className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                ← Volver
+              </button>
+              <button 
+                onClick={handleCancel}
+                className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                Cancelar compra
+              </button>
+            </div>
+
             <h1 className="text-2xl font-bold mb-6 text-center">Confirmar pago</h1>
             
             {/* Panel principal */}
@@ -307,7 +518,7 @@ function CheckoutPaymentConfirmation() {
                       </div>
                     </div>
                     
-                    {/* Método de envío - SOLO MUESTRA EL SELECCIONADO */}
+                    {/* Método de envío */}
                     <div>
                       <h3 className="font-medium text-gray-700 mb-3">Método de envío</h3>
                       <div className="border border-gray-200 rounded p-3">
@@ -319,7 +530,7 @@ function CheckoutPaymentConfirmation() {
                             className="h-4 w-4 text-blue-600"
                           />
                           <label className="ml-2">
-                            {shippingInfo.method === 'tienda' ? (
+                            {shippingInfo.method === 'recogida_tienda' ? (
                               <div>
                                 <span className="font-medium">Recoger en tienda</span>
                                 {shippingInfo.storeName && (
@@ -332,8 +543,13 @@ function CheckoutPaymentConfirmation() {
                               <div>
                                 <span className="font-medium">Envío a domicilio</span>
                                 <p className="text-sm text-gray-600 mt-1">
-                                  {shippingInfo.locationCity}, {shippingInfo.locationState}
+                                  <span>
+                                    {shippingInfo.locationCity}, {shippingInfo.locationState}, {shippingInfo.locationStreet}
+                                    <br/>
+                                    {shippingInfo.locationPostalCode}
+                                  </span>
                                 </p>
+                                
                               </div>
                             )}
                           </label>
@@ -367,20 +583,6 @@ function CheckoutPaymentConfirmation() {
                                 paymentInfo.cardNumber.replace(/\d(?=\d{4})/g, "*") : 
                                 '•••• •••• •••• ••••'}
                             </p>
-                            <div className="ml-2 flex space-x-1">
-                              <img src="/visa-icon.png" alt="Visa" className="h-5" 
-                                onError={(e) => {
-                                  e.target.onerror = null; 
-                                  e.target.style.display = 'none';
-                                }} 
-                              />
-                              <img src="/mastercard-icon.png" alt="Mastercard" className="h-5" 
-                                onError={(e) => {
-                                  e.target.onerror = null; 
-                                  e.target.style.display = 'none';
-                                }} 
-                              />
-                            </div>
                           </div>
                         </div>
                         
