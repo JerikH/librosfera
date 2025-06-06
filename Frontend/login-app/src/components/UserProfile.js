@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './UserProfilePageComponents/Sidebar';
 import Dashboard from './UserProfilePageComponents/Dashboard';
 import ProfilePage from './UserProfilePageComponents/ProfilePage';
@@ -18,6 +18,7 @@ const UserProfile = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // SOLUCIÓN 1: Usar useCallback para memoizar updateCartCount
   const updateCartCount = useCallback((count) => {
@@ -85,6 +86,12 @@ const UserProfile = () => {
     
     checkUserTypeAndRedirect();
   }, [navigate]);
+
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    }
+  }, [location.state]);
   
   // SOLUCIÓN 2: Optimizar el refresh de datos - solo cuando sea necesario
   const refreshUserData = useCallback(async () => {
