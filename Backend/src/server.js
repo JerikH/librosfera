@@ -2,6 +2,7 @@
 const dotenv = require('dotenv');
 const { connectDB } = require('../Database/config/dbConfig');
 const initRootUser = require('../Database/scripts/initRootUser');
+// const initMensajeria = require('../Database/scripts/initMensajeria');
 const fs = require('fs');
 const path = require('path');
 
@@ -51,6 +52,7 @@ async function iniciarServidor() {
     
     // Inicializar usuario root
     await initRootUser();
+    // await initMensajeria();
     
     // Crear directorios necesarios
     createRequiredDirectories();

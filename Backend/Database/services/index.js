@@ -6,6 +6,7 @@ const tarjetaService = require('./tarjetaService');
 const carritoService = require('./carritoService');
 const ventaService = require('./ventaService');
 const devolucionService = require('./devolucionService');
+const mensajeriaService = require('./mensajeriaService');
 
 module.exports = {
   userService,
@@ -15,4 +16,5 @@ module.exports = {
   carritoService,
   ventaService,
   devolucionService,
+  mensajeriaService,
 };
