@@ -491,7 +491,7 @@ useEffect(() => {
                               </p>
                             )}
                             
-                            {item.bookDetails?.stock > 0 ? (
+                            {/* {item.bookDetails?.stock > 0 ? (
                               <p className="text-xs text-green-600 mb-2">
                                 Disponible: {item.bookDetails.stock} unidades
                               </p>
@@ -499,7 +499,7 @@ useEffect(() => {
                               <p className="text-xs text-red-600 mb-2">
                                 Agotado
                               </p>
-                            )}
+                            )} */}
                           </div>
                           
                           <button 
