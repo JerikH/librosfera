@@ -2,7 +2,7 @@
 const mongoose = require('mongoose');
 const Conversacion = require('../models/conversacionModel');
 const Mensaje = require('../models/mensajeModel');
-const { userService } = require('./index');
+const userService = require('./userService');
 
 const mensajeriaService = {
   /**
@@ -10,6 +10,7 @@ const mensajeriaService = {
    */
   async crearConversacion(clienteId, datosConversacion) {
     try {
+      
       // Obtener información del cliente
       const cliente = await userService.obtenerUsuarioCompleto(clienteId);
       if (!cliente || cliente.tipo_usuario !== 'cliente') {
