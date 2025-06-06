@@ -1,3 +1,4 @@
+// Database/services/ventaService.js (CORREGIDO)
 const mongoose = require('mongoose');
 const Venta = require('../models/ventaModel');
 const Devolucion = require('../models/devolucionModel');
@@ -7,16 +8,23 @@ const emailService = require('../../src/utils/emailService');
 
 class VentaService {
   /**
-   * Crear una venta desde un carrito
-   * @param {String} idUsuario - ID del usuario que realiza la compra
-   * @param {Object} datosVenta - Datos de la venta (método de pago, envío, etc.)
-   * @returns {Promise<Object>} Venta creada
+   * Calcular costo de envío según el tipo
+   */
+  _calcularCostoEnvio(tipoEnvio) {
+    const COSTO_ENVIO_DOMICILIO = 7000;
+    return tipoEnvio === 'domicilio' ? COSTO_ENVIO_DOMICILIO : 0;
+  }
+
+  /**
+   * Crear una venta desde un carrito CON MANEJO CORRECTO DE STOCK RESERVADO
    */
   async crearVenta(idUsuario, datosVenta) {
     const session = await mongoose.startSession();
     session.startTransaction();
     
     try {
+      console.log('Iniciando creación de venta desde carrito con stock reservado');
+      
       // 1. Obtener y validar el carrito
       const carrito = await Carrito.findOne({ 
         id_usuario: idUsuario, 
@@ -36,25 +44,50 @@ class VentaService {
         throw new Error('El carrito está vacío');
       }
       
-      // 3. Validar disponibilidad de stock
+      // 3. VALIDAR QUE TODAS LAS RESERVAS ESTÉN CORRECTAS
+      console.log('Validando reservas existentes...');
       for (const item of items) {
-        const inventario = await Inventario.findOne({ 
-          id_libro: item.id_libro._id 
-        }).session(session);
+        const reservaInfo = await this._verificarReservaItem(carrito._id, item.id_libro._id, session);
         
-        if (!inventario || inventario.stock_disponible < item.cantidad) {
-          throw new Error(`Stock insuficiente para: ${item.id_libro.titulo}`);
+        if (!reservaInfo.valida) {
+          throw new Error(`Reserva inválida para "${item.id_libro.titulo}": ${reservaInfo.mensaje}`);
+        }
+        
+        if (reservaInfo.cantidadReservada < item.cantidad) {
+          throw new Error(`Stock reservado insuficiente para "${item.id_libro.titulo}". Reservado: ${reservaInfo.cantidadReservada}, Necesario: ${item.cantidad}`);
         }
       }
       
-      // 4. Validar método de pago
+      // 4. Calcular costo de envío
+      const costoEnvio = this._calcularCostoEnvio(datosVenta.tipo_envio);
+      
+      // 5. Recalcular totales considerando impuesto opcional y envío
+      const totalSinEnvio = carrito.totales.total_final;
+      const totalConEnvio = totalSinEnvio + costoEnvio;
+      
+      // 6. Manejar impuesto opcional
+      let totalFinalAPagar = totalConEnvio;
+      let impuestoPagadoPorCliente = false;
+      let montoImpuestoExcluido = 0;
+      
+      if (datosVenta.cliente_pagara_impuesto === true) {
+        impuestoPagadoPorCliente = true;
+        montoImpuestoExcluido = carrito.totales.total_impuestos;
+        totalFinalAPagar = totalConEnvio - montoImpuestoExcluido;
+        
+        if (totalFinalAPagar < 0) {
+          totalFinalAPagar = 0;
+        }
+      }
+      
+      // 7. Validar método de pago con el monto final
       const tarjeta = await this._validarMetodoPago(
         idUsuario, 
         datosVenta.id_tarjeta, 
-        carrito.totales.total_final
+        totalFinalAPagar
       );
       
-      // 5. Preparar items de la venta
+      // 8. Preparar items de la venta
       const itemsVenta = items.map(item => ({
         id_libro: item.id_libro._id,
         snapshot: {
@@ -71,10 +104,12 @@ class VentaService {
           precio_unitario_final: item.precios.precio_con_impuestos,
           impuesto: item.precios.impuesto,
           subtotal: item.subtotal
-        }
+        },
+        // Nuevo: información de la tienda donde está reservado
+        id_tienda_origen: item.metadatos?.id_tienda_reservado
       }));
       
-      // 6. Crear la venta
+      // 9. Crear la venta con información de impuesto
       const nuevaVenta = new Venta({
         id_cliente: idUsuario,
         id_carrito_origen: carrito._id,
@@ -83,9 +118,9 @@ class VentaService {
           subtotal_sin_descuentos: carrito.totales.subtotal_base,
           total_descuentos: carrito.totales.total_descuentos,
           subtotal_con_descuentos: carrito.totales.subtotal_con_descuentos,
-          total_impuestos: carrito.totales.total_impuestos,
-          costo_envio: carrito.totales.costo_envio,
-          total_final: carrito.totales.total_final
+          total_impuestos: impuestoPagadoPorCliente ? 0 : carrito.totales.total_impuestos,
+          costo_envio: costoEnvio,
+          total_final: totalFinalAPagar
         },
         pago: {
           metodo: tarjeta.tipo === 'debito' ? 'tarjeta_debito' : 'tarjeta_credito',
@@ -97,49 +132,53 @@ class VentaService {
           tipo: datosVenta.tipo_envio,
           direccion: datosVenta.direccion_envio,
           id_tienda_recogida: datosVenta.id_tienda_recogida,
-          costo: carrito.totales.costo_envio,
+          costo: costoEnvio,
           notas_envio: datosVenta.notas_envio
         },
         descuentos_aplicados: carrito.codigos_carrito?.map(c => ({
           codigo: c.codigo,
           tipo: 'codigo_promocional'
-        })) || []
+        })) || [],
+        impuesto_info: {
+          pagado_por_cliente: impuestoPagadoPorCliente,
+          monto_excluido: montoImpuestoExcluido,
+          monto_incluido: impuestoPagadoPorCliente ? 0 : carrito.totales.total_impuestos
+        }
       });
       
-      // CORRECCIÓN: Primero guardar la venta en la base de datos
+      // 10. Guardar la venta en la base de datos
       await nuevaVenta.save({ session });
       
-      // 7. Procesar el pago
+      // 11. Procesar el pago
       try {
-        await this._procesarPago(tarjeta, carrito.totales.total_final, nuevaVenta.numero_venta);
-        // CORRECCIÓN: Aplicar cambios al objeto en memoria sin guardar
+        await this._procesarPago(tarjeta, totalFinalAPagar, nuevaVenta.numero_venta);
         nuevaVenta.aprobarPago();
-        // CORRECCIÓN: Luego guardar explícitamente con la sesión
         await nuevaVenta.save({ session });
       } catch (errorPago) {
-        // En caso de error, rechazar el pago sin guardar
         nuevaVenta.rechazarPago(errorPago.message);
-        // Guardar explícitamente con la sesión
         await nuevaVenta.save({ session });
         throw new Error(`Error procesando el pago: ${errorPago.message}`);
       }
       
-      // 8. Actualizar inventario
+      // 12. CONVERTIR RESERVAS EN VENTAS DEFINITIVAS
+      console.log('Convirtiendo reservas en ventas definitivas...');
       for (const item of items) {
-        const inventario = await Inventario.findOne({ 
-          id_libro: item.id_libro._id 
-        }).session(session);
-        
-        await inventario.registrarSalida(
+        await this._convertirReservaEnVenta(
+          carrito._id,
+          item.id_libro._id,
           item.cantidad,
-          'venta',
           idUsuario,
           nuevaVenta._id,
-          `Venta ${nuevaVenta.numero_venta}`
+          session
         );
       }
       
-      // 9. Limpiar carrito
+      // 13. Si es recogida en tienda, crear registro de recogida
+      if (datosVenta.tipo_envio === 'recogida_tienda') {
+        await this._crearRecogidaTienda(nuevaVenta, datosVenta.id_tienda_recogida, session);
+      }
+      
+      // 14. Limpiar carrito
       await CarritoItem.deleteMany({ id_carrito: carrito._id }).session(session);
       carrito.estado = 'convertido_a_compra';
       carrito.n_item = 0;
@@ -153,10 +192,12 @@ class VentaService {
       };
       await carrito.save({ session });
       
-      // 10. Confirmar transacción
+      // 15. Confirmar transacción
       await session.commitTransaction();
       
-      // 11. Enviar confirmación por email (no bloqueante)
+      console.log('Venta creada exitosamente con stock correctamente manejado');
+      
+      // 16. Enviar confirmación por email (no bloqueante)
       this._enviarConfirmacionCompra(nuevaVenta, idUsuario).catch(err => 
         console.error('Error enviando email de confirmación:', err)
       );
@@ -165,142 +206,128 @@ class VentaService {
       
     } catch (error) {
       await session.abortTransaction();
+      console.error('Error creando venta:', error);
       throw error;
     } finally {
       session.endSession();
     }
   }
-  
+
   /**
-   * Validar método de pago
+   * Verificar que la reserva de un item está correcta
    * @private
    */
-  async _validarMetodoPago(idUsuario, idTarjeta, montoTotal) {
-    // Obtener y validar tarjeta
-    const tarjeta = await tarjetaService.obtenerTarjetaPorId(idTarjeta, idUsuario);
-    
-    if (!tarjeta) {
-      throw new Error('Tarjeta no encontrada');
-    }
-    
-    if (!tarjeta.activa) {
-      throw new Error('La tarjeta no está activa');
-    }
-    
-    // Verificar que no esté expirada
-    const verificacion = await tarjetaService.verificarTarjeta(idTarjeta);
-    if (!verificacion.valida) {
-      throw new Error(verificacion.mensaje);
-    }
-    
-    // Para tarjetas de débito, verificar saldo
-    if (tarjeta.tipo === 'debito') {
-      if (tarjeta.saldo < montoTotal) {
-        throw new Error(`Saldo insuficiente. Disponible: $${tarjeta.saldo.toLocaleString()}, Requerido: $${montoTotal.toLocaleString()}`);
-      }
-    }
-    
-    return tarjeta;
-  }
-  
-  /**
-   * Procesar pago
-   * @private
-   */
-  async _procesarPago(tarjeta, monto, numeroVenta) {
+  async _verificarReservaItem(idCarrito, idLibro, session) {
     try {
-      if (tarjeta.tipo === 'debito') {
-        // Descontar del saldo
-        await tarjetaService.modificarSaldo(
-          tarjeta.id_tarjeta,
-          tarjeta.id_usuario,
-          -monto,
-          `Pago de orden ${numeroVenta}`
-        );
-      } else {
-        // Para tarjetas de crédito, aquí se integraría con el procesador de pagos
-        // Por ahora simulamos que siempre es exitoso
-        console.log(`Procesando pago de $${monto} con tarjeta de crédito ${tarjeta.ultimos_digitos}`);
+      // Buscar inventario con reservas de este carrito
+      const inventario = await Inventario.findOne({
+        id_libro: idLibro,
+        'movimientos': {
+          $elemMatch: {
+            tipo: 'reserva',
+            id_reserva: idCarrito
+          }
+        }
+      }).session(session);
+      
+      if (!inventario) {
+        return {
+          valida: false,
+          mensaje: 'No se encontró reserva para este libro',
+          cantidadReservada: 0
+        };
       }
       
-      return true;
-    } catch (error) {
-      throw new Error(`Error procesando pago: ${error.message}`);
-    }
-  }
-  
-  /**
-   * Enviar email de confirmación
-   * @private
-   */
-  async _enviarConfirmacionCompra(venta, idUsuario) {
-    try {
-      const usuario = await mongoose.model('Usuario').findById(idUsuario);
-      await emailService.sendPurchaseConfirmation(
-        usuario.email,
-        venta,
-        usuario
-      );
-    } catch (error) {
-      console.error('Error enviando confirmación:', error);
-    }
-  }
-  
-  /**
-   * Obtener ventas de un cliente
-   */
-  async obtenerVentasCliente(idCliente, opciones = {}) {
-    const ventas = await Venta.obtenerVentasCliente(idCliente, opciones);
-    
-    // Calcular totales
-    const totales = await Venta.aggregate([
-      { $match: { id_cliente: new mongoose.Types.ObjectId(idCliente) } },
-      {
-        $group: {
-          _id: null,
-          total_compras: { $sum: 1 },
-          monto_total: { $sum: '$totales.total_final' }
+      // Calcular cantidad reservada neta
+      let cantidadReservada = 0;
+      
+      for (const movimiento of inventario.movimientos) {
+        if (movimiento.id_reserva && movimiento.id_reserva.equals(idCarrito)) {
+          if (movimiento.tipo === 'reserva') {
+            cantidadReservada += movimiento.cantidad;
+          } else if (movimiento.tipo === 'liberacion_reserva') {
+            cantidadReservada -= movimiento.cantidad;
+          }
         }
       }
-    ]);
-    
-    return {
-      ventas,
-      resumen: totales[0] || { total_compras: 0, monto_total: 0 }
-    };
+      
+      if (cantidadReservada <= 0) {
+        return {
+          valida: false,
+          mensaje: 'La reserva fue liberada o es inválida',
+          cantidadReservada: 0
+        };
+      }
+      
+      return {
+        valida: true,
+        mensaje: 'Reserva válida',
+        cantidadReservada,
+        inventario
+      };
+    } catch (error) {
+      console.error('Error verificando reserva:', error);
+      return {
+        valida: false,
+        mensaje: `Error verificando reserva: ${error.message}`,
+        cantidadReservada: 0
+      };
+    }
   }
-  
+
   /**
-   * Obtener detalle de una venta
+   * Convertir reserva en venta definitiva
+   * @private
    */
-  async obtenerDetalleVenta(numeroVenta, idUsuario = null) {
-    const query = { numero_venta: numeroVenta };
-    
-    // Si se proporciona usuario, verificar que sea el dueño
-    if (idUsuario) {
-      query.id_cliente = idUsuario;
+  async _convertirReservaEnVenta(idCarrito, idLibro, cantidad, idUsuario, idVenta, session) {
+    try {
+      const reservaInfo = await this._verificarReservaItem(idCarrito, idLibro, session);
+      
+      if (!reservaInfo.valida || !reservaInfo.inventario) {
+        throw new Error(`No se puede convertir reserva en venta para libro ${idLibro}`);
+      }
+      
+      const inventario = reservaInfo.inventario;
+      
+      // Registrar salida definitiva (reduce del stock reservado, no del disponible)
+      await inventario.registrarSalida(
+        cantidad,
+        'venta',
+        idUsuario,
+        idVenta,
+        `Venta confirmada ${idVenta} - conversión de reserva carrito ${idCarrito}`
+      );
+      
+      console.log(`Reserva convertida en venta: ${cantidad} unidades de libro ${idLibro}`);
+    } catch (error) {
+      console.error('Error convirtiendo reserva en venta:', error);
+      throw error;
     }
-    
-    const venta = await Venta.findOne(query)
-      .populate('id_cliente', 'nombres apellidos email telefono')
-      .populate('items.id_libro', 'titulo autor_nombre_completo ISBN');
-    
-    if (!venta) {
-      throw new Error('Venta no encontrada');
-    }
-    
-    // Obtener devoluciones asociadas
-    const devoluciones = await Devolucion.find({ id_venta: venta._id })
-      .select('codigo_devolucion estado fecha_solicitud totales');
-    
-    return {
-      venta: venta.toObject(),
-      devoluciones
-    };
   }
-  
+
   /**
-   * Cancelar una venta
+   * Crear registro de recogida en tienda
+   * @private
+   */
+  async _crearRecogidaTienda(venta, idTienda, session) {
+    try {
+      // Solo importar cuando se necesite para evitar dependencias circulares
+      const tiendaService = require('./tiendaService');
+      
+      // Crear recogida desde la venta
+      const recogida = await tiendaService.crearRecogidaDesdeVenta(venta, idTienda);
+      
+      console.log(`Recogida creada para venta ${venta.numero_venta} en tienda ${idTienda}`);
+      return recogida;
+    } catch (error) {
+      console.error('Error creando recogida en tienda:', error);
+      // No es crítico, la venta puede continuar
+      throw error;
+    }
+  }
+
+  /**
+   * Cancelar una venta CON DEVOLUCIÓN DE STOCK
    */
   async cancelarVenta(numeroVenta, motivo, solicitadaPor, idUsuario) {
     const session = await mongoose.startSession();
@@ -329,20 +356,22 @@ class VentaService {
         await this._procesarReembolso(venta);
       }
       
-      // Devolver stock
+      // DEVOLVER STOCK CORRECTAMENTE
+      console.log('Devolviendo stock por cancelación de venta...');
       for (const item of venta.items) {
-        const inventario = await Inventario.findOne({ 
-          id_libro: item.id_libro 
-        }).session(session);
-        
-        if (inventario) {
-          await inventario.registrarEntrada(
-            item.cantidad,
-            'devolucion',
-            idUsuario,
-            `Cancelación de venta ${venta.numero_venta}`
-          );
-        }
+        await this._devolverStockPorCancelacion(
+          item.id_libro,
+          item.cantidad,
+          item.id_tienda_origen, // Devolver a la tienda original si existe
+          idUsuario,
+          venta._id,
+          session
+        );
+      }
+      
+      // Si había recogida asociada, cancelarla también
+      if (venta.envio.tipo === 'recogida_tienda') {
+        await this._cancelarRecogidaAsociada(venta._id, motivo, idUsuario, session);
       }
       
       await session.commitTransaction();
@@ -361,36 +390,207 @@ class VentaService {
       session.endSession();
     }
   }
-  
+
   /**
-   * Procesar reembolso
+   * Devolver stock por cancelación
    * @private
    */
-  async _procesarReembolso(venta) {
+  async _devolverStockPorCancelacion(idLibro, cantidad, idTiendaOriginal, idUsuario, idVenta, session) {
     try {
-      // Obtener tarjeta original
-      const tarjeta = await tarjetaService.obtenerTarjetaPorId(venta.pago.id_tarjeta);
+      let inventario;
       
-      if (tarjeta && tarjeta.tipo === 'debito') {
-        // Devolver dinero a la tarjeta
+      // Intentar devolver a la tienda original si se especifica
+      if (idTiendaOriginal) {
+        inventario = await Inventario.findOne({
+          id_libro: idLibro,
+          id_tienda: idTiendaOriginal
+        }).session(session);
+      }
+      
+      // Si no hay tienda original o no se encuentra, buscar cualquier inventario activo
+      if (!inventario) {
+        inventario = await Inventario.findOne({
+          id_libro: idLibro,
+          estado: 'disponible'
+        }).session(session);
+      }
+      
+      // Si aún no hay inventario, crear uno nuevo en una tienda activa
+      if (!inventario) {
+        const TiendaFisica = require('../models/tiendaFisicaModel');
+        const tiendaActiva = await TiendaFisica.findOne({ estado: 'activa' }).session(session);
+        
+        if (tiendaActiva) {
+          inventario = new Inventario({
+            id_libro: idLibro,
+            id_tienda: tiendaActiva._id,
+            stock_total: 0,
+            stock_disponible: 0,
+            stock_reservado: 0
+          });
+        } else {
+          throw new Error('No hay tiendas activas para devolver el stock');
+        }
+      }
+      
+      // Registrar entrada por devolución/cancelación
+      await inventario.registrarEntrada(
+        cantidad,
+        'devolucion',
+        idUsuario,
+        `Cancelación de venta ${idVenta} - devolución de stock`
+      );
+      
+      console.log(`Stock devuelto: ${cantidad} unidades de libro ${idLibro} a tienda ${inventario.id_tienda}`);
+    } catch (error) {
+      console.error('Error devolviendo stock por cancelación:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancelar recogida asociada a una venta
+   * @private
+   */
+  async _cancelarRecogidaAsociada(idVenta, motivo, idUsuario, session) {
+    try {
+      const RecogidaTienda = require('../models/recogidaTiendaModel');
+      
+      const recogida = await RecogidaTienda.findOne({ id_venta: idVenta }).session(session);
+      
+      if (recogida && !['RECOGIDO', 'CANCELADO', 'EXPIRADO'].includes(recogida.estado)) {
+        recogida.cambiarEstado('CANCELADO', `Venta cancelada: ${motivo}`, idUsuario);
+        await recogida.save({ session });
+        
+        console.log(`Recogida ${recogida.codigo_recogida} cancelada por venta cancelada`);
+      }
+    } catch (error) {
+      console.error('Error cancelando recogida asociada:', error);
+      // No es crítico, continuar con la cancelación de la venta
+    }
+  }
+
+  // ==========================================
+  // MÉTODOS PRIVADOS EXISTENTES (mantenidos)
+  // ==========================================
+
+  /**
+   * Validar método de pago
+   * @private
+   */
+  async _validarMetodoPago(idUsuario, idTarjeta, montoTotal) {
+    const tarjeta = await tarjetaService.obtenerTarjetaPorId(idTarjeta, idUsuario);
+    
+    if (!tarjeta) {
+      throw new Error('Tarjeta no encontrada');
+    }
+    
+    if (!tarjeta.activa) {
+      throw new Error('La tarjeta no está activa');
+    }
+    
+    const verificacion = await tarjetaService.verificarTarjeta(idTarjeta);
+    if (!verificacion.valida) {
+      throw new Error(verificacion.mensaje);
+    }
+    
+    if (tarjeta.tipo === 'debito') {
+      if (tarjeta.saldo < montoTotal) {
+        throw new Error(`Saldo insuficiente. Disponible: $${tarjeta.saldo.toLocaleString()}, Requerido: $${montoTotal.toLocaleString()}`);
+      }
+    }
+    
+    return tarjeta;
+  }
+  
+  /**
+   * Procesar pago
+   * @private
+   */
+  async _procesarPago(tarjeta, monto, numeroVenta) {
+    try {
+      if (tarjeta.tipo === 'debito') {
         await tarjetaService.modificarSaldo(
           tarjeta.id_tarjeta,
-          venta.id_cliente,
-          venta.totales.total_final,
-          `Reembolso de orden ${venta.numero_venta}`
+          tarjeta.id_usuario,
+          -monto,
+          `Pago de orden ${numeroVenta}`
         );
+      } else {
+        console.log(`Procesando pago de $${monto} con tarjeta de crédito ${tarjeta.ultimos_digitos}`);
       }
       
       return true;
     } catch (error) {
-      console.error('Error procesando reembolso:', error);
-      throw error;
+      throw new Error(`Error procesando pago: ${error.message}`);
     }
   }
   
   /**
-   * Actualizar estado de envío
+   * Enviar email de confirmación
+   * @private
    */
+  async _enviarConfirmacionCompra(venta, idUsuario) {
+    try {
+      const usuario = await mongoose.model('Usuario').findById(idUsuario);
+      await emailService.sendPurchaseConfirmation(
+        usuario.email,
+        venta,
+        usuario
+      );
+    } catch (error) {
+      console.error('Error enviando confirmación:', error);
+    }
+  }
+  
+  // ==========================================
+  // MÉTODOS PÚBLICOS EXISTENTES (mantenidos)
+  // ==========================================
+
+  async obtenerVentasCliente(idCliente, opciones = {}) {
+    const ventas = await Venta.obtenerVentasCliente(idCliente, opciones);
+    
+    const totales = await Venta.aggregate([
+      { $match: { id_cliente: new mongoose.Types.ObjectId(idCliente) } },
+      {
+        $group: {
+          _id: null,
+          total_compras: { $sum: 1 },
+          monto_total: { $sum: '$totales.total_final' }
+        }
+      }
+    ]);
+    
+    return {
+      ventas,
+      resumen: totales[0] || { total_compras: 0, monto_total: 0 }
+    };
+  }
+  
+  async obtenerDetalleVenta(numeroVenta, idUsuario = null) {
+    const query = { numero_venta: numeroVenta };
+    
+    if (idUsuario) {
+      query.id_cliente = idUsuario;
+    }
+    
+    const venta = await Venta.findOne(query)
+      .populate('id_cliente', 'nombres apellidos email telefono')
+      .populate('items.id_libro', 'titulo autor_nombre_completo ISBN');
+    
+    if (!venta) {
+      throw new Error('Venta no encontrada');
+    }
+    
+    const devoluciones = await Devolucion.find({ id_venta: venta._id })
+      .select('codigo_devolucion estado fecha_solicitud totales');
+    
+    return {
+      venta: venta.toObject(),
+      devoluciones
+    };
+  }
+  
   async actualizarEstadoEnvio(numeroVenta, nuevoEstado, datosEnvio, idUsuario) {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -422,17 +622,14 @@ class VentaService {
           throw new Error('Estado de envío no válido');
       }
       
-      // Guardar con la sesión
       await venta.save({ session });
       
-      // Si el estado es "enviado", enviar notificación
       if (nuevoEstado === 'enviado') {
         this._enviarNotificacionEnvio(venta).catch(err => 
           console.error('Error enviando notificación:', err)
         );
       }
       
-      // Si el estado es "entregado", enviar notificación
       if (nuevoEstado === 'entregado') {
         this._enviarNotificacionEntrega(venta).catch(err => 
           console.error('Error enviando notificación:', err)
@@ -450,15 +647,11 @@ class VentaService {
     }
   }
   
-  /**
-   * Crear solicitud de devolución
-   */
   async crearDevolucion(numeroVenta, itemsDevolucion, idCliente) {
     const session = await mongoose.startSession();
     session.startTransaction();
     
     try {
-      // Obtener la venta
       const venta = await Venta.findOne({ 
         numero_venta: numeroVenta,
         id_cliente: idCliente 
@@ -468,7 +661,6 @@ class VentaService {
         throw new Error('Venta no encontrada');
       }
       
-      // Crear devolución
       const devolucion = await Devolucion.crearDesdeVenta(
         venta,
         itemsDevolucion,
@@ -477,7 +669,6 @@ class VentaService {
       
       await devolucion.save({ session });
       
-      // Actualizar cantidades devueltas en la venta
       for (const itemDev of itemsDevolucion) {
         const itemVenta = venta.items.id(itemDev.id_item_venta);
         if (itemVenta) {
@@ -489,7 +680,6 @@ class VentaService {
       
       await session.commitTransaction();
       
-      // Enviar email con QR
       this._enviarEmailDevolucion(devolucion, idCliente).catch(err => 
         console.error('Error enviando email de devolución:', err)
       );
@@ -504,16 +694,12 @@ class VentaService {
     }
   }
   
-  /**
-   * Obtener estadísticas de ventas (admin)
-   */
   async obtenerEstadisticasVentas(fechaInicio, fechaFin) {
     const estadisticas = await Venta.obtenerEstadisticas(
       new Date(fechaInicio),
       new Date(fechaFin)
     );
     
-    // Productos más vendidos
     const productosMasVendidos = await Venta.aggregate([
       {
         $match: {
@@ -542,8 +728,32 @@ class VentaService {
       productos_mas_vendidos: productosMasVendidos
     };
   }
+
+  /**
+   * Procesar reembolso
+   * @private
+   */
+  async _procesarReembolso(venta) {
+    try {
+      const tarjeta = await tarjetaService.obtenerTarjetaPorId(venta.pago.id_tarjeta);
+      
+      if (tarjeta && tarjeta.tipo === 'debito') {
+        await tarjetaService.modificarSaldo(
+          tarjeta.id_tarjeta,
+          venta.id_cliente,
+          venta.totales.total_final,
+          `Reembolso de orden ${venta.numero_venta}`
+        );
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error procesando reembolso:', error);
+      throw error;
+    }
+  }
   
-  // Métodos de notificación
+  // Métodos de notificación (mantenidos)
   async _enviarNotificacionCancelacion(venta) {
     const usuario = await mongoose.model('Usuario').findById(venta.id_cliente);
     await emailService.sendOrderCancellation(usuario.email, venta);

@@ -1,4 +1,4 @@
-// src/app.js
+// src/app.js (ACTUALIZADO)
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -12,8 +12,6 @@ const debugMiddleware = require('./middleware/debugMiddleware');
 const activityLogger = require('./middleware/activityLogMiddleware');
 
 // Importar rutas
-// const productRoutes = require('./routes/productRoutes');
-// const categoryRoutes = require('./routes/categoryRoutes');
 const userRoutes = require('./routes/userRoutes');
 const passwordResetRoutes = require('./routes/passwordResetRoutes');
 const authRoutes = require('./routes/authRoutes');
@@ -24,13 +22,11 @@ const carritoRoutes = require('./routes/carritoRoutes');
 const ventaRoutes = require('./routes/ventaRoutes');
 const devolucionRoutes = require('./routes/devolucionRoutes');
 const direccionRoutes = require('./routes/direccionRoutes');
-// const orderRoutes = require('./routes/orderRoutes');
-// const cartRoutes = require('./routes/cartRoutes');
-// const reservationRoutes = require('./routes/reservationRoutes');
-// const searchRoutes = require('./routes/searchRoutes');
+const tiendaRoutes = require('./routes/tiendaRoutes'); // NUEVA RUTA
 
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
+
 // Inicializar app
 const app = express();
 
@@ -50,15 +46,6 @@ if (process.env.NODE_ENV === 'development' && process.env.DEBUG === 'true') {
   console.log('Middleware de depuración activado');
 }
 
-// Rate limiting
-// const limiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, // 15 minutos
-//   max: 1000, // Límite de 100 peticiones por ventana
-//   standardHeaders: true,
-//   legacyHeaders: false,
-// });
-// app.use(limiter);
-
 // Directorio estático para archivos subidos
 const uploadsPath = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
 console.log('Directorio de uploads configurado en:', uploadsPath);
@@ -68,6 +55,7 @@ app.use('/uploads', express.static(uploadsPath));
 const fs = require('fs');
 const librosPath = path.join(uploadsPath, 'libros');
 const profilesPath = path.join(uploadsPath, 'profiles');
+const devolucionesPath = path.join(uploadsPath, 'devoluciones');
 try {
   if (!fs.existsSync(uploadsPath)) {
     fs.mkdirSync(uploadsPath, { recursive: true });
@@ -81,13 +69,15 @@ try {
     fs.mkdirSync(profilesPath, { recursive: true });
     console.log('Directorio de imágenes de perfiles creado:', profilesPath);
   }
+  if (!fs.existsSync(devolucionesPath)) {
+    fs.mkdirSync(devolucionesPath, { recursive: true });
+    console.log('Directorio de documentos de devoluciones creado:', devolucionesPath);
+  }
 } catch (error) {
   console.error('Error creando directorios:', error);
 }
 
 // Rutas de la API
-// app.use('/api/v1/products', productRoutes);
-// app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/users', passwordResetRoutes);
 app.use('/api/v1/auth', authRoutes);
@@ -98,14 +88,31 @@ app.use('/api/v1/carrito', carritoRoutes);
 app.use('/api/v1/ventas', ventaRoutes);
 app.use('/api/v1/devoluciones', devolucionRoutes);
 app.use('/api/v1/direcciones', direccionRoutes);
-// app.use('/api/v1/orders', orderRoutes);
-// app.use('/api/v1/cart', cartRoutes);
-// app.use('/api/v1/reservations', reservationRoutes);
-// app.use('/api/v1/search', searchRoutes);
+app.use('/api/v1/tiendas', tiendaRoutes); // NUEVA RUTA AGREGADA
 
 // Ruta de estado
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'success', message: 'API funcionando correctamente' });
+  res.status(200).json({ 
+    status: 'success', 
+    message: 'API funcionando correctamente',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    features: {
+      tiendas_fisicas: true,
+      sistema_reservas: true,
+      inventario_distribuido: true,
+      carrito_con_reservas: true
+    }
+  });
+});
+
+// Ruta específica para verificar tiendas
+app.get('/api/tiendas/health', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'Sistema de tiendas físicas operativo',
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
