@@ -86,9 +86,27 @@ const carritoService = {
       if (!libro.activo) {
         throw new Error('El libro no está disponible');
       }
+
+      const inventario = await Inventario.findOne({ id_libro: idLibro });
       
-      if (libro.stock < cantidad) {
-        throw new Error(`Stock insuficiente. Disponible: ${libro.stock}`);
+      let stockDisponible = 0;
+      let detalleStock = '';
+      
+      if (inventario) {
+        stockDisponible = inventario.stock_disponible;
+        detalleStock = `Stock disponible: ${inventario.stock_disponible}, ` +
+                      `Stock reservado: ${inventario.stock_reservado}, ` +
+                      `Stock total: ${inventario.stock_total}`;
+      } else {
+        stockDisponible = libro.stock;
+        detalleStock = `Stock básico: ${libro.stock} (sin inventario detallado)`;
+      }
+      
+      console.log('Verificación de stock:', detalleStock);
+      
+      if (stockDisponible < cantidad) {
+        const razonFalta = this._determinarRazonFaltaStock(inventario, libro, cantidad);
+        throw new Error(`Stock insuficiente para "${libro.titulo}". ${razonFalta}`);
       }
       
       // Obtener carrito del usuario
@@ -113,6 +131,10 @@ const carritoService = {
         const nuevaCantidad = itemExistente.cantidad + cantidad;
         if (nuevaCantidad > 3) {
           throw new Error('No se pueden tener más de 3 ejemplares del mismo libro');
+        }
+        if (stockDisponible < nuevaCantidad) {
+          const razonFalta = this._determinarRazonFaltaStock(inventario, libro, nuevaCantidad);
+          throw new Error(`Stock insuficiente para ${nuevaCantidad} unidades de "${libro.titulo}". ${razonFalta}`);
         }
         
         await itemExistente.actualizarCantidad(nuevaCantidad);
@@ -175,12 +197,48 @@ const carritoService = {
       return {
         exito: true,
         mensaje: `${cantidad} ejemplar(es) agregado(s) al carrito`,
-        carrito: carrito.toObject()
+        carrito: carrito.toObject(),
+        stock_info: {
+          stock_disponible: stockDisponible,
+          stock_despues_agregar: stockDisponible,
+          detalle: detalleStock
+        }
       };
     } catch (error) {
       console.error('Error agregando libro al carrito:', error);
       throw error;
     }
+  },
+
+  /**
+   * Determinar la razón específica de falta de stock (método auxiliar)
+   * @param {Object} inventario - Objeto de inventario  
+   * @param {Object} libro - Objeto del libro
+   * @param {Number} cantidadSolicitada - Cantidad solicitada
+   * @returns {String} Descripción de la razón
+   */
+  _determinarRazonFaltaStock(inventario, libro, cantidadSolicitada) {
+    if (!inventario) {
+      return `Stock básico insuficiente: disponible ${libro.stock}, solicitado ${cantidadSolicitada}.`;
+    }
+    
+    const stockTotal = inventario.stock_total;
+    const stockDisponible = inventario.stock_disponible;
+    const stockReservado = inventario.stock_reservado;
+    
+    if (stockTotal === 0) {
+      return 'El libro está completamente agotado.';
+    }
+    
+    if (stockDisponible === 0 && stockReservado > 0) {
+      return `Todas las ${stockTotal} unidades están reservadas por otros usuarios.`;
+    }
+    
+    if (stockDisponible > 0 && stockDisponible < cantidadSolicitada) {
+      return `Solo hay ${stockDisponible} unidades disponibles de ${stockTotal} en total (${stockReservado} reservadas).`;
+    }
+    
+    return `Stock insuficiente: disponible ${stockDisponible}, solicitado ${cantidadSolicitada}.`;
   },
 
   /**
