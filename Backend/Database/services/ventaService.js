@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 const Venta = require('../models/ventaModel');
 const Devolucion = require('../models/devolucionModel');
+const devolucionService = require('./devolucionService');
 const { Carrito, CarritoItem, Libro, Inventario } = require('../models');
 const tarjetaService = require('./tarjetaService');
 const emailService = require('../../src/utils/emailService');
@@ -172,7 +173,9 @@ class VentaService {
       console.error('Error procesando pago:', errorPago);
       throw new Error(`Error procesando el pago: ${errorPago.message}`);
     }
-    
+
+    const tiendaService = require('./tiendaService');
+    const tienda = await tiendaService.obtenerTiendaPorId(datosVenta.id_tienda_recogida);
     // 4. FASE DE TRANSACCIÓN PRINCIPAL (con retry automático)
     return await this._ejecutarConRetry(async () => {
       const session = await mongoose.startSession();
@@ -203,7 +206,7 @@ class VentaService {
         } else if (datosVenta.tipo_envio === 'recogida_tienda') {
           infoEnvio = {
             tipo: 'recogida_tienda',
-            id_tienda_recogida: datosVenta.id_tienda_recogida,
+            id_tienda_recogida: tienda._id,
             costo: 0
           };
         }
@@ -920,12 +923,19 @@ class VentaService {
       if (!venta) {
         throw new Error('Venta no encontrada');
       }
+
       
       const devolucion = await Devolucion.crearDesdeVenta(
         venta,
         itemsDevolucion,
         idCliente
       );
+      let qr = await devolucionService.generarCodigoQRDevolucion(devolucion.codigo_devolucion);
+      devolucion.qr_code = {
+        ...devolucion.qr_code,
+        ...qr
+      };
+        
       
       await devolucion.save({ session });
       

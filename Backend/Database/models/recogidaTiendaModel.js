@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const QRCode = require('qrcode');
+const crypto = require('crypto');
 
 const recogidaTiendaSchema = new Schema({
   // Identificador único
@@ -9,6 +10,15 @@ const recogidaTiendaSchema = new Schema({
     type: String,
     default: function() {
       return `REC${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 1000)}`;
+    },
+    unique: true,
+    index: true
+  },
+
+  id_transaccion: {
+    type: String,
+    default: function() {
+      return crypto.randomUUID();
     },
     unique: true,
     index: true
@@ -603,7 +613,6 @@ recogidaTiendaSchema.statics.crearDesdeVenta = async function(venta, idTienda) {
   if (venta.envio.tipo !== 'recogida_tienda') {
     throw new Error('La venta no es para recogida en tienda');
   }
-  
   const recogidaExistente = await this.findOne({ id_venta: venta._id });
   if (recogidaExistente) {
     return recogidaExistente;
@@ -625,11 +634,10 @@ recogidaTiendaSchema.statics.crearDesdeVenta = async function(venta, idTienda) {
   const nuevaRecogida = new this({
     id_venta: venta._id,
     id_cliente: venta.id_cliente,
-    id_tienda: idTienda || venta.envio.id_tienda_recogida,
+    id_tienda: venta.envio.id_tienda_recogida || idTienda,
     items: items,
     instrucciones_especiales: venta.envio.notas_envio
   });
-  
   // Registrar estado inicial
   nuevaRecogida.historial_estados.push({
     estado_nuevo: 'VERIFICANDO_DISPONIBILIDAD',

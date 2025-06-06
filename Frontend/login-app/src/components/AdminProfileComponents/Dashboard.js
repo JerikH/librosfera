@@ -84,6 +84,14 @@ const Dashboard = ({ userData, setActiveTab }) => {
             'Accept': 'application/json'
           }
         });
+
+        const salesResponse = await axios.get('http://localhost:5000/api/v1/ventas/estadisticas', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/json'
+          }
+        });
+
         
         // Fetch recent activities
         const activitiesResponse = await axios.get(`${API_BASE_URL}/api/v1/activities/recent?limite=5`, {
@@ -95,7 +103,8 @@ const Dashboard = ({ userData, setActiveTab }) => {
         
         // Check if requests were successful
         if (booksResponse.data.status === 'success' && 
-            usersResponse.data.status === 'success') {
+            usersResponse.data.status === 'success' &&
+            salesResponse.data.status === 'success') {
           
           // Process activities data if it exists
           let activitiesData = [];
@@ -119,7 +128,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
             totalBooks: booksResponse.data.paginacion.total,
             totalUsers: usersResponse.data.paginacion.total,
             // Keep the dummy data for other stats that are not provided by API yet
-            totalSales: 0,
+            totalSales: salesResponse.data.data.resumen.cantidad_ordenes,
             pendingMessages: 0,
             recentActivity: activitiesData.length > 0 ? activitiesData : [
               { id: 1, type: 'user', action: 'Nuevo usuario registrado', timestamp: '2023-11-10 14:25', user: 'maria_lopez' },
@@ -302,7 +311,15 @@ const Dashboard = ({ userData, setActiveTab }) => {
               color="bg-green-500" 
               tabId="gestionar-usuarios"
             />
-            {/* Ventas card - without tabId to make it not clickable */}
+
+            <StatCard 
+              title="Ventas" 
+              value={stats.totalSales} 
+              icon={icons.shopping_cart} 
+              color="bg-purple-500" 
+              tabId="administrar-ventas"
+            />
+            {/* Ventas card - without tabId to make it not clickable
             <div className="bg-white p-4 rounded-lg shadow">
               <div className="flex items-center">
                 <div className="w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center">
@@ -313,7 +330,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
                   <p className="text-2xl font-bold">{stats.totalSales}</p>
                 </div>
               </div>
-            </div>
+            </div> */}
             {/* Mensajes card - without tabId to make it not clickable */}
             <div className="bg-white p-4 rounded-lg shadow">
               <div className="flex items-center">
