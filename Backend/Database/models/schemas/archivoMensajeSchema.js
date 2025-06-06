@@ -1,6 +1,7 @@
 //Database/models/schemas/archivoMensajeSchema.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
+const crypto = require('crypto');
 
 const archivoMensajeSchema = new Schema({
   nombre_original: {
@@ -12,6 +13,9 @@ const archivoMensajeSchema = new Schema({
   nombre_archivo: {
     type: String,
     required: true,
+    default: function() {
+      return crypto.randomUUID();
+    },
   },
   url: {
     type: String,
