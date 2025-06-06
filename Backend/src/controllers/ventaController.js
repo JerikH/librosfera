@@ -15,7 +15,8 @@ const crearVenta = catchAsync(async (req, res, next) => {
       tipo_envio,
       direccion_envio,
       id_tienda_recogida,
-      notas_envio
+      notas_envio,
+      cliente_pagara_impuesto = false
     } = req.body;
 
     // Validaciones básicas
@@ -24,16 +25,28 @@ const crearVenta = catchAsync(async (req, res, next) => {
     }
 
     if (!tipo_envio || !['domicilio', 'recogida_tienda'].includes(tipo_envio)) {
-      return next(new AppError('Tipo de envío no válido', 400));
+      return next(new AppError('Tipo de envío no válido. Debe ser "domicilio" o "recogida_tienda"', 400));
     }
 
     if (tipo_envio === 'domicilio' && !direccion_envio) {
-      return next(new AppError('Debe proporcionar una dirección de envío', 400));
+      return next(new AppError('Debe proporcionar una dirección de envío para entregas a domicilio', 400));
     }
 
     if (tipo_envio === 'recogida_tienda' && !id_tienda_recogida) {
       return next(new AppError('Debe seleccionar una tienda para recoger', 400));
     }
+
+    // Validar formato del campo cliente_pagara_impuesto
+    if (typeof cliente_pagara_impuesto !== 'boolean') {
+      return next(new AppError('El campo cliente_pagara_impuesto debe ser verdadero o falso', 400));
+    }
+
+    console.log('Datos de venta recibidos:', {
+      usuario: req.user._id,
+      tipo_envio,
+      cliente_pagara_impuesto,
+      id_tarjeta
+    });
 
     // Crear venta
     const nuevaVenta = await ventaService.crearVenta(req.user._id, {
@@ -41,7 +54,8 @@ const crearVenta = catchAsync(async (req, res, next) => {
       tipo_envio,
       direccion_envio,
       id_tienda_recogida,
-      notas_envio
+      notas_envio,
+      cliente_pagara_impuesto
     });
 
     // Registrar actividad
@@ -55,10 +69,17 @@ const crearVenta = catchAsync(async (req, res, next) => {
         total: nuevaVenta.totales.total_final,
         cantidad_items: nuevaVenta.items.length,
         metodo_pago: nuevaVenta.pago.metodo,
-        tipo_envio: nuevaVenta.envio.tipo
+        tipo_envio: nuevaVenta.envio.tipo,
+        costo_envio: nuevaVenta.envio.costo,
+        cliente_pagara_impuesto: nuevaVenta.impuesto_info.pagado_por_cliente,
+        monto_impuesto: nuevaVenta.impuesto_info.pagado_por_cliente 
+          ? nuevaVenta.impuesto_info.monto_excluido 
+          : nuevaVenta.impuesto_info.monto_incluido
       },
       nivel_importancia: 'alto'
     });
+
+    const infoImpuesto = nuevaVenta.obtenerInfoImpuesto();
 
     res.status(201).json({
       status: 'success',
@@ -66,14 +87,24 @@ const crearVenta = catchAsync(async (req, res, next) => {
       data: {
         venta: nuevaVenta,
         numero_venta: nuevaVenta.numero_venta,
-        total: nuevaVenta.totales.total_final,
-        estado: nuevaVenta.estado
+        total_a_pagar: nuevaVenta.totales.total_final,
+        estado: nuevaVenta.estado,
+        envio: {
+          tipo: nuevaVenta.envio.tipo,
+          costo: nuevaVenta.envio.costo,
+          direccion: nuevaVenta.envio.direccion
+        },
+        impuesto: infoImpuesto
       }
     });
   } catch (error) {
     console.error('Error creando venta:', error);
     
-    // Manejar errores específicos
+    // Manejar errores específicos con mensajes más descriptivos
+    if (error.message.includes('Stock insuficiente para')) {
+      return next(new AppError(error.message, 409));
+    }
+    
     if (error.message.includes('Stock insuficiente')) {
       return next(new AppError(error.message, 409));
     }
@@ -83,6 +114,10 @@ const crearVenta = catchAsync(async (req, res, next) => {
     }
     
     if (error.message.includes('Tarjeta')) {
+      return next(new AppError(error.message, 400));
+    }
+
+    if (error.message.includes('No hay inventario registrado')) {
       return next(new AppError(error.message, 400));
     }
     
@@ -118,6 +153,87 @@ const obtenerMisVentas = catchAsync(async (req, res, next) => {
   } catch (error) {
     console.error('Error obteniendo ventas:', error);
     return next(new AppError('Error al obtener las ventas', 500));
+  }
+});
+
+/**
+ * @desc    Calcular estimación de costo de venta (preview)
+ * @route   POST /api/v1/ventas/preview
+ * @access  Private/Cliente
+ */
+const calcularPreviewVenta = catchAsync(async (req, res, next) => {
+  try {
+    const {
+      tipo_envio,
+      cliente_pagara_impuesto = false
+    } = req.body;
+
+    if (!tipo_envio || !['domicilio', 'recogida_tienda'].includes(tipo_envio)) {
+      return next(new AppError('Tipo de envío no válido', 400));
+    }
+
+    // Obtener carrito del usuario
+    const { carritoService } = require('../../Database/services');
+    const carritoData = await carritoService.obtenerCarritoUsuario(req.user._id);
+    
+    if (!carritoData.carrito || carritoData.carrito.n_item === 0) {
+      return next(new AppError('No hay productos en el carrito', 400));
+    }
+
+    // Calcular costo de envío
+    const COSTO_ENVIO_DOMICILIO = 7000;
+    const costoEnvio = tipo_envio === 'domicilio' ? COSTO_ENVIO_DOMICILIO : 0;
+
+    // Calcular totales según si el cliente paga impuesto
+    const subtotalConDescuentos = carritoData.carrito.totales.subtotal_con_descuentos;
+    const totalImpuestos = carritoData.carrito.totales.total_impuestos;
+    
+    let totalFinal;
+    let impuestoIncluido;
+    let impuestoExcluido;
+    
+    if (cliente_pagara_impuesto) {
+      totalFinal = subtotalConDescuentos + costoEnvio;
+      impuestoIncluido = 0;
+      impuestoExcluido = totalImpuestos;
+    } else {
+      totalFinal = subtotalConDescuentos + totalImpuestos + costoEnvio;
+      impuestoIncluido = totalImpuestos;
+      impuestoExcluido = 0;
+    }
+
+    const preview = {
+      subtotal_productos: carritoData.carrito.totales.subtotal_base,
+      total_descuentos: carritoData.carrito.totales.total_descuentos,
+      subtotal_con_descuentos: subtotalConDescuentos,
+      envio: {
+        tipo: tipo_envio,
+        costo: costoEnvio,
+        descripcion: tipo_envio === 'domicilio' 
+          ? 'Envío a domicilio' 
+          : 'Recogida en tienda (sin costo)'
+      },
+      impuestos: {
+        monto_total: totalImpuestos,
+        incluido_en_total: impuestoIncluido,
+        a_pagar_separado: impuestoExcluido,
+        pagado_por_cliente: cliente_pagara_impuesto,
+        mensaje: cliente_pagara_impuesto
+          ? `Deberá pagar $${impuestoExcluido.toLocaleString()} de impuesto por separado`
+          : `Impuesto de $${impuestoIncluido.toLocaleString()} incluido en el total`
+      },
+      total_final: totalFinal,
+      cantidad_productos: carritoData.carrito.n_item
+    };
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Vista previa de la venta calculada',
+      data: preview
+    });
+  } catch (error) {
+    console.error('Error calculando preview de venta:', error);
+    return next(new AppError(`Error al calcular vista previa: ${error.message}`, 500));
   }
 });
 
@@ -483,6 +599,7 @@ const agregarNotaInterna = catchAsync(async (req, res, next) => {
 module.exports = {
   // Cliente
   crearVenta,
+  calcularPreviewVenta,
   obtenerMisVentas,
   obtenerDetalleVenta,
   cancelarVentaCliente,
