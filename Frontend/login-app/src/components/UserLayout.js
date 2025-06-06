@@ -32,6 +32,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
           console.log("No user logged in");
           setUserData(null);
           setIsLoading(false);
+          localStorage.removeItem('shoppingCart');
           return;
         }
         
@@ -42,6 +43,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
           console.log("Invalid data structure in cookie");
           setUserData(null);
           setIsLoading(false);
+          localStorage.removeItem('shoppingCart');
           return;
         }
         
@@ -223,6 +225,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
                     Registrarse
                   </Link>
                 </>
+                
               )}
             </div>
           </div>
