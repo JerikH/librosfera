@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatDate } from './authUtils';
 import { useNavigate } from 'react-router-dom';
 import CachedImage from '../CachedImage';
 import EditProfile from '../EditProfile';
+import axios from 'axios';
+import { getAuthToken } from './authUtils';
+
+
+const API_BASE_URL = 'http://localhost:5000/api/v1';
 
 const ProfilePage = ({ userData }) => {
   const navigate = useNavigate();
@@ -13,15 +18,18 @@ const ProfilePage = ({ userData }) => {
   
   // Estado para el formulario de dirección
   const [addressForm, setAddressForm] = useState({
-    nombre: '',
-    calle: '',
+    tipo: 'casa',
+    direccion_completa: '',
     ciudad: '',
-    estado: '',
+    departamento: '',
     codigo_postal: '',
     pais: 'Colombia',
-    telefono: '',
-    es_principal: false
+    telefono_contacto: '',
+    referencia: '',
+    predeterminada: false
   });
+
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
 
   // Get primary address if available
   const primaryAddress = addresses && addresses.length > 0 
@@ -54,6 +62,38 @@ const ProfilePage = ({ userData }) => {
     setIsEditing(false);
   };
 
+  const getAxiosConfig = () => {
+    const token = getAuthToken();
+    return {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+    };
+  }
+
+  const fetchAddresses = async () => {
+    try {
+      setIsLoadingAddresses(true);
+      const response = await axios.get(`${API_BASE_URL}/direcciones`, getAxiosConfig());
+      if (response.data.status === 'success') {
+        setAddresses(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching addresses:', error);
+      if (error.response?.status === 401) {
+        // Handle unauthorized - maybe redirect to login
+        console.log('Unauthorized access - redirecting to login');
+      }
+    } finally {
+      setIsLoadingAddresses(false);
+    }
+  };
+
+  useEffect(() => {
+  fetchAddresses();
+}, []);
+
   // Handle address form changes
   const handleAddressChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -67,14 +107,15 @@ const ProfilePage = ({ userData }) => {
   const handleAddAddress = () => {
     setEditingAddress(null);
     setAddressForm({
-      nombre: '',
-      calle: '',
+      tipo: 'casa',
+      direccion_completa: '',
       ciudad: '',
-      estado: '',
+      departamento: '',
       codigo_postal: '',
       pais: 'Colombia',
-      telefono: '',
-      es_principal: addresses.length === 0 // Primera dirección será principal por defecto
+      telefono_contacto: '',
+      referencia: '',
+      predeterminada: addresses.length === 0 // Primera dirección será predeterminada por defecto
     });
     setShowAddressModal(true);
   };
@@ -82,62 +123,139 @@ const ProfilePage = ({ userData }) => {
   // Open address modal for editing existing address
   const handleEditAddress = (address, index) => {
     setEditingAddress(index);
-    setAddressForm({ ...address });
+    setAddressForm({
+      tipo: address.tipo || 'casa',
+      direccion_completa: address.direccion_completa || '',
+      ciudad: address.ciudad || '',
+      departamento: address.departamento || '',
+      codigo_postal: address.codigo_postal || '',
+      pais: address.pais || 'Colombia',
+      telefono_contacto: address.telefono_contacto || '',
+      referencia: address.referencia || '',
+      predeterminada: address.predeterminada || false
+    });
     setShowAddressModal(true);
   };
 
   // Save address (add or edit)
-  const handleSaveAddress = () => {
-    if (!addressForm.nombre.trim() || !addressForm.calle.trim() || !addressForm.ciudad.trim()) {
-      alert('Por favor completa los campos obligatorios (Nombre, Calle, Ciudad)');
+  const handleSaveAddress = async () => {
+    if (!addressForm.direccion_completa.trim() || !addressForm.ciudad.trim() || !addressForm.departamento.trim()) {
+      alert('Por favor completa los campos obligatorios (Dirección completa, Ciudad, Departamento)');
       return;
     }
 
-    let newAddresses = [...addresses];
-    
-    // Si se marca como principal, desmarcar las otras
-    if (addressForm.es_principal) {
-      newAddresses = newAddresses.map(addr => ({ ...addr, es_principal: false }));
-    }
-
-    if (editingAddress !== null) {
-      // Editando dirección existente
-      newAddresses[editingAddress] = { ...addressForm, id: addresses[editingAddress].id || Date.now() };
-    } else {
-      // Agregando nueva dirección
-      newAddresses.push({ ...addressForm, id: Date.now() });
-    }
-
-    setAddresses(newAddresses);
-    setShowAddressModal(false);
-    
-    // Aquí podrías hacer una llamada al API para guardar en el servidor
-    console.log('Direcciones actualizadas:', newAddresses);
-  };
-
-  // Delete address
-  const handleDeleteAddress = (index) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar esta dirección?')) {
-      const newAddresses = addresses.filter((_, i) => i !== index);
-      
-      // Si eliminamos la dirección principal y hay otras, hacer principal la primera
-      if (addresses[index].es_principal && newAddresses.length > 0) {
-        newAddresses[0].es_principal = true;
+    try {
+      if (editingAddress !== null) {
+        // Editando dirección existente
+        const addressId = addresses[editingAddress]._id;
+        const response = await axios.put(
+          `${API_BASE_URL}/direcciones/${addressId}`, 
+          addressForm, 
+          getAxiosConfig()
+        );
+        
+        if (response.data.status === 'success') {
+          // Refetch addresses to get updated data
+          await fetchAddresses();
+          
+          // If setting as predeterminada, make API call
+          if (addressForm.predeterminada) {
+            await axios.patch(
+              `${API_BASE_URL}/direcciones/${addressId}/predeterminada`, 
+              {}, 
+              getAxiosConfig()
+            );
+          }
+        }
+      } else {
+        // Agregando nueva dirección
+        const response = await axios.post(
+          `${API_BASE_URL}/direcciones`, 
+          addressForm, 
+          getAxiosConfig()
+        );
+        
+        if (response.data.status === 'success') {
+          // Refetch addresses to get updated data
+          await fetchAddresses();
+          
+          // If setting as predeterminada, make API call
+          if (addressForm.predeterminada && response.data.data) {
+            await axios.patch(
+              `${API_BASE_URL}/direcciones/${response.data.data._id}/predeterminada`, 
+              {}, 
+              getAxiosConfig()
+            );
+          }
+        }
       }
       
-      setAddresses(newAddresses);
-      console.log('Dirección eliminada');
+      setShowAddressModal(false);
+      console.log('Dirección guardada exitosamente');
+    } catch (error) {
+      console.error('Error saving address:', error);
+      if (error.response?.status === 401) {
+        alert('Sesión expirada. Por favor inicia sesión nuevamente.');
+      } else if (error.response?.status === 400) {
+        alert('Datos inválidos. Por favor revisa la información ingresada.');
+      } else {
+        alert('Error al guardar la dirección. Por favor intenta nuevamente.');
+      }
+    }
+  };
+
+
+  // Delete address
+  const handleDeleteAddress = async (index) => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar esta dirección?')) {
+      try {
+        const addressId = addresses[index]._id;
+        const response = await axios.delete(
+          `${API_BASE_URL}/direcciones/${addressId}`, 
+          getAxiosConfig()
+        );
+        
+        if (response.data.status === 'success') {
+          await fetchAddresses(); // Refetch addresses
+          console.log('Dirección eliminada exitosamente');
+        }
+      } catch (error) {
+        console.error('Error deleting address:', error);
+        if (error.response?.status === 401) {
+          alert('Sesión expirada. Por favor inicia sesión nuevamente.');
+        } else if (error.response?.status === 404) {
+          alert('Dirección no encontrada.');
+        } else {
+          alert('Error al eliminar la dirección. Por favor intenta nuevamente.');
+        }
+      }
     }
   };
 
   // Set address as primary
-  const handleSetPrimary = (index) => {
-    const newAddresses = addresses.map((addr, i) => ({
-      ...addr,
-      es_principal: i === index
-    }));
-    setAddresses(newAddresses);
-    console.log('Dirección principal actualizada');
+  const handleSetPrimary = async (index) => {
+    try {
+      const addressId = addresses[index]._id;
+      const response = await axios.patch(
+        `${API_BASE_URL}/direcciones/${addressId}/predeterminada`, 
+        {}, 
+        getAxiosConfig()
+      );
+      
+      if (response.data.status === 'success') {
+        await fetchAddresses(); // Refetch addresses to update state
+        console.log('Dirección predeterminada actualizada');
+      }
+    } catch (error) {
+      console.error('Error setting primary address:', error);
+      if (error.response?.status === 401) {
+        alert('Sesión expirada. Por favor inicia sesión nuevamente.');
+      } else if (error.response?.status === 404) {
+        alert('Dirección no encontrada.');
+      } else {
+        alert('Error al establecer dirección predeterminada. Por favor intenta nuevamente.');
+      }
+    }
   };
 
   // Cancel address modal
@@ -257,40 +375,40 @@ const ProfilePage = ({ userData }) => {
               </button>
             </div>
 
-            {addresses.length === 0 ? (
+            {isLoadingAddresses ? (
               <div className="text-center py-8 text-gray-500">
-                <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                <p>Cargando direcciones...</p>
+              </div>
+            ) : addresses.length === 0 ? (
+              <div className="text-center py-4 text-gray-500">
                 <p>No tienes direcciones registradas</p>
-                <button
-                  onClick={handleAddAddress}
-                  className="mt-2 text-blue-500 hover:underline"
-                >
-                  Agregar tu primera dirección
-                </button>
               </div>
             ) : (
               <div className="space-y-3">
                 {addresses.map((address, index) => (
-                  <div key={address.id || index} className={`border rounded-lg p-3 ${address.es_principal ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                  <div key={address._id || index} className={`border rounded-lg p-3 ${address.predeterminada ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium">{address.nombre}</p>
-                          {address.es_principal && (
+                          <p className="font-medium capitalize">{address.tipo}</p>
+                          {address.predeterminada && (
                             <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded">Principal</span>
                           )}
                         </div>
                         <p className="text-sm text-gray-600">
-                          {address.calle}, {address.ciudad}
-                          {address.estado && `, ${address.estado}`}
+                          {address.direccion_completa}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {address.ciudad}, {address.departamento}
                           {address.codigo_postal && ` ${address.codigo_postal}`}
                         </p>
                         <p className="text-sm text-gray-600">{address.pais}</p>
-                        {address.telefono && (
-                          <p className="text-sm text-gray-600">Tel: {address.telefono}</p>
+                        {address.telefono_contacto && (
+                          <p className="text-sm text-gray-600">Tel: {address.telefono_contacto}</p>
+                        )}
+                        {address.referencia && (
+                          <p className="text-sm text-gray-500 italic">{address.referencia}</p>
                         )}
                       </div>
                       <div className="flex flex-col gap-1 ml-2">
@@ -300,12 +418,12 @@ const ProfilePage = ({ userData }) => {
                         >
                           Editar
                         </button>
-                        {!address.es_principal && (
+                        {!address.predeterminada && (
                           <button
                             onClick={() => handleSetPrimary(index)}
                             className="text-green-500 hover:text-green-700 text-xs"
                           >
-                            Hacer principal
+                            Hacer predeterminada
                           </button>
                         )}
                         {addresses.length > 1 && (
@@ -421,34 +539,35 @@ const ProfilePage = ({ userData }) => {
               </h3>
               
               <div className="space-y-4">
-                <div>
+                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre de la dirección *
+                    Tipo de dirección
                   </label>
-                  <input
-                    type="text"
-                    name="nombre"
-                    value={addressForm.nombre}
+                  <select
+                    name="tipo"
+                    value={addressForm.tipo}
                     onChange={handleAddressChange}
-                    placeholder="Casa, Oficina, etc."
                     className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  >
+                    <option value="casa">Casa</option>
+                    <option value="trabajo">Trabajo</option>
+                    <option value="otro">Otro</option>
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Dirección *
+                    Dirección completa *
                   </label>
                   <input
                     type="text"
-                    name="calle"
-                    value={addressForm.calle}
+                    name="direccion_completa"
+                    value={addressForm.direccion_completa}
                     onChange={handleAddressChange}
-                    placeholder="Calle, número, apartamento"
+                    placeholder="Calle 123 #45-67, Apartamento 8B"
                     className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -459,18 +578,20 @@ const ProfilePage = ({ userData }) => {
                       name="ciudad"
                       value={addressForm.ciudad}
                       onChange={handleAddressChange}
+                      placeholder="Bogotá"
                       className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Estado/Región
+                      Departamento *
                     </label>
                     <input
                       type="text"
-                      name="estado"
-                      value={addressForm.estado}
+                      name="departamento"
+                      value={addressForm.departamento}
                       onChange={handleAddressChange}
+                      placeholder="Cundinamarca"
                       className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -486,6 +607,7 @@ const ProfilePage = ({ userData }) => {
                       name="codigo_postal"
                       value={addressForm.codigo_postal}
                       onChange={handleAddressChange}
+                      placeholder="110111"
                       className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -512,14 +634,28 @@ const ProfilePage = ({ userData }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Teléfono
+                    Teléfono de contacto
                   </label>
                   <input
                     type="tel"
-                    name="telefono"
-                    value={addressForm.telefono}
+                    name="telefono_contacto"
+                    value={addressForm.telefono_contacto}
                     onChange={handleAddressChange}
-                    placeholder="Teléfono de contacto"
+                    placeholder="+57 300 123 4567"
+                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Referencia
+                  </label>
+                  <input
+                    type="text"
+                    name="referencia"
+                    value={addressForm.referencia}
+                    onChange={handleAddressChange}
+                    placeholder="Edificio azul, al lado del parque"
                     className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -527,13 +663,13 @@ const ProfilePage = ({ userData }) => {
                 <div className="flex items-center">
                   <input
                     type="checkbox"
-                    name="es_principal"
-                    checked={addressForm.es_principal}
+                    name="predeterminada"
+                    checked={addressForm.predeterminada}
                     onChange={handleAddressChange}
                     className="mr-2"
                   />
                   <label className="text-sm text-gray-700">
-                    Establecer como dirección principal
+                    Establecer como dirección predeterminada
                   </label>
                 </div>
               </div>
