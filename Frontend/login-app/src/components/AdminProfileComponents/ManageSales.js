@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,useCallback } from 'react';
+import axios from 'axios';
 
 const ManageSales = () => {
   const [sales, setSales] = useState([]);
@@ -9,181 +10,227 @@ const ManageSales = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [dateFilter, setDateFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
 
   // Estados de envío disponibles
   const shippingStates = [
-    { value: 'pendiente', label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'procesando', label: 'Procesando', color: 'bg-blue-100 text-blue-800' },
+    { value: 'listo_para_envio', label: 'Listo para envío', color: 'bg-yellow-100 text-yellow-800' },
     { value: 'enviado', label: 'Enviado', color: 'bg-purple-100 text-purple-800' },
-    { value: 'en_transito', label: 'En Tránsito', color: 'bg-orange-100 text-orange-800' },
-    { value: 'entregado', label: 'Entregado', color: 'bg-green-100 text-green-800' },
-    { value: 'cancelado', label: 'Cancelado', color: 'bg-red-100 text-red-800' }
+    { value: 'entregado', label: 'Entregado', color: 'bg-green-100 text-green-800' }
   ];
+
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
   // Datos simulados (mock data)
-  const mockSalesData = [
-    {
-      id_venta: 1001,
-      cliente_nombre: 'María García',
-      cliente_email: 'maria.garcia@email.com',
-      fecha_venta: '2024-03-15T10:30:00Z',
-      total: 45000,
-      estado_envio: 'pendiente',
-      productos: [
-        { nombre: 'Cien años de soledad', cantidad: 1, precio: 25000 },
-        { nombre: 'El amor en los tiempos del cólera', cantidad: 1, precio: 20000 }
-      ]
-    },
-    {
-      id_venta: 1002,
-      cliente_nombre: 'Carlos Rodríguez',
-      cliente_email: 'carlos.rodriguez@email.com',
-      fecha_venta: '2024-03-14T14:15:00Z',
-      total: 32000,
-      estado_envio: 'procesando',
-      productos: [
-        { nombre: 'Don Quijote de la Mancha', cantidad: 2, precio: 16000 }
-      ]
-    },
-    {
-      id_venta: 1003,
-      cliente_nombre: 'Ana López',
-      cliente_email: 'ana.lopez@email.com',
-      fecha_venta: '2024-03-13T09:45:00Z',
-      total: 78000,
-      estado_envio: 'enviado',
-      productos: [
-        { nombre: 'La Odisea', cantidad: 1, precio: 28000 },
-        { nombre: 'Matemáticas Avanzadas', cantidad: 1, precio: 50000 }
-      ]
-    },
-    {
-      id_venta: 1004,
-      cliente_nombre: 'Diego Martínez',
-      cliente_email: 'diego.martinez@email.com',
-      fecha_venta: '2024-03-12T16:20:00Z',
-      total: 55000,
-      estado_envio: 'en_transito',
-      productos: [
-        { nombre: 'Historia Universal', cantidad: 1, precio: 35000 },
-        { nombre: 'Geografía Mundial', cantidad: 1, precio: 20000 }
-      ]
-    },
-    {
-      id_venta: 1005,
-      cliente_nombre: 'Laura Sánchez',
-      cliente_email: 'laura.sanchez@email.com',
-      fecha_venta: '2024-03-11T11:10:00Z',
-      total: 42000,
-      estado_envio: 'entregado',
-      productos: [
-        { nombre: 'Química Orgánica', cantidad: 1, precio: 42000 }
-      ]
-    },
-    {
-      id_venta: 1006,
-      cliente_nombre: 'Roberto Fernández',
-      cliente_email: 'roberto.fernandez@email.com',
-      fecha_venta: '2024-03-10T13:30:00Z',
-      total: 25000,
-      estado_envio: 'cancelado',
-      productos: [
-        { nombre: 'El Principito', cantidad: 1, precio: 15000 },
-        { nombre: 'Alice en el País de las Maravillas', cantidad: 1, precio: 10000 }
-      ]
-    },
-    {
-      id_venta: 1007,
-      cliente_nombre: 'Sofia Herrera',
-      cliente_email: 'sofia.herrera@email.com',
-      fecha_venta: '2024-03-09T15:45:00Z',
-      total: 67000,
-      estado_envio: 'pendiente',
-      productos: [
-        { nombre: 'Física Cuántica', cantidad: 1, precio: 45000 },
-        { nombre: 'Estadística Aplicada', cantidad: 1, precio: 22000 }
-      ]
-    },
-    {
-      id_venta: 1008,
-      cliente_nombre: 'Andrés Torres',
-      cliente_email: 'andres.torres@email.com',
-      fecha_venta: '2024-03-08T08:15:00Z',
-      total: 38000,
-      estado_envio: 'procesando',
-      productos: [
-        { nombre: 'Literatura Española', cantidad: 1, precio: 28000 },
-        { nombre: 'Poesía Contemporánea', cantidad: 1, precio: 10000 }
-      ]
-    }
-  ];
 
-  // Simular carga de datos
-  useEffect(() => {
-    const loadMockData = () => {
-      setLoading(true);
-      // Simular delay de carga
-      setTimeout(() => {
-        setSales(mockSalesData);
-        setLoading(false);
-      }, 1000);
+  const getCookie = (name) => {
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+      return match ? decodeURIComponent(match[2]) : null;
     };
-
-    loadMockData();
+  
+    // Utility - Get auth token from cookie
+  const getAuthToken = useCallback(() => {
+    const dataCookie = getCookie("data");
+    if (!dataCookie) return '';
+    
+    try {
+      const parsedData = JSON.parse(dataCookie);
+      return parsedData.authToken || '';
+    } catch (e) {
+      console.error('Error parsing auth token:', e);
+      return '';
+    }
   }, []);
 
-  // Aplicar filtros cuando cambien
-  useEffect(() => {
-    applyFilters();
-  }, [sales, searchTerm, statusFilter, dateFilter]);
-
-  const applyFilters = () => {
-    let filtered = [...sales];
-
-    // Filtro por término de búsqueda
-    if (searchTerm) {
-      filtered = filtered.filter(sale => 
-        sale.id_venta?.toString().includes(searchTerm) ||
-        sale.cliente_nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sale.cliente_email?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    // Filtro por estado
-    if (statusFilter !== 'todos') {
-      filtered = filtered.filter(sale => sale.estado_envio === statusFilter);
-    }
-
-    // Filtro por fecha
-    if (dateFilter) {
-      filtered = filtered.filter(sale => 
-        new Date(sale.fecha_venta).toISOString().split('T')[0] === dateFilter
-      );
-    }
-
-    setFilteredSales(filtered);
+  const apiHeaders = {
+    'Authorization': `Bearer ${getAuthToken()}`,
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
   };
 
-  const updateShippingStatus = (saleId, newStatus) => {
+  const fetchSales = async (page = 1, filters = {}) => {
     try {
-      // Simular actualización en el estado local
-      setSales(prevSales => 
-        prevSales.map(sale => 
-          sale.id_venta === saleId 
-            ? { ...sale, estado_envio: newStatus }
-            : sale
-        )
+      setLoading(true);
+      
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20',
+        //ordenar: '-fecha_creacion'
+      });
+
+      // Add filters to params
+      if (filters.estado && filters.estado !== 'todos') {
+        params.append('estado', filters.estado);
+      }
+      
+      if (filters.searchTerm) {
+        params.append('numero_venta', filters.searchTerm);
+      }
+      
+      if (filters.dateFrom) {
+        params.append('fecha_desde', new Date(filters.dateFrom).toISOString());
+      }
+      
+      if (filters.dateTo) {
+        params.append('fecha_hasta', new Date(filters.dateTo).toISOString());
+      }
+
+      const response = await axios.get(
+        `${API_BASE_URL}/api/v1/ventas/admin/todas?${params}`,
+        { headers: apiHeaders }
       );
-      
-      // Cerrar modal
-      setShowModal(false);
-      setSelectedSale(null);
-      
-      // Mostrar mensaje de éxito
-      alert(`Estado actualizado a: ${getStatusInfo(newStatus).label}`);
+
+      if (response.data.status === 'success') {
+        setSales(response.data.data || []);
+        setTotalResults(response.data.resultados || 0);
+        setTotalPages(Math.ceil((response.data.resultados || 0) / 20));
+      }
+    } catch (error) {
+      console.error('Error fetching sales:', error);
+      alert('Error al cargar las ventas');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+   const fetchSaleDetails = async (numeroVenta) => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/v1/ventas/${numeroVenta}`,
+        { headers: apiHeaders }
+      );
+
+      if (response.data.status === 'success') {
+        return response.data.data.venta;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching sale details:', error);
+      alert('Error al cargar los detalles de la venta');
+      return null;
+    }
+  };
+  
+  // Simular carga de datos
+  // useEffect(() => {
+  //   const loadMockData = () => {
+  //     setLoading(true);
+  //     // Simular delay de carga
+  //     setTimeout(() => {
+  //       setSales(mockSalesData);
+  //       setLoading(false);
+  //     }, 1000);
+  //   };
+
+  //   loadMockData();
+  // }, []);
+
+  // Aplicar filtros cuando cambien
+  // useEffect(() => {
+  //   applyFilters();
+  // }, [sales, searchTerm, statusFilter, dateFilter]);
+
+  // const applyFilters = () => {
+  //   let filtered = [...sales];
+
+  //   // Filtro por término de búsqueda
+  //   if (searchTerm) {
+  //     filtered = filtered.filter(sale => 
+  //       sale.id_venta?.toString().includes(searchTerm) ||
+  //       sale.cliente_nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //       sale.cliente_email?.toLowerCase().includes(searchTerm.toLowerCase())
+  //     );
+  //   }
+
+  //   // Filtro por estado
+  //   if (statusFilter !== 'todos') {
+  //     filtered = filtered.filter(sale => sale.estado_envio === statusFilter);
+  //   }
+
+  //   // Filtro por fecha
+  //   if (dateFilter) {
+  //     filtered = filtered.filter(sale => 
+  //       new Date(sale.fecha_venta).toISOString().split('T')[0] === dateFilter
+  //     );
+  //   }
+
+  //   setFilteredSales(filtered);
+  // };
+
+  useEffect(() => {
+    const filters = {
+      estado: statusFilter,
+      searchTerm: searchTerm,
+      dateFrom: dateFilter,
+      dateTo: dateFilter
+    };
+    
+    fetchSales(currentPage, filters);
+  }, [currentPage, statusFilter, searchTerm, dateFilter]);
+
+  // Apply local filtering for immediate UI response
+  useEffect(() => {
+    setFilteredSales(sales);
+  }, [sales]);
+
+   const updateShippingStatus = async (numeroVenta, newStatus) => {
+    try {
+      const requestData = {
+        estado: newStatus
+      };
+
+      // Add required fields based on status
+      if (newStatus === 'enviado') {
+        const numeroGuia = prompt('Ingrese el número de guía:');
+        if (!numeroGuia) {
+          alert('El número de guía es requerido para el estado "enviado"');
+          return;
+        }
+        requestData.numero_guia = numeroGuia;
+        
+        const transportadora = prompt('Ingrese la transportadora (opcional):');
+        if (transportadora) {
+          requestData.transportadora = transportadora;
+        }
+      } else if (newStatus === 'entregado') {
+        requestData.fecha_entrega = new Date().toISOString();
+      }
+
+      const response = await axios.patch(
+        `${API_BASE_URL}/api/v1/ventas/${numeroVenta}/envio`,
+        requestData,
+        { headers: apiHeaders }
+      );
+
+      if (response.data.status === 'success') {
+        // Update local state
+        setSales(prevSales => 
+          prevSales.map(sale => 
+            sale.numero_venta === numeroVenta 
+              ? { ...sale, envio: { ...sale.envio, estado_envio: newStatus } }
+              : sale
+          )
+        );
+        
+        // Close modal
+        setShowModal(false);
+        setSelectedSale(null);
+        
+        alert(`Estado actualizado a: ${getStatusInfo(newStatus).label}`);
+      }
     } catch (error) {
       console.error('Error updating shipping status:', error);
       alert('Error al actualizar el estado del envío');
+    }
+  };
+
+  const handleViewDetails = async (sale) => {
+    const saleDetails = await fetchSaleDetails(sale.numero_venta);
+    if (saleDetails) {
+      setSelectedSale(saleDetails);
+      setShowModal(true);
     }
   };
 
@@ -351,27 +398,27 @@ const ManageSales = () => {
                   </tr>
                 ) : (
                   filteredSales.map((sale) => {
-                    const statusInfo = getStatusInfo(sale.estado_envio);
+                    const statusInfo = getStatusInfo(sale.envio?.estado_envio || 'pendiente');
                     return (
-                      <tr key={sale.id_venta} className="hover:bg-gray-50">
+                      <tr key={sale._id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          #{sale.id_venta}
+                          {sale.numero_venta}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
                             <div className="text-sm font-medium text-gray-900">
-                              {sale.cliente_nombre || 'N/A'}
+                              {sale.id_cliente?.nombres} {sale.id_cliente?.apellidos}
                             </div>
                             <div className="text-sm text-gray-500">
-                              {sale.cliente_email || 'N/A'}
+                              {sale.id_cliente?.email}
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatDate(sale.fecha_venta)}
+                          {formatDate(sale.fecha_creacion)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(sale.total || 0)}
+                          {formatCurrency(sale.totales?.total_final || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.color}`}>
@@ -380,19 +427,13 @@ const ManageSales = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
-                            onClick={() => {
-                              setSelectedSale(sale);
-                              setShowModal(true);
-                            }}
+                            onClick={() => handleViewDetails(sale)}
                             className="text-blue-600 hover:text-blue-900 mr-3"
                           >
                             Ver detalles
                           </button>
                           <button
-                            onClick={() => {
-                              setSelectedSale(sale);
-                              setShowModal(true);
-                            }}
+                            onClick={() => handleViewDetails(sale)}
                             className="text-green-600 hover:text-green-900"
                           >
                             Cambiar estado
@@ -410,11 +451,11 @@ const ManageSales = () => {
         {/* Modal para ver detalles y cambiar estado */}
         {showModal && selectedSale && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
               <div className="mt-3">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-900">
-                    Detalle de Venta #{selectedSale.id_venta}
+                    Detalle de Venta {selectedSale.numero_venta}
                   </h3>
                   <button
                     onClick={() => setShowModal(false)}
@@ -428,10 +469,11 @@ const ManageSales = () => {
                 <div className="mb-6">
                   <h4 className="font-medium text-gray-900 mb-2">Información del Cliente</h4>
                   <div className="bg-gray-50 p-3 rounded">
-                    <p><strong>Nombre:</strong> {selectedSale.cliente_nombre || 'N/A'}</p>
-                    <p><strong>Email:</strong> {selectedSale.cliente_email || 'N/A'}</p>
-                    <p><strong>Fecha de venta:</strong> {formatDate(selectedSale.fecha_venta)}</p>
-                    <p><strong>Total:</strong> {formatCurrency(selectedSale.total || 0)}</p>
+                    <p><strong>Nombre:</strong> {selectedSale.id_cliente?.nombres} {selectedSale.id_cliente?.apellidos}</p>
+                    <p><strong>Email:</strong> {selectedSale.id_cliente?.email}</p>
+                    <p><strong>Teléfono:</strong> {selectedSale.id_cliente?.telefono || 'N/A'}</p>
+                    <p><strong>Fecha de venta:</strong> {formatDate(selectedSale.fecha_creacion)}</p>
+                    <p><strong>Total:</strong> {formatCurrency(selectedSale.totales?.total_final || 0)}</p>
                   </div>
                 </div>
 
@@ -439,36 +481,46 @@ const ManageSales = () => {
                 <div className="mb-6">
                   <h4 className="font-medium text-gray-900 mb-2">Productos</h4>
                   <div className="bg-gray-50 p-3 rounded">
-                    {selectedSale.productos?.map((producto, index) => (
+                    {selectedSale.items?.map((item, index) => (
                       <div key={index} className="flex justify-between items-center mb-2 last:mb-0">
-                        <span>{producto.nombre} (x{producto.cantidad})</span>
-                        <span className="font-medium">{formatCurrency(producto.precio * producto.cantidad)}</span>
+                        <div>
+                          <span className="font-medium">{item.snapshot?.titulo}</span>
+                          <p className="text-sm text-gray-600">Autor: {item.snapshot?.autor}</p>
+                          <p className="text-sm text-gray-600">Cantidad: {item.cantidad}</p>
+                        </div>
+                        <span className="font-medium">{formatCurrency(item.precios?.subtotal || 0)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Estado actual */}
+                {/* Información de envío */}
                 <div className="mb-6">
-                  <h4 className="font-medium text-gray-900 mb-2">Estado Actual del Envío</h4>
-                  <div className="mb-4">
-                    <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusInfo(selectedSale.estado_envio).color}`}>
-                      {getStatusInfo(selectedSale.estado_envio).label}
-                    </span>
+                  <h4 className="font-medium text-gray-900 mb-2">Información de Envío</h4>
+                  <div className="bg-gray-50 p-3 rounded">
+                    <p><strong>Tipo:</strong> {selectedSale.envio?.tipo}</p>
+                    <p><strong>Estado:</strong> {getStatusInfo(selectedSale.envio?.estado_envio).label}</p>
+                    {selectedSale.envio?.numero_guia && (
+                      <p><strong>Número de guía:</strong> {selectedSale.envio.numero_guia}</p>
+                    )}
+                    {selectedSale.envio?.transportadora && (
+                      <p><strong>Transportadora:</strong> {selectedSale.envio.transportadora}</p>
+                    )}
+                    <p><strong>Dirección:</strong> {selectedSale.envio?.direccion?.calle}, {selectedSale.envio?.direccion?.ciudad}</p>
                   </div>
                 </div>
 
                 {/* Cambiar estado */}
                 <div className="mb-6">
                   <h4 className="font-medium text-gray-900 mb-2">Cambiar Estado</h4>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {shippingStates.map((state) => (
                       <button
                         key={state.value}
-                        onClick={() => updateShippingStatus(selectedSale.id_venta, state.value)}
-                        disabled={state.value === selectedSale.estado_envio}
+                        onClick={() => updateShippingStatus(selectedSale.numero_venta, state.value)}
+                        disabled={state.value === selectedSale.envio?.estado_envio}
                         className={`p-2 text-sm rounded transition-colors ${
-                          state.value === selectedSale.estado_envio
+                          state.value === selectedSale.envio?.estado_envio
                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                             : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
                         }`}
