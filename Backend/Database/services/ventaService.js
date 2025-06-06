@@ -7,6 +7,15 @@ const emailService = require('../../src/utils/emailService');
 
 class VentaService {
   /**
+   * Calcular costo de envío según el tipo
+   * @param {String} tipoEnvio - 'domicilio' o 'recogida_tienda'
+   * @returns {Number} Costo del envío
+   */
+  _calcularCostoEnvio(tipoEnvio) {
+    const COSTO_ENVIO_DOMICILIO = 7000;
+    return tipoEnvio === 'domicilio' ? COSTO_ENVIO_DOMICILIO : 0;
+  }
+  /**
    * Crear una venta desde un carrito
    * @param {String} idUsuario - ID del usuario que realiza la compra
    * @param {Object} datosVenta - Datos de la venta (método de pago, envío, etc.)
@@ -36,25 +45,62 @@ class VentaService {
         throw new Error('El carrito está vacío');
       }
       
-      // 3. Validar disponibilidad de stock
+      // 3. Validar disponibilidad de stock y reservar
       for (const item of items) {
         const inventario = await Inventario.findOne({ 
           id_libro: item.id_libro._id 
         }).session(session);
         
-        if (!inventario || inventario.stock_disponible < item.cantidad) {
-          throw new Error(`Stock insuficiente para: ${item.id_libro.titulo}`);
+        if (!inventario) {
+          throw new Error(`No hay inventario registrado para: ${item.id_libro.titulo}`);
+        }
+
+        // Verificar stock disponible detalladamente
+        if (inventario.stock_disponible < item.cantidad) {
+          const razonFalta = this._determinarRazonFaltaStock(inventario, item.cantidad);
+          throw new Error(`Stock insuficiente para "${item.id_libro.titulo}". ${razonFalta}`);
+        }
+
+        // Reservar el stock inmediatamente
+        // await inventario.reservarEjemplares(
+        //   item.cantidad,
+        //   idUsuario,
+        //   null, // reservaId
+        //   `Reserva para venta - Usuario: ${idUsuario}`
+        // );
+      }
+      
+      // 4. Calcular costo de envío
+      const costoEnvio = this._calcularCostoEnvio(datosVenta.tipo_envio);
+      
+      // 5. Recalcular totales considerando impuesto opcional y envío
+      const totalSinEnvio = carrito.totales.total_final;
+      const totalConEnvio = totalSinEnvio + costoEnvio;
+      
+      // 6. Manejar impuesto opcional
+      let totalFinalAPagar = totalConEnvio;
+      let impuestoPagadoPorCliente = false;
+      let montoImpuestoExcluido = 0;
+      
+      if (datosVenta.cliente_pagara_impuesto === true) {
+        // El cliente pagará el impuesto por separado
+        impuestoPagadoPorCliente = true;
+        montoImpuestoExcluido = carrito.totales.total_impuestos;
+        totalFinalAPagar = totalConEnvio - montoImpuestoExcluido;
+        
+        if (totalFinalAPagar < 0) {
+          totalFinalAPagar = 0;
         }
       }
       
-      // 4. Validar método de pago
+      // 7. Validar método de pago con el monto final
       const tarjeta = await this._validarMetodoPago(
         idUsuario, 
         datosVenta.id_tarjeta, 
-        carrito.totales.total_final
+        totalFinalAPagar
       );
       
-      // 5. Preparar items de la venta
+      // 8. Preparar items de la venta
       const itemsVenta = items.map(item => ({
         id_libro: item.id_libro._id,
         snapshot: {
@@ -74,7 +120,7 @@ class VentaService {
         }
       }));
       
-      // 6. Crear la venta
+      // 9. Crear la venta con información de impuesto
       const nuevaVenta = new Venta({
         id_cliente: idUsuario,
         id_carrito_origen: carrito._id,
@@ -83,9 +129,9 @@ class VentaService {
           subtotal_sin_descuentos: carrito.totales.subtotal_base,
           total_descuentos: carrito.totales.total_descuentos,
           subtotal_con_descuentos: carrito.totales.subtotal_con_descuentos,
-          total_impuestos: carrito.totales.total_impuestos,
-          costo_envio: carrito.totales.costo_envio,
-          total_final: carrito.totales.total_final
+          total_impuestos: impuestoPagadoPorCliente ? 0 : carrito.totales.total_impuestos,
+          costo_envio: costoEnvio,
+          total_final: totalFinalAPagar
         },
         pago: {
           metodo: tarjeta.tipo === 'debito' ? 'tarjeta_debito' : 'tarjeta_credito',
@@ -97,49 +143,52 @@ class VentaService {
           tipo: datosVenta.tipo_envio,
           direccion: datosVenta.direccion_envio,
           id_tienda_recogida: datosVenta.id_tienda_recogida,
-          costo: carrito.totales.costo_envio,
+          costo: costoEnvio,
           notas_envio: datosVenta.notas_envio
         },
         descuentos_aplicados: carrito.codigos_carrito?.map(c => ({
           codigo: c.codigo,
           tipo: 'codigo_promocional'
-        })) || []
+        })) || [],
+        // NUEVO: Información del impuesto
+        impuesto_info: {
+          pagado_por_cliente: impuestoPagadoPorCliente,
+          monto_excluido: montoImpuestoExcluido,
+          monto_incluido: impuestoPagadoPorCliente ? 0 : carrito.totales.total_impuestos
+        }
       });
       
-      // CORRECCIÓN: Primero guardar la venta en la base de datos
+      // 10. Guardar la venta en la base de datos
       await nuevaVenta.save({ session });
       
-      // 7. Procesar el pago
+      // 11. Procesar el pago
       try {
-        await this._procesarPago(tarjeta, carrito.totales.total_final, nuevaVenta.numero_venta);
-        // CORRECCIÓN: Aplicar cambios al objeto en memoria sin guardar
+        await this._procesarPago(tarjeta, totalFinalAPagar, nuevaVenta.numero_venta);
         nuevaVenta.aprobarPago();
-        // CORRECCIÓN: Luego guardar explícitamente con la sesión
         await nuevaVenta.save({ session });
       } catch (errorPago) {
-        // En caso de error, rechazar el pago sin guardar
         nuevaVenta.rechazarPago(errorPago.message);
-        // Guardar explícitamente con la sesión
         await nuevaVenta.save({ session });
         throw new Error(`Error procesando el pago: ${errorPago.message}`);
       }
       
-      // 8. Actualizar inventario
+      // 12. Confirmar las reservas como ventas en el inventario
       for (const item of items) {
         const inventario = await Inventario.findOne({ 
           id_libro: item.id_libro._id 
         }).session(session);
         
+        // Registrar salida definitiva (convierte reserva en venta)
         await inventario.registrarSalida(
           item.cantidad,
           'venta',
           idUsuario,
           nuevaVenta._id,
-          `Venta ${nuevaVenta.numero_venta}`
+          `Venta confirmada ${nuevaVenta.numero_venta}`
         );
       }
       
-      // 9. Limpiar carrito
+      // 13. Limpiar carrito
       await CarritoItem.deleteMany({ id_carrito: carrito._id }).session(session);
       carrito.estado = 'convertido_a_compra';
       carrito.n_item = 0;
@@ -153,10 +202,10 @@ class VentaService {
       };
       await carrito.save({ session });
       
-      // 10. Confirmar transacción
+      // 14. Confirmar transacción
       await session.commitTransaction();
       
-      // 11. Enviar confirmación por email (no bloqueante)
+      // 15. Enviar confirmación por email (no bloqueante)
       this._enviarConfirmacionCompra(nuevaVenta, idUsuario).catch(err => 
         console.error('Error enviando email de confirmación:', err)
       );
@@ -169,6 +218,32 @@ class VentaService {
     } finally {
       session.endSession();
     }
+  }
+
+  /**
+   * Determinar la razón específica de falta de stock
+   * @param {Object} inventario - Objeto de inventario
+   * @param {Number} cantidadSolicitada - Cantidad solicitada
+   * @returns {String} Descripción de la razón
+   */
+  _determinarRazonFaltaStock(inventario, cantidadSolicitada) {
+    const stockTotal = inventario.stock_total;
+    const stockDisponible = inventario.stock_disponible;
+    const stockReservado = inventario.stock_reservado;
+    
+    if (stockTotal === 0) {
+      return 'El libro está completamente agotado.';
+    }
+    
+    if (stockDisponible === 0 && stockReservado > 0) {
+      return `Todas las ${stockTotal} unidades están reservadas por otros usuarios.`;
+    }
+    
+    if (stockDisponible > 0 && stockDisponible < cantidadSolicitada) {
+      return `Solo hay ${stockDisponible} unidades disponibles de ${stockTotal} en total (${stockReservado} reservadas).`;
+    }
+    
+    return `Stock insuficiente: disponible ${stockDisponible}, solicitado ${cantidadSolicitada}.`;
   }
   
   /**
@@ -267,6 +342,28 @@ class VentaService {
     return {
       ventas,
       resumen: totales[0] || { total_compras: 0, monto_total: 0 }
+    };
+  }
+
+  /**
+   * Obtener ventas de todos los clientes (admin)
+   */
+  async obtenerVentasAdmin(filtros = {},opciones = {}) {
+    const ventas = await Venta.obtenerVentasAdmin(filtros, opciones);
+    // Calcular totales
+    const totales = await Venta.aggregate([
+      {
+        $group: {
+          _id: null,
+          total_ventas: { $sum: 1 },
+          monto_total: { $sum: '$totales.total_final' }
+        }
+      }
+    ]);
+
+    return {
+      ventas,
+      resumen: totales[0] || { total_ventas: 0, monto_total: 0 }
     };
   }
   
