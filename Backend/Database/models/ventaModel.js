@@ -72,8 +72,6 @@ const ventaSchema = new Schema({
   // Número de venta único y legible
   numero_venta: {
     type: String,
-    unique: true,
-    index: true,
     default: function() {
       const fecha = new Date();
       const año = fecha.getFullYear();

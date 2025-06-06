@@ -16,6 +16,46 @@ class VentaService {
   }
 
   /**
+   * Mapea y valida la dirección de envío desde el request al schema requerido
+   * @private
+   * @param {Object} direccionEnvio - Dirección del request
+   * @returns {Object} Dirección mapeada para el schema
+   */
+  _mapearDireccionEnvio(direccionEnvio) {
+    if (!direccionEnvio) {
+      throw new Error('La dirección de envío es obligatoria');
+    }
+
+    // Mapear campos que pueden venir con nombres diferentes
+    const direccionMapeada = {
+      direccion_completa: direccionEnvio.calle || direccionEnvio.direccion_completa || direccionEnvio.direccion,
+      ciudad: direccionEnvio.ciudad,
+      departamento: direccionEnvio.departamento || direccionEnvio.estado_provincia || direccionEnvio.estado,
+      codigo_postal: direccionEnvio.codigo_postal,
+      pais: direccionEnvio.pais || 'Colombia',
+      referencia: direccionEnvio.referencias || direccionEnvio.referencia,
+      telefono_contacto: direccionEnvio.telefono_contacto || direccionEnvio.telefono
+    };
+
+    // Validar campos obligatorios
+    if (!direccionMapeada.direccion_completa) {
+      throw new Error('La dirección completa es obligatoria (calle, carrera, etc.)');
+    }
+
+    if (!direccionMapeada.ciudad) {
+      throw new Error('La ciudad es obligatoria');
+    }
+
+    if (!direccionMapeada.departamento) {
+      throw new Error('El departamento/estado es obligatorio');
+    }
+
+    console.log('Dirección mapeada:', direccionMapeada);
+    
+    return direccionMapeada;
+  }
+
+  /**
    * Crear una venta desde un carrito CON MANEJO CORRECTO DE STOCK RESERVADO
    */
   async crearVenta(idUsuario, datosVenta) {
@@ -86,6 +126,34 @@ class VentaService {
         datosVenta.id_tarjeta, 
         totalFinalAPagar
       );
+
+      let direccionEnvioMapeada = null;
+      if (datosVenta.direccion_envio) {
+        direccionEnvioMapeada = this._mapearDireccionEnvio(datosVenta.direccion_envio);
+      }
+      
+      let infoEnvio = {};
+  
+      if (datosVenta.tipo_envio === 'domicilio') {
+        if (!direccionEnvioMapeada) {
+          throw new Error('La dirección de envío es obligatoria para envío a domicilio');
+        }
+        
+        infoEnvio = {
+          tipo: 'domicilio',
+          direccion: direccionEnvioMapeada,
+          costo_envio: this._calcularCostoEnvio(direccionEnvioMapeada.ciudad, direccionEnvioMapeada.departamento),
+          instrucciones_entrega: datosVenta.notas_envio || '',
+          estado_envio: 'ENVIADO'
+        };
+      } else if (datosVenta.tipo_envio === 'recogida_tienda') {
+        infoEnvio = {
+          tipo: 'recogida_tienda',
+          id_tienda_recogida: datosVenta.id_tienda_recogida,
+          costo_envio: 0,
+          estado_envio: 'EN PREPARACION'
+        };
+      }
       
       // 8. Preparar items de la venta
       const itemsVenta = items.map(item => ({
@@ -128,13 +196,7 @@ class VentaService {
           ultimos_digitos: tarjeta.ultimos_digitos,
           marca_tarjeta: tarjeta.marca
         },
-        envio: {
-          tipo: datosVenta.tipo_envio,
-          direccion: datosVenta.direccion_envio,
-          id_tienda_recogida: datosVenta.id_tienda_recogida,
-          costo: costoEnvio,
-          notas_envio: datosVenta.notas_envio
-        },
+        envio: infoEnvio,
         descuentos_aplicados: carrito.codigos_carrito?.map(c => ({
           codigo: c.codigo,
           tipo: 'codigo_promocional'
