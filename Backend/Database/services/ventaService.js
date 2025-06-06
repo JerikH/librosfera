@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 const Venta = require('../models/ventaModel');
 const Devolucion = require('../models/devolucionModel');
+const devolucionService = require('./devolucionService');
 const { Carrito, CarritoItem, Libro, Inventario } = require('../models');
 const tarjetaService = require('./tarjetaService');
 const emailService = require('../../src/utils/emailService');
@@ -922,12 +923,19 @@ class VentaService {
       if (!venta) {
         throw new Error('Venta no encontrada');
       }
+
       
       const devolucion = await Devolucion.crearDesdeVenta(
         venta,
         itemsDevolucion,
         idCliente
       );
+      let qr = await devolucionService.generarCodigoQRDevolucion(devolucion.codigo_devolucion);
+      devolucion.qr_code = {
+        ...devolucion.qr_code,
+        ...qr
+      };
+        
       
       await devolucion.save({ session });
       

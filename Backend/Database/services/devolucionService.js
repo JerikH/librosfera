@@ -6,6 +6,7 @@ const tarjetaService = require('./tarjetaService');
 const emailService = require('../../src/utils/emailService');
 const path = require('path');
 const fs = require('fs').promises;
+const QRCode = require('qrcode');
 
 class DevolucionService {
   /**
@@ -44,7 +45,32 @@ class DevolucionService {
       }
     };
   }
-  
+
+  /**
+   * Generar código QR para devolución
+   */
+  async generarCodigoQRDevolucion(codigoDevolucion) {
+    try{
+      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+      let qr_code = {url_rastreo: '', codigo: '', imagen_base64: ''};
+      qr_code.url_rastreo = `${baseUrl}/devolucion/rastreo/${codigoDevolucion}`;
+      qr_code.codigo = `QR-${codigoDevolucion}`;
+      const qrOptions = {
+        type: 'png',
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      };
+      qr_code.imagen_base64 = await QRCode.toDataURL(qr_code.url_rastreo, qrOptions);
+      return qr_code;
+    } catch (error) {
+      console.error('Error generando código QR:', error);
+      throw new Error('No se pudo generar el código QR para la devolución');
+    }
+  }
   /**
    * Obtener detalle de una devolución
    */
