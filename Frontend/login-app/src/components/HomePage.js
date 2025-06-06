@@ -431,11 +431,11 @@ const HomePage = () => {
   const fetchFeaturedBooks = useCallback(async () => {
     const cacheKey = 'featuredBooks';
     
-    // Check cache first
-    if (apiCache.isValid(cacheKey)) {
-      setFeaturedBooks(apiCache.get(cacheKey));
-      return apiCache.get(cacheKey);
-    }
+    // // Check cache first
+    // if (apiCache.isValid(cacheKey)) {
+    //   setFeaturedBooks(apiCache.get(cacheKey));
+    //   return apiCache.get(cacheKey);
+    // }
     
     try {
       const response = await axios.get(`${API_BASE_URL}/libros/destacados`, {
