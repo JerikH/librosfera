@@ -174,25 +174,19 @@ router.use(protect);
  *         description: Stock insuficiente
  */
 
+// RUTAS DE CLIENTE
 router.post('/preview', authorize('cliente'), calcularPreviewVenta);
-
 router.post('/', authorize('cliente'), crearVenta);
-
-// Obtener mis ventas
 router.get('/mis-ventas', authorize('cliente'), obtenerMisVentas);
-
-// Cancelar mi venta (cliente)
 router.patch('/:numeroVenta/cancelar', authorize('cliente'), cancelarVentaCliente);
-
-// Crear solicitud de devolución
 router.post('/:numeroVenta/devolucion', authorize('cliente'), crearDevolucion);
 
 // RUTAS ADMINISTRATIVAS
 
-// Obtener estadísticas de ventas
+// Obtener estadísticas de ventas (CON MÉTRICAS DE DEVOLUCIONES)
 router.get('/estadisticas', authorize('administrador', 'root'), obtenerEstadisticas);
 
-// Obtener todas las ventas (admin)
+// Obtener todas las ventas (admin) - CON FILTROS DE DEVOLUCIÓN
 router.get('/admin/todas', authorize('administrador', 'root'), obtenerVentas);
 
 // Actualizar estado de envío
@@ -206,7 +200,7 @@ router.post('/:numeroVenta/notas', authorize('administrador', 'root'), agregarNo
 
 // RUTAS MIXTAS (Cliente para sus ventas, Admin para cualquiera)
 
-// Obtener detalle de venta específica
+// Obtener detalle de venta específica (CON INFORMACIÓN COMPLETA DE DEVOLUCIONES)
 router.get('/:numeroVenta', obtenerDetalleVenta);
 
 module.exports = router;

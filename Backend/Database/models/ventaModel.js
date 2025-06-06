@@ -1,3 +1,4 @@
+// Database/models/ventaModel.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const addressSchema = require('./schemas/addressSchema');
@@ -60,11 +61,26 @@ const ventaItemSchema = new Schema({
     default: 'procesando'
   },
   
-  // Para devoluciones parciales
-  cantidad_devuelta: {
-    type: Number,
-    default: 0,
-    min: 0
+  // Para devoluciones - MEJORADO
+  devolucion_info: {
+    cantidad_devuelta: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    cantidad_disponible_devolucion: {
+      type: Number,
+      default: function() { return this.cantidad; }
+    },
+    monto_devuelto: {
+      type: Number,
+      default: 0
+    },
+    ultima_devolucion: Date,
+    tiene_devolucion_activa: {
+      type: Boolean,
+      default: false
+    }
   }
 });
 
@@ -78,7 +94,7 @@ const ventaSchema = new Schema({
       const mes = String(fecha.getMonth() + 1).padStart(2, '0');
       const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
       return `VTA-${año}${mes}-${random}`;
-    }
+    },
   },
   
   // Cliente
@@ -97,6 +113,42 @@ const ventaSchema = new Schema({
   
   // Items de la venta
   items: [ventaItemSchema],
+  
+  // NUEVO: Sistema de devoluciones integrado
+  sistema_devolucion: {
+    tiene_devoluciones: {
+      type: Boolean,
+      default: false,
+    },
+    estado_devolucion: {
+      type: String,
+      enum: [
+        'sin_devolucion',
+        'devolucion_solicitada', 
+        'devolucion_en_proceso',
+        'devolucion_aprobada',
+        'devolucion_rechazada',
+        'devolucion_completada',
+        'devolucion_parcial'
+      ],
+      default: 'sin_devolucion',
+    },
+    cantidad_devoluciones: {
+      type: Number,
+      default: 0
+    },
+    monto_total_devuelto: {
+      type: Number,
+      default: 0
+    },
+    ultima_solicitud_devolucion: Date,
+    permite_devolucion: {
+      type: Boolean,
+      default: function() {
+        return this.estado === 'entregado';
+      }
+    }
+  },
   
   // Totales y costos
   totales: {
@@ -309,16 +361,51 @@ const ventaSchema = new Schema({
   }
 });
 
-// ÍNDICES
+// ÍNDICES MEJORADOS
 ventaSchema.index({ id_cliente: 1, fecha_creacion: -1 });
 ventaSchema.index({ estado: 1, fecha_creacion: -1 });
 ventaSchema.index({ 'pago.estado_pago': 1 });
 ventaSchema.index({ 'envio.numero_guia': 1 });
 ventaSchema.index({ numero_venta: 1 });
+ventaSchema.index({ 'sistema_devolucion.tiene_devoluciones': 1 });
+ventaSchema.index({ 'sistema_devolucion.estado_devolucion': 1 });
 
-// MÉTODOS DE INSTANCIA
+// MIDDLEWARE MEJORADO
+ventaSchema.pre('save', function(next) {
+  // Actualizar información de devoluciones automáticamente
+  this._actualizarInfoDevoluciones();
+  next();
+});
 
-// Registrar evento en el historial (CORREGIDO: no guarda automáticamente)
+ventaSchema.methods._actualizarInfoDevoluciones = function() {
+  let totalDevuelto = 0;
+  let tieneDevolucionActiva = false;
+  
+  for (const item of this.items) {
+    if (item.devolucion_info) {
+      totalDevuelto += item.devolucion_info.monto_devuelto || 0;
+      if (item.devolucion_info.tiene_devolucion_activa) {
+        tieneDevolucionActiva = true;
+      }
+    }
+  }
+  
+  this.sistema_devolucion.monto_total_devuelto = totalDevuelto;
+  
+  // Actualizar estado de devolución automáticamente
+  if (totalDevuelto > 0) {
+    this.sistema_devolucion.tiene_devoluciones = true;
+    if (totalDevuelto >= this.totales.total_final) {
+      this.sistema_devolucion.estado_devolucion = 'devolucion_completada';
+    } else {
+      this.sistema_devolucion.estado_devolucion = 'devolucion_parcial';
+    }
+  }
+};
+
+// MÉTODOS DE INSTANCIA EXISTENTES Y NUEVOS
+
+// Registrar evento en el historial (sin guardar automáticamente)
 ventaSchema.methods.registrarEvento = function(evento, descripcion, usuarioId = null, metadata = {}) {
   this.historial.push({
     evento,
@@ -327,10 +414,10 @@ ventaSchema.methods.registrarEvento = function(evento, descripcion, usuarioId = 
     metadata
   });
   
-  return this; // Retornamos el objeto sin guardarlo
+  return this;
 };
 
-// Cambiar estado de la venta (CORREGIDO: no guarda automáticamente)
+// Cambiar estado de la venta (sin guardar automáticamente)
 ventaSchema.methods.cambiarEstado = function(nuevoEstado, usuarioId, descripcion = '') {
   const estadoAnterior = this.estado;
   this.estado = nuevoEstado;
@@ -344,6 +431,112 @@ ventaSchema.methods.cambiarEstado = function(nuevoEstado, usuarioId, descripcion
   
   return this;
 };
+
+// NUEVOS MÉTODOS PARA DEVOLUCIONES
+
+// Actualizar estado de devolución
+ventaSchema.methods.actualizarEstadoDevolucion = function(nuevoEstado, usuarioId, descripcion = '') {
+  const estadoAnterior = this.sistema_devolucion.estado_devolucion;
+  this.sistema_devolucion.estado_devolucion = nuevoEstado;
+  
+  // Activar flag si no es 'sin_devolucion'
+  if (nuevoEstado !== 'sin_devolucion') {
+    this.sistema_devolucion.tiene_devoluciones = true;
+  }
+  
+  this.registrarEvento(
+    'cambio_estado_devolucion',
+    descripcion || `Estado de devolución cambiado de ${estadoAnterior} a ${nuevoEstado}`,
+    usuarioId,
+    { 
+      estado_devolucion_anterior: estadoAnterior, 
+      estado_devolucion_nuevo: nuevoEstado 
+    }
+  );
+  
+  return this;
+};
+
+// Registrar nueva solicitud de devolución
+ventaSchema.methods.registrarSolicitudDevolucion = function(codigoDevolucion, itemsAfectados, usuarioId) {
+  this.sistema_devolucion.cantidad_devoluciones += 1;
+  this.sistema_devolucion.ultima_solicitud_devolucion = new Date();
+  
+  // Marcar items afectados
+  for (const itemAfectado of itemsAfectados) {
+    const item = this.items.id(itemAfectado.id_item_venta);
+    if (item) {
+      item.devolucion_info.tiene_devolucion_activa = true;
+      item.devolucion_info.cantidad_disponible_devolucion -= itemAfectado.cantidad;
+    }
+  }
+  
+  this.actualizarEstadoDevolucion('devolucion_solicitada', usuarioId, 
+    `Nueva solicitud de devolución: ${codigoDevolucion}`);
+  
+  return this;
+};
+
+// Actualizar cuando se aprueba una devolución
+ventaSchema.methods.aprobarDevolucion = function(codigoDevolucion, usuarioId) {
+  this.actualizarEstadoDevolucion('devolucion_aprobada', usuarioId,
+    `Devolución aprobada: ${codigoDevolucion}`);
+  
+  return this;
+};
+
+// Actualizar cuando se rechaza una devolución
+ventaSchema.methods.rechazarDevolucion = function(codigoDevolucion, usuarioId, motivo) {
+  // Liberar items que estaban marcados como en devolución
+  for (const item of this.items) {
+    if (item.devolucion_info.tiene_devolucion_activa) {
+      // Solo liberar si no hay otras devoluciones activas para este item
+      item.devolucion_info.tiene_devolucion_activa = false;
+      item.devolucion_info.cantidad_disponible_devolucion = 
+        item.cantidad - item.devolucion_info.cantidad_devuelta;
+    }
+  }
+  
+  this.actualizarEstadoDevolucion('devolucion_rechazada', usuarioId,
+    `Devolución rechazada: ${codigoDevolucion} - ${motivo}`);
+  
+  return this;
+};
+
+// Completar devolución con reembolso
+ventaSchema.methods.completarDevolucion = function(codigoDevolucion, itemsReembolsados, montoReembolsado, usuarioId) {
+  // Actualizar items reembolsados
+  for (const itemReembolsado of itemsReembolsados) {
+    const item = this.items.id(itemReembolsado.id_item);
+    if (item) {
+      item.devolucion_info.cantidad_devuelta += itemReembolsado.cantidad_devuelta;
+      item.devolucion_info.monto_devuelto += itemReembolsado.monto_reembolsado;
+      item.devolucion_info.tiene_devolucion_activa = false;
+      
+      // Actualizar estado del item si se devolvió completamente
+      if (item.devolucion_info.cantidad_devuelta >= item.cantidad) {
+        item.estado_item = 'devuelto';
+      } else if (item.devolucion_info.cantidad_devuelta > 0) {
+        item.estado_item = 'devolucion_parcial';
+      }
+    }
+  }
+  
+  // Actualizar totales de devolución
+  this.sistema_devolucion.monto_total_devuelto += montoReembolsado;
+  
+  // Determinar nuevo estado
+  const estadoDevolucion = this.sistema_devolucion.monto_total_devuelto >= this.totales.total_final
+    ? 'devolucion_completada'
+    : 'devolucion_parcial';
+  
+  this.actualizarEstadoDevolucion(estadoDevolucion, usuarioId,
+    `Devolución completada: ${codigoDevolucion} - Reembolso: $${montoReembolsado.toLocaleString()}`);
+  
+  return this;
+};
+
+// MÉTODOS EXISTENTES ACTUALIZADOS
 
 ventaSchema.methods.obtenerTotalAPagar = function() {
   return this.totales.total_final;
@@ -370,7 +563,7 @@ ventaSchema.methods.obtenerInfoImpuesto = function() {
   return info;
 };
 
-// Aprobar pago (CORREGIDO: no guarda automáticamente)
+// Aprobar pago (sin guardar automáticamente)
 ventaSchema.methods.aprobarPago = function(referenciaPago = null) {
   if (this.pago.estado_pago !== 'pendiente' && this.pago.estado_pago !== 'procesando') {
     throw new Error('El pago ya fue procesado');
@@ -383,14 +576,12 @@ ventaSchema.methods.aprobarPago = function(referenciaPago = null) {
   }
   
   this.cambiarEstado('pago_aprobado', null, 'Pago aprobado exitosamente');
-  
-  // Automáticamente pasar a preparando
   this.cambiarEstado('preparando', null, 'Orden en preparación');
   
   return this;
 };
 
-// Rechazar pago (CORREGIDO: no guarda automáticamente)
+// Rechazar pago (sin guardar automáticamente)
 ventaSchema.methods.rechazarPago = function(motivo = '') {
   this.pago.estado_pago = 'rechazado';
   this.cambiarEstado('fallo_pago', null, `Pago rechazado: ${motivo}`);
@@ -398,7 +589,7 @@ ventaSchema.methods.rechazarPago = function(motivo = '') {
   return this;
 };
 
-// Marcar como listo para envío (CORREGIDO: no guarda automáticamente)
+// Marcar como listo para envío (sin guardar automáticamente)
 ventaSchema.methods.marcarListoParaEnvio = function(usuarioId) {
   if (this.estado !== 'preparando') {
     throw new Error('La orden debe estar en preparación para marcarla como lista para envío');
@@ -409,7 +600,7 @@ ventaSchema.methods.marcarListoParaEnvio = function(usuarioId) {
   return this;
 };
 
-// Marcar como enviado (CORREGIDO: no guarda automáticamente)
+// Marcar como enviado (sin guardar automáticamente)
 ventaSchema.methods.marcarComoEnviado = function(datosEnvio, usuarioId) {
   if (this.estado !== 'listo_para_envio' && this.estado !== 'preparando') {
     throw new Error('La orden debe estar lista para envío');
@@ -430,7 +621,7 @@ ventaSchema.methods.marcarComoEnviado = function(datosEnvio, usuarioId) {
   return this;
 };
 
-// Marcar como entregado (CORREGIDO: no guarda automáticamente)
+// Marcar como entregado (sin guardar automáticamente)
 ventaSchema.methods.marcarComoEntregado = function(usuarioId, fechaEntrega = null) {
   if (this.estado !== 'enviado' && this.estado !== 'en_transito') {
     throw new Error('La orden debe estar enviada para marcarla como entregada');
@@ -438,21 +629,23 @@ ventaSchema.methods.marcarComoEntregado = function(usuarioId, fechaEntrega = nul
   
   this.envio.fecha_entrega_real = fechaEntrega || new Date();
   
-  // Actualizar estado de todos los items
+  // Actualizar estado de todos los items (solo si no han sido devueltos)
   this.items.forEach(item => {
-    if (item.estado_item !== 'devuelto') {
+    if (!['devuelto', 'devolucion_parcial'].includes(item.estado_item)) {
       item.estado_item = 'entregado';
     }
   });
+  
+  // Activar la posibilidad de devolución
+  this.sistema_devolucion.permite_devolucion = true;
   
   this.cambiarEstado('entregado', usuarioId, 'Orden entregada exitosamente');
   
   return this;
 };
 
-// Cancelar venta (CORREGIDO: no guarda automáticamente)
+// Cancelar venta (sin guardar automáticamente)
 ventaSchema.methods.cancelarVenta = function(motivo, solicitadaPor, usuarioId) {
-  // Validar que se puede cancelar
   const estadosNoCancelables = ['enviado', 'en_transito', 'entregado', 'cancelado', 'reembolsado'];
   if (estadosNoCancelables.includes(this.estado)) {
     throw new Error(`No se puede cancelar una orden en estado: ${this.estado}`);
@@ -465,7 +658,6 @@ ventaSchema.methods.cancelarVenta = function(motivo, solicitadaPor, usuarioId) {
     usuario_responsable: usuarioId
   };
   
-  // Si el pago fue aprobado, marcarlo para reembolso
   if (this.pago.estado_pago === 'aprobado') {
     this.pago.estado_pago = 'reembolsado';
   }
@@ -485,10 +677,14 @@ ventaSchema.methods.agregarNotaInterna = function(nota, usuarioId) {
   return this;
 };
 
-// Validar si se puede solicitar devolución
+// MÉTODO MEJORADO: Validar si se puede solicitar devolución
 ventaSchema.methods.puedeSolicitarDevolucion = function() {
   if (this.estado !== 'entregado') {
     return { puede: false, razon: 'La orden debe estar entregada para solicitar devolución' };
+  }
+  
+  if (!this.envio.fecha_entrega_real) {
+    return { puede: false, razon: 'No se ha registrado fecha de entrega' };
   }
   
   const diasDesdeEntrega = Math.floor((new Date() - this.envio.fecha_entrega_real) / (1000 * 60 * 60 * 24));
@@ -496,10 +692,37 @@ ventaSchema.methods.puedeSolicitarDevolucion = function() {
     return { puede: false, razon: 'Han pasado más de 8 días desde la entrega' };
   }
   
-  return { puede: true };
+  // Verificar si hay items disponibles para devolución
+  const itemsDisponibles = this.items.filter(item => 
+    item.devolucion_info.cantidad_disponible_devolucion > 0
+  );
+  
+  if (itemsDisponibles.length === 0) {
+    return { puede: false, razon: 'Todos los items ya han sido devueltos' };
+  }
+  
+  return { 
+    puede: true, 
+    items_disponibles: itemsDisponibles.length,
+    dias_restantes: 8 - diasDesdeEntrega
+  };
 };
 
-// MÉTODOS ESTÁTICOS
+// Obtener resumen de devoluciones
+ventaSchema.methods.obtenerResumenDevoluciones = function() {
+  return {
+    tiene_devoluciones: this.sistema_devolucion.tiene_devoluciones,
+    estado_devolucion: this.sistema_devolucion.estado_devolucion,
+    cantidad_devoluciones: this.sistema_devolucion.cantidad_devoluciones,
+    monto_total_devuelto: this.sistema_devolucion.monto_total_devuelto,
+    porcentaje_devuelto: this.totales.total_final > 0 
+      ? (this.sistema_devolucion.monto_total_devuelto / this.totales.total_final) * 100 
+      : 0,
+    puede_solicitar_devolucion: this.puedeSolicitarDevolucion()
+  };
+};
+
+// MÉTODOS ESTÁTICOS EXISTENTES Y NUEVOS
 
 // Obtener ventas de un cliente
 ventaSchema.statics.obtenerVentasCliente = function(idCliente, opciones = {}) {
@@ -507,6 +730,7 @@ ventaSchema.statics.obtenerVentasCliente = function(idCliente, opciones = {}) {
     page = 1,
     limit = 10,
     estado = null,
+    incluir_devoluciones = true,
     ordenar = '-fecha_creacion'
   } = opciones;
   
@@ -515,18 +739,29 @@ ventaSchema.statics.obtenerVentasCliente = function(idCliente, opciones = {}) {
     query.estado = estado;
   }
   
-  return this.find(query)
+  let consulta = this.find(query)
     .sort(ordenar)
     .limit(limit * 1)
     .skip((page - 1) * limit)
-    .select('-notas_internas'); // No mostrar notas internas a clientes
+    .select('-notas_internas');
+  
+  // Incluir información de devoluciones si se solicita
+  if (incluir_devoluciones) {
+    consulta = consulta.populate({
+      path: 'sistema_devolucion',
+      select: 'tiene_devoluciones estado_devolucion monto_total_devuelto cantidad_devoluciones'
+    });
+  }
+  
+  return consulta;
 };
 
-// Obtener ventas para administradores
+// Obtener ventas para administradores CON INFORMACIÓN DE DEVOLUCIONES
 ventaSchema.statics.obtenerVentasAdmin = function(filtros = {}, opciones = {}) {
   const {
     page = 1,
     limit = 20,
+    incluir_devoluciones = true,
     ordenar = '-fecha_creacion'
   } = opciones;
   
@@ -541,14 +776,36 @@ ventaSchema.statics.obtenerVentasAdmin = function(filtros = {}, opciones = {}) {
     query.fecha_creacion.$lte = new Date(filtros.fecha_hasta);
   }
   
-  return this.find(query)
+  // NUEVO: Filtro por estado de devolución
+  if (filtros.estado_devolucion) {
+    query['sistema_devolucion.estado_devolucion'] = filtros.estado_devolucion;
+  }
+  if (filtros.tiene_devoluciones !== undefined) {
+    query['sistema_devolucion.tiene_devoluciones'] = filtros.tiene_devoluciones;
+  }
+  
+  let consulta = this.find(query)
     .populate('id_cliente', 'nombres apellidos email')
     .sort(ordenar)
     .limit(limit * 1)
     .skip((page - 1) * limit);
+  
+  return consulta;
 };
 
-// Obtener estadísticas de ventas
+// NUEVO: Obtener ventas con devoluciones pendientes
+ventaSchema.statics.obtenerVentasConDevolucionesPendientes = function() {
+  return this.find({
+    'sistema_devolucion.tiene_devoluciones': true,
+    'sistema_devolucion.estado_devolucion': {
+      $in: ['devolucion_solicitada', 'devolucion_en_proceso', 'devolucion_aprobada']
+    }
+  })
+  .populate('id_cliente', 'nombres apellidos email')
+  .sort('-sistema_devolucion.ultima_solicitud_devolucion');
+};
+
+// Obtener estadísticas de ventas INCLUYENDO DEVOLUCIONES
 ventaSchema.statics.obtenerEstadisticas = async function(fechaInicio, fechaFin) {
   const stats = await this.aggregate([
     {
@@ -567,7 +824,13 @@ ventaSchema.statics.obtenerEstadisticas = async function(fechaInicio, fechaFin) 
         cantidad_ordenes: { $sum: 1 },
         ticket_promedio: { $avg: '$totales.total_final' },
         total_descuentos: { $sum: '$totales.total_descuentos' },
-        total_envios: { $sum: '$totales.costo_envio' }
+        total_envios: { $sum: '$totales.costo_envio' },
+        // NUEVAS MÉTRICAS DE DEVOLUCIONES
+        ordenes_con_devolucion: { 
+          $sum: { $cond: ['$sistema_devolucion.tiene_devoluciones', 1, 0] } 
+        },
+        total_monto_devuelto: { $sum: '$sistema_devolucion.monto_total_devuelto' },
+        cantidad_devoluciones: { $sum: '$sistema_devolucion.cantidad_devoluciones' }
       }
     }
   ]);
@@ -590,15 +853,39 @@ ventaSchema.statics.obtenerEstadisticas = async function(fechaInicio, fechaFin) 
     }
   ]);
   
+  // NUEVAS ESTADÍSTICAS DE DEVOLUCIONES
+  const devolucionesPorEstado = await this.aggregate([
+    {
+      $match: {
+        fecha_creacion: {
+          $gte: fechaInicio,
+          $lte: fechaFin
+        },
+        'sistema_devolucion.tiene_devoluciones': true
+      }
+    },
+    {
+      $group: {
+        _id: '$sistema_devolucion.estado_devolucion',
+        cantidad: { $sum: 1 },
+        monto_total: { $sum: '$sistema_devolucion.monto_total_devuelto' }
+      }
+    }
+  ]);
+  
   return {
     resumen: stats[0] || {
       total_ventas: 0,
       cantidad_ordenes: 0,
       ticket_promedio: 0,
       total_descuentos: 0,
-      total_envios: 0
+      total_envios: 0,
+      ordenes_con_devolucion: 0,
+      total_monto_devuelto: 0,
+      cantidad_devoluciones: 0
     },
-    por_estado: ventasPorEstado
+    por_estado: ventasPorEstado,
+    devoluciones_por_estado: devolucionesPorEstado
   };
 };
 
