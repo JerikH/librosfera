@@ -12,7 +12,6 @@ const archivoMensajeSchema = new Schema({
   nombre_archivo: {
     type: String,
     required: true,
-    unique: true
   },
   url: {
     type: String,
