@@ -14,6 +14,25 @@ const ManageSales = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [statistics, setStatistics] = useState(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [updatingVenta, setUpdatingVenta] = useState(null);
+  const [modalInfo, setModalInfo] = useState({ show: false, type: '', message: '', title: '' });
+  const [inputModal, setInputModal] = useState({ 
+    show: false, 
+    title: '', 
+    fields: [], 
+    onConfirm: null, 
+    onCancel: null 
+  });
+
+  const showModalE = (type, title, message) => {
+    setModalInfo({
+      show: true,
+      type: type,
+      title: title,
+      message: message
+    });
+  };
 
   // Estados de envío disponibles
   const shippingStates = [
@@ -82,81 +101,100 @@ const ManageSales = () => {
   };
 
   const fetchSales = async (page = 1, filters = {}) => {
-    try {
-      setLoading(true);
-      
-      const params = new URLSearchParams({
-        limit: '200',
-      });
+  try {
+    setLoading(true);
+    
+    const params = new URLSearchParams({
+      limit: '200',
+    });
 
-      // Add filters to params only if they have values
-      if (filters.estado && filters.estado !== 'todos') {
-        params.append('estado', filters.estado);
-      }
-      
-      // Only search if there's a meaningful search term (at least 2 characters)
-      if (filters.searchTerm && filters.searchTerm.length >= 2) {
-        params.append('numero_venta', filters.searchTerm);
-      }
-      
-      if (filters.dateFrom) {
-        params.append('fecha_desde', new Date(filters.dateFrom).toISOString());
-      }
-      
-      if (filters.dateTo) {
-        params.append('fecha_hasta', new Date(filters.dateTo).toISOString());
-      }
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/ventas/admin/todas?${params}`,
-        {
-          method: 'GET',
-          headers: getApiHeaders()
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'success') {
-          const ventasData = data.data?.ventas || [];
-          setSales(Array.isArray(ventasData) ? ventasData : []);
-          setTotalResults(ventasData.length || 0);
-          setTotalPages(Math.ceil((ventasData.length || 0) / 50)); // Assuming 50 per page
-        }
-      } else {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-    } catch (error) {
-      console.error('Error fetching sales:', error);
-      alert('Error al cargar las ventas');
-    } finally {
-      setLoading(false);
+    // Add filters to params only if they have values
+    if (filters.estado && filters.estado !== 'todos') {
+      params.append('estado', filters.estado);
     }
-  };
+    
+    // Only search if there's a meaningful search term (at least 2 characters)
+    if (filters.searchTerm && filters.searchTerm.length >= 2) {
+      params.append('numero_venta', filters.searchTerm);
+    }
+    
+    if (filters.dateFrom) {
+      params.append('fecha_desde', new Date(filters.dateFrom).toISOString());
+    }
+    
+    if (filters.dateTo) {
+      params.append('fecha_hasta', new Date(filters.dateTo).toISOString());
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/ventas/admin/todas?${params}`,
+      {
+        method: 'GET',
+        headers: getApiHeaders()
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === 'success') {
+        const ventasData = data.data?.ventas || [];
+        setSales(Array.isArray(ventasData) ? ventasData : []);
+        setTotalResults(ventasData.length || 0);
+        setTotalPages(Math.ceil((ventasData.length || 0) / 50)); // Assuming 50 per page
+      }
+    } else {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  } catch (error) {
+    console.error('Error fetching sales:', error);
+    showModalE('error', 'Error', 'Error al cargar las ventas');
+  } finally {
+    setLoading(false);
+  }
+};
+
+const renderStatusButton = (sale) => {
+  const isUpdating = updatingStatus && updatingVenta === sale.numero_venta;
+  
+  return (
+    <button
+      onClick={() => handleViewDetails(sale)}
+      disabled={isUpdating}
+      className={`text-green-600 hover:text-green-900 transition-colors flex items-center ${
+        isUpdating ? 'opacity-50 cursor-not-allowed' : ''
+      }`}
+    >
+      {isUpdating && (
+        <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+      )}
+      Cambiar estado
+    </button>
+  );
+};
 
   const fetchSaleDetails = async (numeroVenta) => {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/ventas/${numeroVenta}`,
-        {
-          method: 'GET',
-          headers: getApiHeaders()
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'success') {
-          return data.data.venta;
-        }
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/ventas/${numeroVenta}`,
+      {
+        method: 'GET',
+        headers: getApiHeaders()
       }
-      return null;
-    } catch (error) {
-      console.error('Error fetching sale details:', error);
-      alert('Error al cargar los detalles de la venta');
-      return null;
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === 'success') {
+        return data.data.venta;
+      }
     }
-  };
+    return null;
+  } catch (error) {
+    console.error('Error fetching sale details:', error);
+    showModalE('error', 'Error', 'Error al cargar los detalles de la venta');
+    return null;
+  }
+};
 
   // Load initial data and statistics
   useEffect(() => {
@@ -198,29 +236,55 @@ const ManageSales = () => {
 
   const updateShippingStatus = async (numeroVenta, newStatus) => {
     try {
+      setUpdatingStatus(true);
+      setUpdatingVenta(numeroVenta);
+
       const requestData = {
         estado: newStatus
       };
 
-      // Add required fields based on status
+      // Handle required fields based on status
       if (newStatus === 'enviado') {
-        const numeroGuia = prompt('Ingrese el número de guía:');
-        if (!numeroGuia) {
-          alert('El número de guía es requerido para el estado "enviado"');
+        const inputData = await showInputModal('Información de Envío', [
+          { 
+            name: 'numero_guia', 
+            label: 'Número de guía *', 
+            type: 'text', 
+            required: true,
+            placeholder: 'Ingrese el número de guía'
+          },
+          { 
+            name: 'transportadora', 
+            label: 'Transportadora', 
+            type: 'text', 
+            required: false,
+            placeholder: 'Ingrese la transportadora (opcional)'
+          },
+          { 
+            name: 'notas_envio', 
+            label: 'Notas adicionales', 
+            type: 'textarea', 
+            required: false,
+            placeholder: 'Notas adicionales del envío (opcional)'
+          }
+        ]);
+
+        if (!inputData) {
+          setUpdatingStatus(false);
+          setUpdatingVenta(null);
           return;
         }
-        requestData.numero_guia = numeroGuia;
-        
-        const transportadora = prompt('Ingrese la transportadora (opcional):');
-        if (transportadora) {
-          requestData.transportadora = transportadora;
+
+        if (!inputData.numero_guia) {
+          showModalE('error', 'Error', 'El número de guía es requerido para el estado "enviado"');
+          setUpdatingStatus(false);
+          setUpdatingVenta(null);
+          return;
         }
 
-        const notasEnvio = prompt('Notas adicionales del envío (opcional):');
-        if (notasEnvio) {
-          requestData.notas_envio = notasEnvio;
-        }
-
+        requestData.numero_guia = inputData.numero_guia;
+        if (inputData.transportadora) requestData.transportadora = inputData.transportadora;
+        if (inputData.notas_envio) requestData.notas_envio = inputData.notas_envio;
         requestData.fecha_envio = new Date().toISOString();
       } else if (newStatus === 'entregado') {
         requestData.fecha_entrega = new Date().toISOString();
@@ -275,7 +339,7 @@ const ManageSales = () => {
             }));
           }
           
-          alert(`Estado actualizado a: ${getStatusInfo(newStatus).label}`);
+          showModalE('success', 'Estado Actualizado', `Estado actualizado a: ${getStatusInfo(newStatus).label}`);
           
           // Refresh statistics
           fetchStatistics();
@@ -285,17 +349,42 @@ const ManageSales = () => {
       }
     } catch (error) {
       console.error('Error updating shipping status:', error);
-      alert('Error al actualizar el estado del envío');
+      showModalE('error', 'Error', 'Error al actualizar el estado del envío');
+    } finally {
+      setUpdatingStatus(false);
+      setUpdatingVenta(null);
     }
   };
 
   const handleViewDetails = async (sale) => {
     const saleDetails = await fetchSaleDetails(sale.numero_venta);
     if (saleDetails) {
+      
       setSelectedSale(saleDetails);
+      console.log("Details:", selectedSale);
       setShowModal(true);
+      
     }
   };
+
+
+  const showInputModal = (title, fields) => {
+  return new Promise((resolve) => {
+    setInputModal({
+      show: true,
+      title: title,
+      fields: fields.map(field => ({ ...field, value: '' })),
+      onConfirm: (data) => {
+        setInputModal({ show: false, title: '', fields: [], onConfirm: null, onCancel: null });
+        resolve(data);
+      },
+      onCancel: () => {
+        setInputModal({ show: false, title: '', fields: [], onConfirm: null, onCancel: null });
+        resolve(null);
+      }
+    });
+  });
+};
 
   const getStatusInfo = (status) => {
     return shippingStates.find(state => state.value === status) || 
@@ -326,9 +415,153 @@ const ManageSales = () => {
     setCurrentPage(1);
   };
 
+  const InfoModal = () => {
+  if (!modalInfo.show) return null;
+
+  const getModalStyles = () => {
+    switch (modalInfo.type) {
+      case 'success':
+        return {
+          iconColor: 'text-green-500',
+          bgColor: 'bg-green-50',
+          buttonColor: 'bg-green-600 hover:bg-green-700'
+        };
+      case 'error':
+        return {
+          iconColor: 'text-red-500',
+          bgColor: 'bg-red-50',
+          buttonColor: 'bg-red-600 hover:bg-red-700'
+        };
+      default:
+        return {
+          iconColor: 'text-blue-500',
+          bgColor: 'bg-blue-50',
+          buttonColor: 'bg-blue-600 hover:bg-blue-700'
+        };
+    }
+  };
+
+  const styles = getModalStyles();
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div className="mt-3 text-center">
+          <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${styles.bgColor} mb-4`}>
+            {modalInfo.type === 'success' ? (
+              <svg className={`h-6 w-6 ${styles.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            ) : modalInfo.type === 'error' ? (
+              <svg className={`h-6 w-6 ${styles.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            ) : (
+              <svg className={`h-6 w-6 ${styles.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            )}
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">{modalInfo.title}</h3>
+          <p className="text-sm text-gray-500 mb-4">{modalInfo.message}</p>
+          <div className="flex justify-center">
+            <button
+              onClick={() => setModalInfo({ show: false, type: '', message: '', title: '' })}
+              className={`px-4 py-2 text-white text-sm font-medium rounded-md ${styles.buttonColor} focus:outline-none focus:ring-2 focus:ring-offset-2`}
+            >
+              Aceptar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+  const InputModal = () => {
+  // Move useState BEFORE the conditional return
+  const [formData, setFormData] = useState(
+    inputModal.fields.reduce((acc, field) => ({ ...acc, [field.name]: field.value || '' }), {})
+  );
+
+  // Update formData when inputModal.fields changes
+  useEffect(() => {
+    if (inputModal.show) {
+      setFormData(
+        inputModal.fields.reduce((acc, field) => ({ ...acc, [field.name]: field.value || '' }), {})
+      );
+    }
+  }, [inputModal.show, inputModal.fields]);
+
+  // Conditional return AFTER useState
+  if (!inputModal.show) return null;
+
+  const handleInputChange = (name, value) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleConfirm = () => {
+    inputModal.onConfirm(formData);
+  };
+
+  const handleCancel = () => {
+    inputModal.onCancel();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div className="mt-3">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">{inputModal.title}</h3>
+          <div className="space-y-4">
+            {inputModal.fields.map((field) => (
+              <div key={field.name}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {field.label}
+                </label>
+                {field.type === 'textarea' ? (
+                  <textarea
+                    value={formData[field.name] || ''}
+                    onChange={(e) => handleInputChange(field.name, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
+                ) : (
+                  <input
+                    type={field.type}
+                    value={formData[field.name] || ''}
+                    onChange={(e) => handleInputChange(field.name, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end space-x-3 mt-6">
+            <button
+              onClick={handleCancel}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium rounded transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirm}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors"
+            >
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex-1 flex justify-center items-center bg-gray-50">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Cargando ventas...</p>
@@ -544,12 +777,7 @@ const ManageSales = () => {
                           >
                             Ver detalles
                           </button>
-                          <button
-                            onClick={() => handleViewDetails(sale)}
-                            className="text-green-600 hover:text-green-900 transition-colors"
-                          >
-                            Cambiar estado
-                          </button>
+                          {renderStatusButton(sale)}
                         </td>
                       </tr>
                     );
@@ -611,7 +839,7 @@ const ManageSales = () => {
                   <h4 className="font-medium text-gray-900 mb-2">Información de Envío</h4>
                   <div className="bg-gray-50 p-3 rounded">
                     <p><strong>Tipo:</strong> {selectedSale.envio?.tipo}</p>
-                    <p><strong>Estado:</strong> {getStatusInfo(selectedSale.envio?.estado_envio).label}</p>
+                    <p><strong>Estado:</strong> {getStatusInfo(selectedSale.estado).label}</p>
                     {selectedSale.envio?.numero_guia && (
                       <p><strong>Número de guía:</strong> {selectedSale.envio.numero_guia}</p>
                     )}
@@ -627,7 +855,7 @@ const ManageSales = () => {
                     {selectedSale.envio?.notas_envio && (
                       <p><strong>Notas:</strong> {selectedSale.envio.notas_envio}</p>
                     )}
-                    <p><strong>Dirección:</strong> {selectedSale.envio?.direccion?.calle}, {selectedSale.envio?.direccion?.ciudad}</p>
+                    <p><strong>Dirección:</strong> {selectedSale.envio?.direccion?.direccion_completa}, {selectedSale.envio?.direccion?.ciudad}</p>
                   </div>
                 </div>
 
@@ -635,21 +863,31 @@ const ManageSales = () => {
                 <div className="mb-6">
                   <h4 className="font-medium text-gray-900 mb-2">Cambiar Estado</h4>
                   <div className="grid grid-cols-3 gap-2">
-                    {shippingStates.map((state) => (
+                  {shippingStates.map((state) => {
+                    const isCurrentState = state.value === selectedSale.envio?.estado_envio;
+                    const isUpdating = updatingStatus && updatingVenta === selectedSale.numero_venta;
+                    
+                    return (
                       <button
                         key={state.value}
                         onClick={() => updateShippingStatus(selectedSale.numero_venta, state.value)}
-                        disabled={state.value === selectedSale.envio?.estado_envio}
-                        className={`p-2 text-sm rounded transition-colors ${
-                          state.value === selectedSale.envio?.estado_envio
+                        disabled={isCurrentState || isUpdating}
+                        className={`p-2 text-sm rounded transition-colors flex items-center justify-center ${
+                          isCurrentState
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : isUpdating
                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                             : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
                         }`}
                       >
+                        {isUpdating && updatingVenta === selectedSale.numero_venta && (
+                          <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                        )}
                         {state.label}
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })}
+                </div>
                 </div>
 
                 <div className="flex justify-end">
@@ -665,6 +903,10 @@ const ManageSales = () => {
           </div>
         )}
       </div>
+      <InfoModal />
+
+      {/* Input Modal */}
+      <InputModal />
     </div>
   );
 };

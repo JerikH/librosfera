@@ -123,53 +123,67 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
 
 
   // Función para actualizar la cantidad de un item
-  const updateQuantity = useCallback(async (itemId, newQuantity, item) => {
-      if (newQuantity < 1) return;
-      
-      console.log("Edit quantity:");
-      console.log(itemId);
-      console.log(newQuantity);
-      console.log(item);
-      
-      // Set loading state for this specific item
-      setUpdatingQuantity(prev => ({ ...prev, [itemId]: true }));
-      
-      try {
-        const result = await UpdateQuantityBook(item.bookId._id, newQuantity);
-  
-        if(result === "success"){
-          const updatedCart = cartItems.map(cartItem => 
-            cartItem.bookId === itemId 
-              ? { ...cartItem, quantity: newQuantity }
-              : cartItem
-          );
-          
-          setCartItems(updatedCart);
-          
-          // Update localStorage
-          const simplifiedCart = updatedCart.map(item => ({
-            bookId: item.bookId,
-            quantity: item.quantity
-          }));
-          
-          localStorage.setItem('shoppingCart', JSON.stringify(simplifiedCart));
-          
-          // Update cart count
-          if (updateCartCount) {
-            updateCartCount(simplifiedCart.reduce((total, item) => total + item.quantity, 0));
+  // Función para actualizar la cantidad de un item
+const updateQuantity = useCallback(async (itemId, newQuantity, item) => {
+    if (newQuantity < 1) return;
+    
+    console.log("Edit quantity:");
+    console.log(itemId);
+    console.log(newQuantity);
+    console.log(item);
+    
+    // Set loading state for this specific item
+    setUpdatingQuantity(prev => ({ ...prev, [itemId]: true }));
+    
+    try {
+      const result = await UpdateQuantityBook(item.bookId._id, newQuantity);
+
+      if(result === "success"){
+        // Update cart items using the correct identifier (itemId)
+        const updatedCart = cartItems.map(cartItem => 
+          cartItem.itemId === itemId 
+            ? { ...cartItem, quantity: newQuantity }
+            : cartItem
+        );
+        
+        setCartItems(updatedCart);
+        
+        // Update localStorage
+        const simplifiedCart = updatedCart.map(item => ({
+          bookId: item.bookId,
+          quantity: item.quantity
+        }));
+        
+        localStorage.setItem('shoppingCart', JSON.stringify(simplifiedCart));
+        localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+        
+        // Dispatch events
+        const cartChangeEvent = new CustomEvent('cartUpdated', {
+          bubbles: true,
+          detail: {
+            action: 'update_quantity',
+            timestamp: Date.now()
           }
-        }
-      } catch (error) {
-        console.error('Error updating quantity:', error);
-      } finally {
-        // Remove loading state
-        setUpdatingQuantity(prev => {
-          const newState = { ...prev };
-          delete newState[itemId];
-          return newState;
         });
+        window.dispatchEvent(cartChangeEvent);
+        window.dispatchEvent(new Event('globalCartUpdate'));
+        
+        // Update cart count with total quantity
+        if (updateCartCount) {
+          updateCartCount(updatedCart.reduce((total, item) => total + item.quantity, 0));
+        }
       }
-    }, [updateCartCount]);
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+    } finally {
+      // Remove loading state
+      setUpdatingQuantity(prev => {
+        const newState = { ...prev };
+        delete newState[itemId];
+        return newState;
+      });
+    }
+  }, [cartItems, updateCartCount]);
 
   // Función para eliminar un item del carrito
   const removeItem = async (itemId, bookId) => {
