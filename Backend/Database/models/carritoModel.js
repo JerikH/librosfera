@@ -1,4 +1,4 @@
-// Database/models/carritoModel.js
+// Database/models/carritoModel.js (CORREGIDO - MANEJO DE ITEMS ELIMINADOS)
 const mongoose = require('mongoose');
 const addressSchema = require('./schemas/addressSchema');
 
@@ -330,21 +330,63 @@ carritoSchema.methods.vaciar = async function() {
   }
 };
 
-// Verificar problemas en el carrito
+// CORREGIDO: Verificar problemas en el carrito con manejo seguro de items eliminados
 carritoSchema.methods.verificarProblemas = async function() {
   try {
     const CarritoItem = mongoose.model('Carrito_Items');
+    
+    // CORREGIDO: Obtener items actualmente existentes
     const items = await CarritoItem.find({ id_carrito: this._id });
     
+    // Limpiar problemas existentes
     this.problemas = [];
     
+    // Si no hay items, no hay problemas que verificar
+    if (items.length === 0) {
+      console.log(`Carrito ${this._id} está vacío, no hay problemas que verificar`);
+      return this.save();
+    }
+    
+    console.log(`Verificando problemas en ${items.length} items del carrito ${this._id}`);
+    
     for (const item of items) {
-      await item.verificarPrecio();
-      
-      if (item.precio_cambiado || item.estado !== 'activo') {
+      try {
+        // CORREGIDO: Verificar que el item aún existe antes de verificar precio
+        const itemExisteEnDB = await CarritoItem.findById(item._id);
+        
+        if (!itemExisteEnDB) {
+          console.log(`Item ${item._id} ya no existe en DB, saltando verificación`);
+          continue;
+        }
+        
+        await itemExisteEnDB.verificarPrecio();
+        
+        // Verificar si hay problemas después de la verificación
+        if (itemExisteEnDB.precio_cambiado || itemExisteEnDB.estado !== 'activo') {
+          this.problemas.push({
+            tipo: itemExisteEnDB.estado === 'sin_stock' ? 'sin_stock' : 'precio_cambiado',
+            descripcion: itemExisteEnDB.mensaje_precio,
+            id_item: itemExisteEnDB._id,
+            fecha: new Date(),
+            resuelto: false
+          });
+        }
+      } catch (itemError) {
+        // CORREGIDO: Manejo mejorado de errores por item
+        console.error(`Error verificando item ${item._id}:`, itemError.message);
+        
+        // Si el error es "documento no encontrado", el item fue eliminado
+        if (itemError.message.includes('No document found') || 
+            itemError.message.includes('document not found') ||
+            itemError.message.includes('Cast to ObjectId failed')) {
+          console.log(`Item ${item._id} fue eliminado durante la verificación, saltando`);
+          continue;
+        }
+        
+        // Para otros errores, registrar como problema
         this.problemas.push({
-          tipo: item.estado === 'sin_stock' ? 'sin_stock' : 'precio_cambiado',
-          descripcion: item.mensaje_precio,
+          tipo: 'libro_no_disponible',
+          descripcion: `Error verificando disponibilidad: ${itemError.message}`,
           id_item: item._id,
           fecha: new Date(),
           resuelto: false
@@ -352,9 +394,29 @@ carritoSchema.methods.verificarProblemas = async function() {
       }
     }
     
+    console.log(`Verificación completada. Problemas encontrados: ${this.problemas.length}`);
+    
     return this.save();
   } catch (error) {
-    throw new Error(`Error verificando problemas: ${error.message}`);
+    console.error(`Error general verificando problemas del carrito ${this._id}:`, error);
+    
+    // CORREGIDO: No fallar completamente, solo registrar el error
+    // Esto permite que el carrito siga funcionando aunque haya problemas de verificación
+    try {
+      this.problemas = [{
+        tipo: 'libro_no_disponible',
+        descripcion: `Error general en verificación: ${error.message}`,
+        id_item: null,
+        fecha: new Date(),
+        resuelto: false
+      }];
+      
+      return this.save();
+    } catch (saveError) {
+      console.error('Error guardando problemas del carrito:', saveError);
+      // Como último recurso, no fallar
+      return this;
+    }
   }
 };
 

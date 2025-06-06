@@ -281,7 +281,15 @@ function CheckoutPaymentPage() {
               {/* Columna izquierda - Información de envío y producto */}
               <div className="md:w-2/3">
                 <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-                  <h1 className="text-xl font-bold mb-6">Información de pago</h1>
+                  <div className="flex justify-between items-center mb-6">
+                    <h1 className="text-xl font-bold">Información de pago</h1>
+                    <button
+                      onClick={() => navigate('/profile', { state: { activeTab: 'tarjeta' } })}
+                      className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition-colors text-sm"
+                    >
+                      Añadir Tarjeta
+                    </button>
+                  </div>
                   
                   {/* Método de pago */}
                   <div className="mb-6">
@@ -293,7 +301,7 @@ function CheckoutPaymentPage() {
                         className="block w-full border border-gray-300 rounded-md px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
                         disabled={loading}
                       >
-                        <option value="">Seleccionar tarjeta</option>
+                        <option value="">Seleccionar Tarjetas</option>
                         {cards.filter(card => card.isActive).map(card => (
                           <option key={card.id} value={card.id}>
                             {card.bank} **** {card.lastFour}
@@ -324,8 +332,8 @@ function CheckoutPaymentPage() {
                           placeholder="1234 1234 1234 1234"
                           value={cardNumber}
                           onChange={(e) => setCardNumber(e.target.value)}
-                          disabled={selectedCard !== ''}
-                          className={`block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedCard !== '' ? 'bg-gray-100' : ''}`}
+                          disabled={true}
+                          className="block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
                         />
                         <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                           <div className="flex space-x-1">
@@ -344,8 +352,8 @@ function CheckoutPaymentPage() {
                           placeholder="MM / YY"
                           value={expiry}
                           onChange={(e) => setExpiry(e.target.value)}
-                          disabled={selectedCard !== ''}
-                          className={`block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedCard !== '' ? 'bg-gray-100' : ''}`}
+                          disabled={true}
+                          className="block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
                         />
                       </div>
                       <div className="w-1/2">
@@ -356,8 +364,8 @@ function CheckoutPaymentPage() {
                             placeholder="CVC"
                             value={cvc}
                             onChange={(e) => setCvc(e.target.value)}
-                            disabled={selectedCard !== ''}
-                            className={`block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedCard !== '' ? 'bg-gray-100' : ''}`}
+                            disabled={true}
+                            className="block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
                           />
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                             <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -375,8 +383,8 @@ function CheckoutPaymentPage() {
                         placeholder="Nombre como aparece en la tarjeta"
                         value={cardholderName}
                         onChange={(e) => setCardholderName(e.target.value)}
-                        disabled={selectedCard !== ''}
-                        className={`block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedCard !== '' ? 'bg-gray-100' : ''}`}
+                        disabled={true}
+                        className="block w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -397,7 +405,7 @@ function CheckoutPaymentPage() {
                         />
                         <label className="ml-3">
                           <div className="flex justify-between w-full items-center">
-                            <span className="font-medium">{shippingInfo.method === 'recogida_tienda' ? 'Recoger en tienda' : 'Envío a domicilio '}</span>
+                            <span className="font-medium">{shippingInfo.method === 'recogida_tienda' ? 'Recoger en tienda' : 'Envío a domicilio'}</span>
                             <div className="">
                               {shippingInfo.method === 'recogida_tienda' ? (
                                 <p className="text-green-600 font-bold">Gratis</p>

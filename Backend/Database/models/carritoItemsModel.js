@@ -1,4 +1,4 @@
-// Database/models/carritoItemsModel.js
+// Database/models/carritoItemsModel.js (CORREGIDO)
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
@@ -95,6 +95,28 @@ const carritoItemSchema = new Schema({
     min: 0
   },
   
+  // NUEVO: Información de reserva de stock
+  reserva_info: {
+    id_tienda_reservado: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tienda_Fisica',
+    },
+    fecha_reserva: {
+      type: Date,
+      default: Date.now
+    },
+    cantidad_reservada: {
+      type: Number,
+      default: 0
+    },
+    estado_reserva: {
+      type: String,
+      enum: ['PENDIENTE', 'RESERVADO', 'LIBERADO', 'CONVERTIDO_VENTA'],
+      default: 'PENDIENTE',
+    },
+    observaciones_reserva: String
+  },
+  
   // Indicar si el precio ha cambiado desde que se agregó
   precio_cambiado: {
     type: Boolean,
@@ -110,7 +132,7 @@ const carritoItemSchema = new Schema({
   // Estado del item
   estado: {
     type: String,
-    enum: ['activo', 'precio_cambiado', 'sin_stock', 'removido'],
+    enum: ['activo', 'precio_cambiado', 'sin_stock', 'reserva_expirada', 'removido'],
     default: 'activo'
   },
   
@@ -126,7 +148,7 @@ const carritoItemSchema = new Schema({
     default: Date.now
   },
   
-  // Metadatos adicionales
+  // Metadatos adicionales (ACTUALIZADO)
   metadatos: {
     titulo_libro: String,
     autor_libro: String,
@@ -135,6 +157,20 @@ const carritoItemSchema = new Schema({
     disponible: {
       type: Boolean,
       default: true
+    },
+    // NUEVO: Información de tienda donde está disponible
+    tiendas_disponibles: [{
+      id_tienda: {
+        type: Schema.Types.ObjectId,
+        ref: 'Tienda_Fisica'
+      },
+      nombre_tienda: String,
+      stock_disponible: Number,
+      distancia_km: Number // Si se calculó
+    }],
+    mejor_tienda_disponible: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tienda_Fisica'
     }
   }
 });
@@ -143,18 +179,26 @@ const carritoItemSchema = new Schema({
 carritoItemSchema.index({ id_carrito: 1, id_libro: 1 }, { unique: true });
 carritoItemSchema.index({ estado: 1 });
 carritoItemSchema.index({ fecha_agregado: -1 });
+carritoItemSchema.index({ 'reserva_info.estado_reserva': 1 });
+carritoItemSchema.index({ 'reserva_info.id_tienda_reservado': 1 });
 
 // PRE SAVE MIDDLEWARE
 carritoItemSchema.pre('save', function(next) {
   // Actualizar el subtotal automáticamente (con impuestos incluidos)
   this.subtotal = this.precios.precio_con_impuestos * this.cantidad;
   this.fecha_actualizado = new Date();
+  
+  // Actualizar información de reserva en metadatos para compatibilidad
+  if (this.reserva_info.id_tienda_reservado) {
+    this.metadatos.id_tienda_reservado = this.reserva_info.id_tienda_reservado;
+  }
+  
   next();
 });
 
 // MÉTODOS DE INSTANCIA
 
-// Actualizar cantidad
+// Actualizar cantidad CON MANEJO DE RESERVA
 carritoItemSchema.methods.actualizarCantidad = async function(nuevaCantidad) {
   if (nuevaCantidad < 1) {
     throw new Error('La cantidad debe ser al menos 1');
@@ -164,12 +208,69 @@ carritoItemSchema.methods.actualizarCantidad = async function(nuevaCantidad) {
     throw new Error('No se pueden agregar más de 3 ejemplares del mismo libro');
   }
   
+  const cantidadAnterior = this.cantidad;
   this.cantidad = nuevaCantidad;
   this.subtotal = this.precios.precio_con_impuestos * nuevaCantidad;
+  
+  // Actualizar información de reserva
+  if (this.reserva_info.estado_reserva === 'RESERVADO') {
+    this.reserva_info.cantidad_reservada = nuevaCantidad;
+    this.reserva_info.observaciones_reserva = `Cantidad actualizada de ${cantidadAnterior} a ${nuevaCantidad}`;
+  }
+  
   return this.save();
 };
 
-// Calcular precios con descuentos e impuestos
+// NUEVO: Marcar como reservado
+carritoItemSchema.methods.marcarComoReservado = function(idTienda, cantidadReservada = null) {
+  this.reserva_info.id_tienda_reservado = idTienda;
+  this.reserva_info.fecha_reserva = new Date();
+  this.reserva_info.cantidad_reservada = cantidadReservada || this.cantidad;
+  this.reserva_info.estado_reserva = 'RESERVADO';
+  this.reserva_info.observaciones_reserva = `Reservado en tienda ${idTienda}`;
+  
+  // Actualizar metadatos para compatibilidad
+  this.metadatos.id_tienda_reservado = idTienda;
+  
+  return this.save();
+};
+
+// NUEVO: Liberar reserva
+carritoItemSchema.methods.liberarReserva = function(motivo = 'Reserva liberada') {
+  this.reserva_info.estado_reserva = 'LIBERADO';
+  this.reserva_info.observaciones_reserva = motivo;
+  
+  return this.save();
+};
+
+// NUEVO: Convertir reserva en venta
+carritoItemSchema.methods.convertirReservaEnVenta = function(idVenta) {
+  this.reserva_info.estado_reserva = 'CONVERTIDO_VENTA';
+  this.reserva_info.observaciones_reserva = `Convertido en venta ${idVenta}`;
+  
+  return this.save();
+};
+
+// NUEVO: Verificar si tiene reserva activa
+carritoItemSchema.methods.tieneReservaActiva = function() {
+  return this.reserva_info.estado_reserva === 'RESERVADO' && 
+         this.reserva_info.id_tienda_reservado;
+};
+
+// NUEVO: Obtener información de tienda reservada
+carritoItemSchema.methods.obtenerInfoTiendaReservada = async function() {
+  if (!this.reserva_info.id_tienda_reservado) {
+    return null;
+  }
+  
+  const TiendaFisica = mongoose.model('Tienda_Fisica');
+  const tienda = await TiendaFisica.findById(this.reserva_info.id_tienda_reservado)
+    .select('nombre codigo direccion.ciudad estado');
+  
+  return tienda;
+};
+
+// Calcular precios con descuentos e impuestos (MEJORADO)
 carritoItemSchema.methods.calcularPrecios = async function(codigosDescuento = []) {
   try {
     const Libro = mongoose.model('Libro');
@@ -255,7 +356,80 @@ carritoItemSchema.methods.calcularPrecios = async function(codigosDescuento = []
   }
 };
 
-// Verificar y actualizar precio
+// NUEVO: Actualizar información de tiendas disponibles
+carritoItemSchema.methods.actualizarTiendasDisponibles = async function(latitud = null, longitud = null) {
+  try {
+    const TiendaFisica = mongoose.model('Tienda_Fisica');
+    const Inventario = mongoose.model('Inventario');
+    
+    // Buscar inventarios que tengan este libro disponible
+    const inventarios = await Inventario.find({
+      id_libro: this.id_libro,
+      stock_disponible: { $gte: this.cantidad },
+      estado: 'disponible'
+    }).populate('id_tienda', 'nombre estado direccion coordenadas');
+    
+    const tiendasDisponibles = [];
+    
+    for (const inventario of inventarios) {
+      if (inventario.id_tienda && inventario.id_tienda.estado === 'activa') {
+        const tiendaInfo = {
+          id_tienda: inventario.id_tienda._id,
+          nombre_tienda: inventario.id_tienda.nombre,
+          stock_disponible: inventario.stock_disponible
+        };
+        
+        // Calcular distancia si se proporcionan coordenadas
+        if (latitud && longitud && inventario.id_tienda.coordenadas) {
+          const distancia = this._calcularDistancia(
+            latitud, 
+            longitud,
+            inventario.id_tienda.coordenadas.latitud,
+            inventario.id_tienda.coordenadas.longitud
+          );
+          tiendaInfo.distancia_km = Math.round(distancia * 100) / 100;
+        }
+        
+        tiendasDisponibles.push(tiendaInfo);
+      }
+    }
+    
+    // Ordenar por distancia si está disponible, sino por stock
+    if (tiendasDisponibles.some(t => t.distancia_km !== undefined)) {
+      tiendasDisponibles.sort((a, b) => (a.distancia_km || 999) - (b.distancia_km || 999));
+    } else {
+      tiendasDisponibles.sort((a, b) => b.stock_disponible - a.stock_disponible);
+    }
+    
+    // Actualizar metadatos
+    this.metadatos.tiendas_disponibles = tiendasDisponibles;
+    if (tiendasDisponibles.length > 0) {
+      this.metadatos.mejor_tienda_disponible = tiendasDisponibles[0].id_tienda;
+    }
+    
+    return this.save();
+  } catch (error) {
+    console.error('Error actualizando tiendas disponibles:', error);
+  }
+};
+
+// Método auxiliar para calcular distancia
+carritoItemSchema.methods._calcularDistancia = function(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Radio de la Tierra en km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distancia = R * c;
+  
+  return distancia;
+};
+
+// Verificar y actualizar precio (MEJORADO)
 carritoItemSchema.methods.verificarPrecio = async function() {
   try {
     const Libro = mongoose.model('Libro');
@@ -286,10 +460,18 @@ carritoItemSchema.methods.verificarPrecio = async function() {
       }
     }
     
-    // Verificar stock
-    if (libro.stock < this.cantidad) {
+    // Verificar stock disponible en tiendas
+    const Inventario = mongoose.model('Inventario');
+    const stockTotal = await Inventario.aggregate([
+      { $match: { id_libro: this.id_libro, estado: 'disponible' } },
+      { $group: { _id: null, total_disponible: { $sum: '$stock_disponible' } } }
+    ]);
+    
+    const stockDisponible = stockTotal.length > 0 ? stockTotal[0].total_disponible : 0;
+    
+    if (stockDisponible < this.cantidad) {
       this.estado = 'sin_stock';
-      this.mensaje_precio = `Stock insuficiente. Disponible: ${libro.stock}`;
+      this.mensaje_precio = `Stock insuficiente. Disponible: ${stockDisponible}`;
     }
     
     return this.save();
@@ -313,10 +495,11 @@ carritoItemSchema.methods.confirmarCambioPrecio = async function() {
 
 // MÉTODOS ESTÁTICOS
 
-// Obtener todos los items de un carrito
+// Obtener todos los items de un carrito (MEJORADO)
 carritoItemSchema.statics.obtenerItemsCarrito = function(idCarrito) {
   return this.find({ id_carrito: idCarrito })
     .populate('id_libro', 'titulo autor_nombre_completo ISBN precio stock imagenes estado precio_info')
+    .populate('reserva_info.id_tienda_reservado', 'nombre codigo direccion.ciudad')
     .sort({ fecha_agregado: -1 });
 };
 
@@ -326,7 +509,36 @@ carritoItemSchema.statics.libroEnCarrito = async function(idCarrito, idLibro) {
   return item;
 };
 
-// Obtener estadísticas de items con estructura de precios detallada
+// NUEVO: Obtener items con reservas expiradas
+carritoItemSchema.statics.obtenerReservasExpiradas = function(tiempoExpiracionMinutos = 30) {
+  const fechaLimite = new Date();
+  fechaLimite.setMinutes(fechaLimite.getMinutes() - tiempoExpiracionMinutos);
+  
+  return this.find({
+    'reserva_info.estado_reserva': 'RESERVADO',
+    'reserva_info.fecha_reserva': { $lt: fechaLimite }
+  }).populate('id_carrito', 'id_usuario ultima_actualizacion');
+};
+
+// NUEVO: Limpiar reservas expiradas
+carritoItemSchema.statics.limpiarReservasExpiradas = async function(tiempoExpiracionMinutos = 30) {
+  const itemsExpirados = await this.obtenerReservasExpiradas(tiempoExpiracionMinutos);
+  let reservasLiberadas = 0;
+  
+  for (const item of itemsExpirados) {
+    await item.liberarReserva('Reserva expirada por tiempo');
+    item.estado = 'reserva_expirada';
+    await item.save();
+    reservasLiberadas++;
+  }
+  
+  return {
+    reservas_liberadas: reservasLiberadas,
+    items_procesados: itemsExpirados.length
+  };
+};
+
+// Obtener estadísticas de items con estructura de precios detallada (MEJORADO)
 carritoItemSchema.statics.obtenerEstadisticasItems = async function(idCarrito) {
   try {
     // Asegurar que idCarrito es un ObjectId válido
@@ -353,12 +565,18 @@ carritoItemSchema.statics.obtenerEstadisticasItems = async function(idCarrito) {
           },
           items_sin_stock: {
             $sum: { $cond: [{ $eq: ['$estado', 'sin_stock'] }, 1, 0] }
+          },
+          items_reservados: {
+            $sum: { $cond: [{ $eq: ['$reserva_info.estado_reserva', 'RESERVADO'] }, 1, 0] }
+          },
+          items_con_reserva_expirada: {
+            $sum: { $cond: [{ $eq: ['$estado', 'reserva_expirada'] }, 1, 0] }
           }
         }
       }
     ]);
     
-    return stats.length > 0 ? stats[0] : {
+    const resultado = stats.length > 0 ? stats[0] : {
       total_items: 0,
       subtotal_sin_descuentos: 0,
       total_descuentos: 0,
@@ -366,8 +584,12 @@ carritoItemSchema.statics.obtenerEstadisticasItems = async function(idCarrito) {
       total_impuestos: 0,
       total_final: 0,
       items_con_precio_cambiado: 0,
-      items_sin_stock: 0
+      items_sin_stock: 0,
+      items_reservados: 0,
+      items_con_reserva_expirada: 0
     };
+    
+    return resultado;
   } catch (error) {
     console.error('Error en obtenerEstadisticasItems:', error);
     throw error;

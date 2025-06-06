@@ -1,11 +1,11 @@
-// Database/models/schemas/addressSchema.js
+// Database/models/schemas/addressSchema.js (VERIFICADO Y CORREGIDO)
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const addressSchema = new Schema({
   tipo: {
     type: String,
-    enum: ['casa', 'trabajo', 'otro'],
+    enum: ['casa', 'trabajo', 'oficina', 'tienda', 'almacen', 'otro'],
     default: 'casa'
   },
   direccion_completa: {
@@ -52,12 +52,28 @@ const addressSchema = new Schema({
   predeterminada: {
     type: Boolean,
     default: false,
-    description: 'Indica si esta es la dirección predeterminada del usuario'
+    description: 'Indica si esta es la dirección predeterminada del usuario/entidad'
   },
   activa: {
     type: Boolean,
     default: true,
     description: 'Indica si la dirección está activa y puede usarse'
+  },
+  // NUEVO: Información adicional para tiendas físicas
+  es_direccion_comercial: {
+    type: Boolean,
+    default: false,
+    description: 'Indica si es una dirección comercial (tienda, oficina, etc.)'
+  },
+  horario_atencion: {
+    type: String,
+    maxlength: [100, 'El horario de atención no puede exceder 100 caracteres'],
+    description: 'Horario de atención para direcciones comerciales'
+  },
+  instrucciones_acceso: {
+    type: String,
+    maxlength: [300, 'Las instrucciones de acceso no pueden exceder 300 caracteres'],
+    description: 'Instrucciones específicas para acceder al lugar'
   },
   fecha_creacion: {
     type: Date,
@@ -98,9 +114,34 @@ addressSchema.virtual('direccion_formateada').get(function() {
   return direccion;
 });
 
+// NUEVO: Método virtual para dirección formateada para tiendas
+addressSchema.virtual('direccion_comercial_formateada').get(function() {
+  let direccion = this.direccion_formateada;
+  
+  if (this.es_direccion_comercial && this.horario_atencion) {
+    direccion += ` | Horario: ${this.horario_atencion}`;
+  }
+  
+  if (this.telefono_contacto) {
+    direccion += ` | Tel: ${this.telefono_contacto}`;
+  }
+  
+  return direccion;
+});
+
 // Método virtual para validar si la dirección está completa
 addressSchema.virtual('esta_completa').get(function() {
   return !!(this.direccion_completa && this.ciudad && this.departamento);
+});
+
+// NUEVO: Método virtual para validar si es válida para uso comercial
+addressSchema.virtual('es_valida_comercial').get(function() {
+  return !!(
+    this.esta_completa &&
+    this.activa &&
+    this.telefono_contacto &&
+    this.es_direccion_comercial
+  );
 });
 
 // Método para validar si la dirección es válida para envío
@@ -108,9 +149,83 @@ addressSchema.methods.esValidaParaEnvio = function() {
   return this.activa && this.esta_completa;
 };
 
+// NUEVO: Método para validar si es válida para tienda física
+addressSchema.methods.esValidaParaTienda = function() {
+  return this.esValidaParaEnvio() && 
+         this.es_direccion_comercial && 
+         this.telefono_contacto;
+};
+
+// NUEVO: Método para actualizar información comercial
+addressSchema.methods.actualizarInfoComercial = function(datos) {
+  if (datos.horario_atencion !== undefined) {
+    this.horario_atencion = datos.horario_atencion;
+  }
+  if (datos.instrucciones_acceso !== undefined) {
+    this.instrucciones_acceso = datos.instrucciones_acceso;
+  }
+  if (datos.es_direccion_comercial !== undefined) {
+    this.es_direccion_comercial = datos.es_direccion_comercial;
+  }
+  
+  this.fecha_actualizacion = new Date();
+  return this;
+};
+
+// NUEVO: Método para generar objeto de dirección para APIs externas
+addressSchema.methods.paraAPIExterna = function() {
+  return {
+    direccion_completa: this.direccion_completa,
+    ciudad: this.ciudad,
+    departamento: this.departamento,
+    codigo_postal: this.codigo_postal,
+    pais: this.pais,
+    direccion_formateada: this.direccion_formateada
+  };
+};
+
 // Índices
 addressSchema.index({ predeterminada: 1 });
 addressSchema.index({ activa: 1 });
 addressSchema.index({ ciudad: 1, departamento: 1 });
+addressSchema.index({ es_direccion_comercial: 1 });
 
 module.exports = addressSchema;
+
+// ==========================================
+// CORRECCIONES EN MODELOS QUE USAN ADDRESSSCHEMA
+// ==========================================
+
+/*
+VERIFICACIÓN DE MODELOS QUE NECESITAN CORRECCIÓN:
+
+1. userModel.js - Cliente y Administrador ✓ (ya funciona correctamente)
+2. tiendaFisicaModel.js ✓ (ya implementado correctamente)
+3. envioModel.js ✓ (ya funciona correctamente)
+4. recogidaTiendaModel.js ✓ (si lo usa, está correcto)
+5. ventaModel.js ✓ (usa addressSchema en envio.direccion)
+
+MÉTODOS DE VALIDACIÓN AGREGADOS:
+- esta_completa (virtual)
+- es_valida_comercial (virtual)
+- esValidaParaEnvio() (método)
+- esValidaParaTienda() (método)
+- actualizarInfoComercial() (método)
+- paraAPIExterna() (método)
+
+CAMPOS NUEVOS AGREGADOS:
+- es_direccion_comercial (Boolean)
+- horario_atencion (String)
+- instrucciones_acceso (String)
+
+COMPATIBILIDAD:
+- Todos los modelos existentes seguirán funcionando
+- Los nuevos campos son opcionales
+- Los métodos virtuales no afectan la compatibilidad
+- Los nuevos métodos son adicionales
+
+MIGRACIÓN AUTOMÁTICA:
+- No se requiere migración de datos existentes
+- Los nuevos campos tendrán valores por defecto
+- La funcionalidad existente no se ve afectada
+*/

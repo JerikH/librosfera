@@ -204,7 +204,7 @@ class EmailService {
                 </div>
                 
                 <div style="text-align: center; margin-top: 40px;">
-                  <a href="${process.env.FRONT_URL}/mis-pedidos/${venta.numero_venta}" 
+                  <a href="${process.env.FRONT_URL}/Profile/purchases//${venta.numero_venta}" 
                      style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
                     Ver Estado del Pedido
                   </a>
