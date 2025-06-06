@@ -267,10 +267,12 @@ const RefundModal = ({
   const [errors, setErrors] = useState({});
 
   const motivosDevolucion = [
-    { value: 'producto_defectuoso', label: 'Producto defectuoso' },
-    { value: 'no_corresponde', label: 'No corresponde con la descripción' },
-    { value: 'llegó_dañado', label: 'Llegó dañado' },
-    { value: 'no_me_gustó', label: 'No me gustó' },
+    { value: 'producto_dañado', label: 'Llegó dañado' },
+    { value: 'producto_incorrecto', label: 'Producto incorrecto' },
+    { value: 'no_coincide_descripcion', label: 'No corresponde con la descripción' },
+    { value: 'no_satisfecho', label: 'No me gustó' },
+    { value: 'error_compra', label: 'Error de compra' },
+    { value: 'producto_no_llego', label: 'Producto no llegó' },
     { value: 'otro', label: 'Otro motivo' }
   ];
 
