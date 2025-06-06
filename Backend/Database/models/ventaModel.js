@@ -181,6 +181,29 @@ const ventaSchema = new Schema({
     fecha_entrega_real: Date,
     notas_envio: String
   },
+
+  impuesto_info: {
+    pagado_por_cliente: {
+      type: Boolean,
+      default: false,
+      description: 'Indica si el cliente pagará el impuesto por separado'
+    },
+    monto_excluido: {
+      type: Number,
+      default: 0,
+      description: 'Monto del impuesto excluido del total si lo paga el cliente'
+    },
+    monto_incluido: {
+      type: Number,
+      default: 0,
+      description: 'Monto del impuesto incluido en el total de la venta'
+    },
+    nota_impuesto: {
+      type: String,
+      default: '',
+      description: 'Nota adicional sobre el manejo del impuesto'
+    }
+  },
   
   // Estado general de la venta
   estado: {
@@ -322,6 +345,31 @@ ventaSchema.methods.cambiarEstado = function(nuevoEstado, usuarioId, descripcion
   );
   
   return this;
+};
+
+ventaSchema.methods.obtenerTotalAPagar = function() {
+  return this.totales.total_final;
+};
+
+ventaSchema.methods.obtenerInfoImpuesto = function() {
+  const info = {
+    debe_pagar_impuesto_separado: this.impuesto_info.pagado_por_cliente,
+    monto_impuesto: this.impuesto_info.pagado_por_cliente 
+      ? this.impuesto_info.monto_excluido 
+      : this.impuesto_info.monto_incluido,
+    incluido_en_total: !this.impuesto_info.pagado_por_cliente,
+    total_productos: this.totales.subtotal_con_descuentos,
+    total_envio: this.totales.costo_envio,
+    total_a_pagar: this.totales.total_final
+  };
+  
+  if (this.impuesto_info.pagado_por_cliente) {
+    info.mensaje = `El cliente debe pagar $${this.impuesto_info.monto_excluido.toLocaleString()} de impuesto por separado`;
+  } else {
+    info.mensaje = `El impuesto de $${this.impuesto_info.monto_incluido.toLocaleString()} está incluido en el total`;
+  }
+  
+  return info;
 };
 
 // Aprobar pago (CORREGIDO: no guarda automáticamente)
