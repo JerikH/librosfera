@@ -131,4 +131,9 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
 app.use(notFound);
 app.use(errorHandler);
 
+if (process.env.NODE_ENV === 'production' || process.env.ENABLE_CRON_JOBS === 'true') {
+  const DevolucionCronJobs = require('./utils/cronJobs');
+  DevolucionCronJobs.inicializarJobs();
+}
+
 module.exports = app;

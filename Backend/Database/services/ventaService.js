@@ -792,41 +792,156 @@ class VentaService {
 
   // Resto de métodos públicos sin cambios...
   async obtenerVentasCliente(idCliente, opciones = {}) {
-    const ventas = await Venta.obtenerVentasCliente(idCliente, opciones);
+    const {
+      incluir_devoluciones = true,
+      ...opcionesRestantes
+    } = opciones;//????
     
+    // Usar el método actualizado del modelo
+    const ventas = await Venta.obtenerVentasCliente(idCliente, {
+      ...opcionesRestantes,
+      incluir_devoluciones
+    });
+    
+    // Si se incluyen devoluciones, agregar información detallada
+    let ventasConDevoluciones = ventas;
+    
+    if (incluir_devoluciones) {
+      ventasConDevoluciones = await Promise.all(ventas.map(async (venta) => {
+        const ventaObj = venta.toObject();
+        
+        // Agregar resumen de devoluciones
+        ventaObj.resumen_devoluciones = venta.obtenerResumenDevoluciones();
+        
+        // Si tiene devoluciones, obtener la información básica
+        if (venta.sistema_devolucion.tiene_devoluciones) {
+          const Devolucion = require('../models/devolucionModel');
+          const devoluciones = await Devolucion.find({ id_venta: venta._id })
+            .select('codigo_devolucion estado fecha_solicitud totales.monto_aprobado_reembolso')
+            .sort('-fecha_solicitud');
+          
+          ventaObj.devoluciones_asociadas = devoluciones;
+        }
+        
+        return ventaObj;
+      }));
+    }
+    
+    // Calcular totales con información de devoluciones
     const totales = await Venta.aggregate([
       { $match: { id_cliente: new mongoose.Types.ObjectId(idCliente) } },
       {
         $group: {
           _id: null,
           total_compras: { $sum: 1 },
-          monto_total: { $sum: '$totales.total_final' }
+          monto_total: { $sum: '$totales.total_final' },
+          // NUEVAS MÉTRICAS
+          compras_con_devolucion: { 
+            $sum: { $cond: ['$sistema_devolucion.tiene_devoluciones', 1, 0] } 
+          },
+          total_monto_devuelto: { $sum: '$sistema_devolucion.monto_total_devuelto' }
         }
       }
     ]);
     
     return {
-      ventas,
-      resumen: totales[0] || { total_compras: 0, monto_total: 0 }
+      ventas: ventasConDevoluciones,
+      resumen: totales[0] || { 
+        total_compras: 0, 
+        monto_total: 0,
+        compras_con_devolucion: 0,
+        total_monto_devuelto: 0
+      }
     };
   }
 
   async obtenerVentasAdmin(filtros = {}, opciones = {}) {
-    const ventas = await Venta.obtenerVentasAdmin(filtros, opciones);
-
+    const {
+      incluir_devoluciones = true,
+      ...opcionesRestantes
+    } = opciones;//????
+    
+    // Usar el método actualizado del modelo que incluye filtros de devolución
+    const ventas = await Venta.obtenerVentasAdmin(filtros, {
+      ...opcionesRestantes,
+      incluir_devoluciones
+    });
+    
+    // Agregar información detallada de devoluciones para admins
+    let ventasCompletas = ventas;
+    
+    if (incluir_devoluciones) {
+      ventasCompletas = await Promise.all(ventas.map(async (venta) => {
+        const ventaObj = venta.toObject();
+        
+        // Agregar resumen completo de devoluciones
+        ventaObj.resumen_devoluciones = venta.obtenerResumenDevoluciones();
+        
+        // Si tiene devoluciones, obtener información detallada para admins
+        if (venta.sistema_devolucion.tiene_devoluciones) {
+          const Devolucion = require('../models/devolucionModel');
+          const devoluciones = await Devolucion.find({ id_venta: venta._id })
+            .populate('id_cliente', 'nombres apellidos email')
+            .sort('-fecha_solicitud');
+          
+          ventaObj.devoluciones_detalladas = devoluciones;
+        }
+        
+        return ventaObj;
+      }));
+    }
+    
+    // Calcular totales mejorados para administradores
     const totales = await Venta.aggregate([
       { $match: filtros },
       {
         $group: {
           _id: null,
           total_compras: { $sum: 1 },
-          monto_total: { $sum: '$totales.total_final' }
+          monto_total: { $sum: '$totales.total_final' },
+          // MÉTRICAS ADMINISTRATIVAS DETALLADAS
+          compras_con_devolucion: { 
+            $sum: { $cond: ['$sistema_devolucion.tiene_devoluciones', 1, 0] } 
+          },
+          total_monto_devuelto: { $sum: '$sistema_devolucion.monto_total_devuelto' },
+          devoluciones_pendientes: {
+            $sum: {
+              $cond: [
+                { 
+                  $in: ['$sistema_devolucion.estado_devolucion', 
+                        ['devolucion_solicitada', 'devolucion_en_proceso', 'devolucion_aprobada']] 
+                },
+                1, 
+                0
+              ]
+            }
+          },
+          devoluciones_completadas: {
+            $sum: {
+              $cond: [
+                { 
+                  $in: ['$sistema_devolucion.estado_devolucion', 
+                        ['devolucion_completada', 'devolucion_parcial']] 
+                },
+                1, 
+                0
+              ]
+            }
+          }
         }
       }
     ]);
+    
     return {
-      ventas,
-      resumen: totales[0] || { total_compras: 0, monto_total: 0 }
+      ventas: ventasCompletas,
+      resumen: totales[0] || { 
+        total_compras: 0, 
+        monto_total: 0,
+        compras_con_devolucion: 0,
+        total_monto_devuelto: 0,
+        devoluciones_pendientes: 0,
+        devoluciones_completadas: 0
+      }
     };
   }
   
@@ -845,12 +960,20 @@ class VentaService {
       throw new Error('Venta no encontrada');
     }
     
+    // Obtener todas las devoluciones asociadas con información detallada
+    const Devolucion = require('../models/devolucionModel');
     const devoluciones = await Devolucion.find({ id_venta: venta._id })
-      .select('codigo_devolucion estado fecha_solicitud totales');
+      .select('codigo_devolucion estado fecha_solicitud fecha_resolucion totales items qr_code')
+      .sort('-fecha_solicitud');
+    
+    // Preparar respuesta completa
+    const ventaCompleta = venta.toObject();
+    ventaCompleta.resumen_devoluciones = venta.obtenerResumenDevoluciones();
     
     return {
-      venta: venta.toObject(),
-      devoluciones
+      venta: ventaCompleta,
+      devoluciones: devoluciones,
+      puede_solicitar_devolucion: venta.puedeSolicitarDevolucion()
     };
   }
   
@@ -911,56 +1034,18 @@ class VentaService {
   }
   
   async crearDevolucion(numeroVenta, itemsDevolucion, idCliente) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
     try {
-      const venta = await Venta.findOne({ 
-        numero_venta: numeroVenta,
-        id_cliente: idCliente 
-      }).session(session);
-      
-      if (!venta) {
-        throw new Error('Venta no encontrada');
-      }
-
-      
-      const devolucion = await Devolucion.crearDesdeVenta(
-        venta,
+      const devolucion = await devolucionService.crearDevolucionDesdeVenta(
+        numeroVenta,
         itemsDevolucion,
         idCliente
-      );
-      let qr = await devolucionService.generarCodigoQRDevolucion(devolucion.codigo_devolucion);
-      devolucion.qr_code = {
-        ...devolucion.qr_code,
-        ...qr
-      };
-        
-      
-      await devolucion.save({ session });
-      
-      for (const itemDev of itemsDevolucion) {
-        const itemVenta = venta.items.id(itemDev.id_item_venta);
-        if (itemVenta) {
-          itemVenta.cantidad_devuelta += itemDev.cantidad;
-        }
-      }
-      
-      await venta.save({ session });
-      
-      await session.commitTransaction();
-      
-      this._enviarEmailDevolucion(devolucion, idCliente).catch(err => 
-        console.error('Error enviando email de devolución:', err)
       );
       
       return devolucion;
       
     } catch (error) {
-      await session.abortTransaction();
+      console.error('Error en ventaService.crearDevolucion:', error);
       throw error;
-    } finally {
-      session.endSession();
     }
   }
   
@@ -969,6 +1054,63 @@ class VentaService {
       new Date(fechaInicio),
       new Date(fechaFin)
     );
+
+    const metricasDevolucion = await Venta.aggregate([
+      {
+        $match: {
+          fecha_creacion: {
+            $gte: new Date(fechaInicio),
+            $lte: new Date(fechaFin)
+          },
+          'sistema_devolucion.tiene_devoluciones': true
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          promedio_tiempo_primera_devolucion: {
+            $avg: {
+              $subtract: ['$sistema_devolucion.ultima_solicitud_devolucion', '$fecha_creacion']
+            }
+          },
+          tasa_devolucion: {
+            $avg: {
+              $divide: ['$sistema_devolucion.monto_total_devuelto', '$totales.total_final']
+            }
+          }
+        }
+      }
+    ]);
+    
+    // Productos más devueltos
+    const productosMasDevueltos = await Venta.aggregate([
+      {
+        $match: {
+          fecha_creacion: {
+            $gte: new Date(fechaInicio),
+            $lte: new Date(fechaFin)
+          },
+          'sistema_devolucion.tiene_devoluciones': true
+        }
+      },
+      { $unwind: '$items' },
+      {
+        $match: {
+          'items.devolucion_info.cantidad_devuelta': { $gt: 0 }
+        }
+      },
+      {
+        $group: {
+          _id: '$items.id_libro',
+          titulo: { $first: '$items.snapshot.titulo' },
+          cantidad_devuelta: { $sum: '$items.devolucion_info.cantidad_devuelta' },
+          monto_devuelto: { $sum: '$items.devolucion_info.monto_devuelto' },
+          frecuencia_devolucion: { $sum: 1 }
+        }
+      },
+      { $sort: { cantidad_devuelta: -1 } },
+      { $limit: 10 }
+    ]);
     
     const productosMasVendidos = await Venta.aggregate([
       {
@@ -995,7 +1137,11 @@ class VentaService {
     
     return {
       ...estadisticas,
-      productos_mas_vendidos: productosMasVendidos
+      metricas_devolucion: metricasDevolucion[0] || {
+        promedio_tiempo_primera_devolucion: 0,
+        tasa_devolucion: 0
+      },
+      productos_mas_devueltos: productosMasDevueltos
     };
   }
   

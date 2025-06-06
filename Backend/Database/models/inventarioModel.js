@@ -522,6 +522,202 @@ inventarioSchema.methods.registrarAuditoria = async function(stockFisico, idUsua
 };
 
 // MÉTODOS ESTÁTICOS
+//Validar y procesar devolución de stock
+inventarioSchema.statics.procesarDevolucionStock = async function(datosDevolucion, session = null) {
+  try {
+    const {
+      id_libro,
+      cantidad,
+      id_usuario_admin,
+      codigo_devolucion,
+      preferencia_tienda = null
+    } = datosDevolucion;
+    
+    console.log(`Procesando devolución de stock: ${cantidad} unidades del libro ${id_libro}`);
+    
+    // 1. Buscar el mejor inventario para recibir la devolución
+    let inventario = null;
+    
+    // Prioridad 1: Tienda preferida (si se especifica)
+    if (preferencia_tienda) {
+      inventario = await this.findOne({
+        id_libro: id_libro,
+        id_tienda: preferencia_tienda,
+        estado: { $in: ['disponible', 'baja_existencia'] }
+      }).session(session);
+    }
+    
+    // Prioridad 2: Tienda principal
+    if (!inventario) {
+      const TiendaFisica = require('./tiendaFisicaModel');
+      const tiendaPrincipal = await TiendaFisica.findOne({ 
+        estado: 'activa',
+        es_principal: true 
+      }).session(session);
+      
+      if (tiendaPrincipal) {
+        inventario = await this.findOne({
+          id_libro: id_libro,
+          id_tienda: tiendaPrincipal._id
+        }).session(session);
+        
+        // Si no existe inventario en tienda principal, crearlo
+        if (!inventario) {
+          inventario = new this({
+            id_libro: id_libro,
+            id_tienda: tiendaPrincipal._id,
+            stock_total: 0,
+            stock_disponible: 0,
+            stock_reservado: 0
+          });
+        }
+      }
+    }
+    
+    // Prioridad 3: Cualquier tienda activa con mayor capacidad
+    if (!inventario) {
+      const inventarios = await this.find({
+        id_libro: id_libro,
+        estado: { $in: ['disponible', 'baja_existencia'] }
+      })
+      .populate('id_tienda', 'estado capacidad_maxima')
+      .session(session);
+      
+      // Filtrar solo tiendas activas y ordenar por capacidad disponible
+      const inventariosActivos = inventarios
+        .filter(inv => inv.id_tienda.estado === 'activa')
+        .sort((a, b) => a.stock_total - b.stock_total); // Menor stock = más capacidad disponible
+      
+      inventario = inventariosActivos[0];
+    }
+    
+    // Prioridad 4: Crear inventario en primera tienda activa disponible
+    if (!inventario) {
+      const TiendaFisica = require('./tiendaFisicaModel');
+      const tiendaActiva = await TiendaFisica.findOne({ 
+        estado: 'activa' 
+      }).session(session);
+      
+      if (!tiendaActiva) {
+        throw new Error('No hay tiendas activas disponibles para procesar la devolución');
+      }
+      
+      inventario = new this({
+        id_libro: id_libro,
+        id_tienda: tiendaActiva._id,
+        stock_total: 0,
+        stock_disponible: 0,
+        stock_reservado: 0
+      });
+    }
+    
+    // 2. Procesar la entrada de stock
+    await inventario.registrarEntrada(
+      cantidad,
+      'devolucion',
+      id_usuario_admin,
+      `Devolución procesada - Código: ${codigo_devolucion}`
+    );
+    
+    console.log(`✅ Stock devuelto exitosamente a tienda ${inventario.id_tienda}: ${cantidad} unidades`);
+    
+    return {
+      exito: true,
+      inventario_actualizado: inventario,
+      tienda_destino: inventario.id_tienda,
+      stock_anterior: inventario.stock_total - cantidad,
+      stock_nuevo: inventario.stock_total
+    };
+    
+  } catch (error) {
+    console.error('Error procesando devolución de stock:', error);
+    throw new Error(`Error en devolución de stock: ${error.message}`);
+  }
+};
+
+//Obtener reporte de devoluciones por tienda
+inventarioSchema.statics.obtenerReporteDevolucionesPorTienda = async function(fechaInicio, fechaFin, idTienda = null) {
+  try {
+    const match = {
+      'movimientos.tipo': 'entrada',
+      'movimientos.motivo': 'devolucion',
+      'movimientos.fecha': {
+        $gte: fechaInicio,
+        $lte: fechaFin
+      }
+    };
+    
+    if (idTienda) {
+      match.id_tienda = new mongoose.Types.ObjectId(idTienda);
+    }
+    
+    const reporte = await this.aggregate([
+      { $match: match },
+      { $unwind: '$movimientos' },
+      {
+        $match: {
+          'movimientos.tipo': 'entrada',
+          'movimientos.motivo': 'devolucion',
+          'movimientos.fecha': {
+            $gte: fechaInicio,
+            $lte: fechaFin
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'libros',
+          localField: 'id_libro',
+          foreignField: '_id',
+          as: 'libro_info'
+        }
+      },
+      {
+        $lookup: {
+          from: 'tienda_fisicas',
+          localField: 'id_tienda',
+          foreignField: '_id',
+          as: 'tienda_info'
+        }
+      },
+      {
+        $group: {
+          _id: {
+            tienda: '$id_tienda',
+            libro: '$id_libro'
+          },
+          tienda_nombre: { $first: { $arrayElemAt: ['$tienda_info.nombre', 0] } },
+          libro_titulo: { $first: { $arrayElemAt: ['$libro_info.titulo', 0] } },
+          total_unidades_devueltas: { $sum: '$movimientos.cantidad' },
+          cantidad_devoluciones: { $sum: 1 },
+          fechas_devoluciones: { $push: '$movimientos.fecha' }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.tienda',
+          tienda_nombre: { $first: '$tienda_nombre' },
+          total_unidades: { $sum: '$total_unidades_devueltas' },
+          total_devoluciones: { $sum: '$cantidad_devoluciones' },
+          libros_devueltos: {
+            $push: {
+              libro_titulo: '$libro_titulo',
+              unidades: '$total_unidades_devueltas',
+              devoluciones: '$cantidad_devoluciones'
+            }
+          }
+        }
+      },
+      { $sort: { total_unidades: -1 } }
+    ]);
+    
+    return reporte;
+    
+  } catch (error) {
+    console.error('Error generando reporte de devoluciones por tienda:', error);
+    throw error;
+  }
+};
 
 // Obtener libros con bajo stock
 inventarioSchema.statics.obtenerBajoStock = function(idTienda = null, limite = 20) {
