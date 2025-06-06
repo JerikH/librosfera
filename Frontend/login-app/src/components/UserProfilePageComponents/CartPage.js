@@ -68,6 +68,8 @@ const CartPage = ({ updateCartCount }) => {
           itemId: item._id,
           subtotal: item.subtotal
         }));
+
+        console.log("Item", items);
        
         setCartItems(cartWithDetails);
         

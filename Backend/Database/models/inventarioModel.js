@@ -1,3 +1,4 @@
+// Database/models/inventarioModel.js (CORREGIDO)
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
@@ -16,6 +17,14 @@ const inventarioSchema = new Schema({
   id_libro: {
     type: Schema.Types.ObjectId,
     ref: 'Libro',
+    required: true,
+    index: true
+  },
+  
+  // Referencia a la tienda física donde está el inventario
+  id_tienda: {
+    type: Schema.Types.ObjectId,
+    ref: 'Tienda_Fisica',
     required: true,
     index: true
   },
@@ -39,13 +48,25 @@ const inventarioSchema = new Schema({
   stock_disponible: {
     type: Number,
     default: 0,
-    min: 0
+    min: 0,
+    validate: {
+      validator: function(v) {
+        return v <= this.stock_total;
+      },
+      message: 'Stock disponible no puede ser mayor que stock total'
+    }
   },
   
   stock_reservado: {
     type: Number,
     default: 0,
-    min: 0
+    min: 0,
+    validate: {
+      validator: function(v) {
+        return v <= this.stock_total;
+      },
+      message: 'Stock reservado no puede ser mayor que stock total'
+    }
   },
   
   // Umbral para alertas de bajo stock
@@ -55,17 +76,11 @@ const inventarioSchema = new Schema({
     min: 1
   },
   
-  id_tienda: {
-    type: Schema.Types.ObjectId,
-    ref: 'Tienda_Fisica',
-    index: true
-  },
-  
   // Registro de movimientos de inventario
   movimientos: [{
     tipo: {
       type: String,
-      enum: ['entrada', 'salida', 'reserva', 'liberacion_reserva', 'ajuste', 'baja'],
+      enum: ['entrada', 'salida', 'reserva', 'liberacion_reserva', 'ajuste', 'baja', 'transferencia'],
       required: true
     },
     cantidad: {
@@ -82,17 +97,28 @@ const inventarioSchema = new Schema({
     },
     motivo: {
       type: String,
-      enum: ['compra', 'venta', 'devolucion', 'perdida', 'daño', 'inventario_inicial', 'ajuste_auditoria', 'reserva', 'expiracion_reserva', 'baja']
+      enum: ['compra', 'venta', 'devolucion', 'perdida', 'daño', 'inventario_inicial', 'ajuste_auditoria', 'reserva', 'expiracion_reserva', 'baja', 'transferencia']
     },
     id_transaccion: {
       type: Schema.Types.ObjectId,
       ref: 'Transaccion'
     },
     id_reserva: {
-      type: Schema.Types.ObjectId,
-      ref: 'Reserva'
+      type: Schema.Types.ObjectId, // ID del carrito para reservas
+      ref: 'Carrito'
     },
-    notas: String
+    notas: String,
+    // Nuevos campos para mejor tracking
+    stock_anterior: {
+      total: Number,
+      disponible: Number,
+      reservado: Number
+    },
+    stock_posterior: {
+      total: Number,
+      disponible: Number,
+      reservado: Number
+    }
   }],
   
   // Historial de cambios de estado
@@ -144,23 +170,46 @@ const inventarioSchema = new Schema({
 });
 
 // ÍNDICES
-// Para consultas frecuentes y optimización
+inventarioSchema.index({ id_libro: 1, id_tienda: 1 }, { unique: true });
 inventarioSchema.index({ id_libro: 1, estado: 1 });
+inventarioSchema.index({ id_tienda: 1, estado: 1 });
 inventarioSchema.index({ stock_disponible: 1 });
 inventarioSchema.index({ 'movimientos.fecha': 1 });
+inventarioSchema.index({ 'movimientos.id_reserva': 1 });
 
 // PRE-SAVE MIDDLEWARE
-// Actualizar fecha de modificación automáticamente
 inventarioSchema.pre('save', function(next) {
   this.ultima_actualizacion = new Date();
   
+  // VALIDAR CONSISTENCIA DE STOCK
+  if (this.stock_disponible + this.stock_reservado > this.stock_total) {
+    return next(new Error('La suma de stock disponible y reservado no puede exceder el stock total'));
+  }
+  
   // Actualizar estado basado en niveles de stock
+  const estadoAnterior = this.estado;
+  
   if (this.stock_total === 0) {
     this.estado = 'agotado';
-  } else if (this.stock_disponible <= this.umbral_alerta) {
+  } else if (this.stock_disponible === 0 && this.stock_reservado > 0) {
+    // Si solo hay stock reservado, considerarlo como disponible pero con alerta
     this.estado = 'baja_existencia';
-  } else {
+  } else if (this.stock_disponible <= this.umbral_alerta && this.stock_disponible > 0) {
+    this.estado = 'baja_existencia';
+  } else if (this.stock_disponible > this.umbral_alerta) {
     this.estado = 'disponible';
+  } else {
+    this.estado = 'agotado';
+  }
+  
+  // Registrar cambio de estado si es diferente
+  if (estadoAnterior && this.estado !== estadoAnterior) {
+    this.historial_estados.push({
+      estado_anterior: estadoAnterior,
+      estado_nuevo: this.estado,
+      fecha_cambio: new Date(),
+      razon: 'Cambio automático por movimiento de stock'
+    });
   }
   
   next();
@@ -175,10 +224,21 @@ inventarioSchema.methods.registrarEntrada = async function(cantidad, motivo, idU
   }
   
   const estadoAnterior = this.estado;
+  const stockAnterior = {
+    total: this.stock_total,
+    disponible: this.stock_disponible,
+    reservado: this.stock_reservado
+  };
   
   // Actualizar contadores
   this.stock_total += cantidad;
-  this.stock_disponible += cantidad;
+  this.stock_disponible += cantidad; // Las entradas van siempre a disponible
+  
+  const stockPosterior = {
+    total: this.stock_total,
+    disponible: this.stock_disponible,
+    reservado: this.stock_reservado
+  };
   
   // Registrar el movimiento
   this.movimientos.push({
@@ -187,19 +247,12 @@ inventarioSchema.methods.registrarEntrada = async function(cantidad, motivo, idU
     fecha: new Date(),
     id_usuario: idUsuario,
     motivo: motivo,
-    notas: notas
+    notas: notas,
+    stock_anterior: stockAnterior,
+    stock_posterior: stockPosterior
   });
   
-  // Si cambió el estado, registrar el cambio
-  if (this.estado !== estadoAnterior) {
-    this.historial_estados.push({
-      estado_anterior: estadoAnterior,
-      estado_nuevo: this.estado,
-      fecha_cambio: new Date(),
-      razon: `Entrada de ${cantidad} ejemplares - ${motivo}`,
-      id_usuario: idUsuario
-    });
-  }
+  console.log(`Entrada registrada: +${cantidad} | Stock total: ${this.stock_total}, Disponible: ${this.stock_disponible}, Reservado: ${this.stock_reservado}`);
   
   return this.save();
 };
@@ -210,15 +263,36 @@ inventarioSchema.methods.registrarSalida = async function(cantidad, motivo, idUs
     throw new Error('La cantidad debe ser mayor que cero');
   }
   
-  if (cantidad > this.stock_disponible) {
-    throw new Error('No hay suficiente stock disponible para esta operación');
+  const stockAnterior = {
+    total: this.stock_total,
+    disponible: this.stock_disponible,
+    reservado: this.stock_reservado
+  };
+  
+  // LÓGICA CORREGIDA: Las ventas salen del stock reservado, no del disponible
+  if (motivo === 'venta') {
+    if (cantidad > this.stock_reservado) {
+      throw new Error(`No hay suficiente stock reservado para la venta. Reservado: ${this.stock_reservado}, Solicitado: ${cantidad}`);
+    }
+    
+    // Reducir del stock reservado (las ventas ya estaban reservadas)
+    this.stock_reservado -= cantidad;
+    this.stock_total -= cantidad;
+  } else {
+    // Para otros motivos (pérdidas, daños, etc.), reducir del disponible
+    if (cantidad > this.stock_disponible) {
+      throw new Error(`No hay suficiente stock disponible. Disponible: ${this.stock_disponible}, Solicitado: ${cantidad}`);
+    }
+    
+    this.stock_disponible -= cantidad;
+    this.stock_total -= cantidad;
   }
   
-  const estadoAnterior = this.estado;
-  
-  // Actualizar contadores
-  this.stock_total -= cantidad;
-  this.stock_disponible -= cantidad;
+  const stockPosterior = {
+    total: this.stock_total,
+    disponible: this.stock_disponible,
+    reservado: this.stock_reservado
+  };
   
   // Registrar el movimiento
   this.movimientos.push({
@@ -228,42 +302,42 @@ inventarioSchema.methods.registrarSalida = async function(cantidad, motivo, idUs
     id_usuario: idUsuario,
     motivo: motivo,
     id_transaccion: idTransaccion,
-    notas: notas
+    notas: notas,
+    stock_anterior: stockAnterior,
+    stock_posterior: stockPosterior
   });
   
-  // Si cambió el estado, registrar el cambio
-  if (this.estado !== estadoAnterior) {
-    this.historial_estados.push({
-      estado_anterior: estadoAnterior,
-      estado_nuevo: this.estado,
-      fecha_cambio: new Date(),
-      razon: `Salida de ${cantidad} ejemplares - ${motivo}`,
-      id_usuario: idUsuario
-    });
-    
-    // Si se agotó el stock, verificar si debe pasar a histórico agotado
-    if (this.estado === 'agotado') {
-      // Lógica para decidir si se marca como histórico_agotado
-      // Por ejemplo, basado en el tiempo que lleva agotado o políticas de la tienda
-    }
-  }
+  console.log(`Salida registrada: -${cantidad} (${motivo}) | Stock total: ${this.stock_total}, Disponible: ${this.stock_disponible}, Reservado: ${this.stock_reservado}`);
   
   return this.save();
 };
 
-// Reservar ejemplares
+// Reservar ejemplares (del disponible al reservado)
 inventarioSchema.methods.reservarEjemplares = async function(cantidad, idUsuario, idReserva, notas = '') {
   if (cantidad <= 0) {
     throw new Error('La cantidad debe ser mayor que cero');
   }
   
   if (cantidad > this.stock_disponible) {
-    throw new Error('No hay suficiente stock disponible para reservar');
+    throw new Error(`No hay suficiente stock disponible para reservar. Disponible: ${this.stock_disponible}, Solicitado: ${cantidad}`);
   }
   
-  // Actualizar contadores
+  const stockAnterior = {
+    total: this.stock_total,
+    disponible: this.stock_disponible,
+    reservado: this.stock_reservado
+  };
+  
+  // Mover del disponible al reservado
   this.stock_disponible -= cantidad;
   this.stock_reservado += cantidad;
+  // El stock_total NO cambia en las reservas
+  
+  const stockPosterior = {
+    total: this.stock_total,
+    disponible: this.stock_disponible,
+    reservado: this.stock_reservado
+  };
   
   // Registrar el movimiento
   this.movimientos.push({
@@ -273,25 +347,42 @@ inventarioSchema.methods.reservarEjemplares = async function(cantidad, idUsuario
     id_usuario: idUsuario,
     motivo: 'reserva',
     id_reserva: idReserva,
-    notas: notas
+    notas: notas,
+    stock_anterior: stockAnterior,
+    stock_posterior: stockPosterior
   });
+  
+  console.log(`Reserva registrada: ${cantidad} | Stock total: ${this.stock_total}, Disponible: ${this.stock_disponible}, Reservado: ${this.stock_reservado}`);
   
   return this.save();
 };
 
-// Liberar reserva de ejemplares
+// Liberar reserva de ejemplares (del reservado al disponible)
 inventarioSchema.methods.liberarReserva = async function(cantidad, idUsuario, idReserva, notas = '') {
   if (cantidad <= 0) {
     throw new Error('La cantidad debe ser mayor que cero');
   }
   
   if (cantidad > this.stock_reservado) {
-    throw new Error('La cantidad a liberar excede el stock reservado');
+    throw new Error(`La cantidad a liberar excede el stock reservado. Reservado: ${this.stock_reservado}, Solicitado: ${cantidad}`);
   }
   
-  // Actualizar contadores
+  const stockAnterior = {
+    total: this.stock_total,
+    disponible: this.stock_disponible,
+    reservado: this.stock_reservado
+  };
+  
+  // Mover del reservado al disponible
   this.stock_disponible += cantidad;
   this.stock_reservado -= cantidad;
+  // El stock_total NO cambia en las liberaciones
+  
+  const stockPosterior = {
+    total: this.stock_total,
+    disponible: this.stock_disponible,
+    reservado: this.stock_reservado
+  };
   
   // Registrar el movimiento
   this.movimientos.push({
@@ -301,10 +392,57 @@ inventarioSchema.methods.liberarReserva = async function(cantidad, idUsuario, id
     id_usuario: idUsuario,
     motivo: 'expiracion_reserva',
     id_reserva: idReserva,
-    notas: notas
+    notas: notas,
+    stock_anterior: stockAnterior,
+    stock_posterior: stockPosterior
   });
   
+  console.log(`Reserva liberada: ${cantidad} | Stock total: ${this.stock_total}, Disponible: ${this.stock_disponible}, Reservado: ${this.stock_reservado}`);
+  
   return this.save();
+};
+
+// Obtener cantidad reservada para una reserva específica (carrito)
+inventarioSchema.methods.obtenerCantidadReservada = function(idReserva) {
+  let cantidadReservada = 0;
+  
+  for (const movimiento of this.movimientos) {
+    if (movimiento.id_reserva && movimiento.id_reserva.equals(idReserva)) {
+      if (movimiento.tipo === 'reserva') {
+        cantidadReservada += movimiento.cantidad;
+      } else if (movimiento.tipo === 'liberacion_reserva') {
+        cantidadReservada -= movimiento.cantidad;
+      }
+    }
+  }
+  
+  return Math.max(0, cantidadReservada);
+};
+
+// Validar consistencia del stock
+inventarioSchema.methods.validarConsistencia = function() {
+  const errores = [];
+  
+  if (this.stock_total < 0) {
+    errores.push('Stock total no puede ser negativo');
+  }
+  
+  if (this.stock_disponible < 0) {
+    errores.push('Stock disponible no puede ser negativo');
+  }
+  
+  if (this.stock_reservado < 0) {
+    errores.push('Stock reservado no puede ser negativo');
+  }
+  
+  if (this.stock_disponible + this.stock_reservado !== this.stock_total) {
+    errores.push(`Inconsistencia: Disponible (${this.stock_disponible}) + Reservado (${this.stock_reservado}) ≠ Total (${this.stock_total})`);
+  }
+  
+  return {
+    valido: errores.length === 0,
+    errores
+  };
 };
 
 // Marcar como histórico agotado
@@ -351,11 +489,21 @@ inventarioSchema.methods.registrarAuditoria = async function(stockFisico, idUsua
   
   // Si se debe ajustar automáticamente
   if (ajustarAutomaticamente && diferencia !== 0) {
-    const estadoAnterior = this.estado;
+    const stockAnterior = {
+      total: this.stock_total,
+      disponible: this.stock_disponible,
+      reservado: this.stock_reservado
+    };
     
-    // Actualizar stock
+    // Ajustar stock (la diferencia va al disponible)
     this.stock_total = stockFisico;
     this.stock_disponible = Math.max(0, this.stock_disponible + diferencia);
+    
+    const stockPosterior = {
+      total: this.stock_total,
+      disponible: this.stock_disponible,
+      reservado: this.stock_reservado
+    };
     
     // Registrar el movimiento
     this.movimientos.push({
@@ -364,19 +512,10 @@ inventarioSchema.methods.registrarAuditoria = async function(stockFisico, idUsua
       fecha: new Date(),
       id_usuario: idUsuario,
       motivo: 'ajuste_auditoria',
-      notas: `Ajuste por auditoría. Diferencia: ${diferencia}`
+      notas: `Ajuste por auditoría. Diferencia: ${diferencia}`,
+      stock_anterior: stockAnterior,
+      stock_posterior: stockPosterior
     });
-    
-    // Si cambió el estado, registrar el cambio
-    if (this.estado !== estadoAnterior) {
-      this.historial_estados.push({
-        estado_anterior: estadoAnterior,
-        estado_nuevo: this.estado,
-        fecha_cambio: new Date(),
-        razon: `Ajuste por auditoría. Stock físico: ${stockFisico}`,
-        id_usuario: idUsuario
-      });
-    }
   }
   
   return this.save();
@@ -385,47 +524,172 @@ inventarioSchema.methods.registrarAuditoria = async function(stockFisico, idUsua
 // MÉTODOS ESTÁTICOS
 
 // Obtener libros con bajo stock
-inventarioSchema.statics.obtenerBajoStock = function(limite = 20) {
-  return this.find({ 
+inventarioSchema.statics.obtenerBajoStock = function(idTienda = null, limite = 20) {
+  const query = { 
     estado: 'baja_existencia',
     stock_total: { $gt: 0 } 
-  })
-  .sort({ stock_disponible: 1 })
-  .limit(limite)
-  .populate('id_libro', 'titulo autor editorial ISBN');
+  };
+  
+  if (idTienda) {
+    query.id_tienda = idTienda;
+  }
+  
+  return this.find(query)
+    .sort({ stock_disponible: 1 })
+    .limit(limite)
+    .populate('id_libro', 'titulo autor editorial ISBN')
+    .populate('id_tienda', 'nombre codigo ciudad');
 };
 
 // Obtener libros agotados
-inventarioSchema.statics.obtenerAgotados = function(limite = 20) {
-  return this.find({ 
+inventarioSchema.statics.obtenerAgotados = function(idTienda = null, limite = 20) {
+  const query = { 
     estado: 'agotado'
-  })
-  .sort({ ultima_actualizacion: -1 })
-  .limit(limite)
-  .populate('id_libro', 'titulo autor editorial ISBN');
+  };
+  
+  if (idTienda) {
+    query.id_tienda = idTienda;
+  }
+  
+  return this.find(query)
+    .sort({ ultima_actualizacion: -1 })
+    .limit(limite)
+    .populate('id_libro', 'titulo autor editorial ISBN')
+    .populate('id_tienda', 'nombre codigo ciudad');
 };
 
 // Obtener historial de movimientos para un libro
-inventarioSchema.statics.obtenerHistorialLibro = function(idLibro, desde, hasta, tipoMovimiento = null) {
+inventarioSchema.statics.obtenerHistorialLibro = function(idLibro, desde, hasta, tipoMovimiento = null, idTienda = null) {
   const query = { id_libro: idLibro };
   
-  if (desde || hasta) {
-    query['movimientos.fecha'] = {};
-    if (desde) query['movimientos.fecha'].$gte = desde;
-    if (hasta) query['movimientos.fecha'].$lte = hasta;
+  if (idTienda) {
+    query.id_tienda = idTienda;
   }
   
   const pipeline = [
     { $match: query },
-    { $unwind: '$movimientos' },
-    { $sort: { 'movimientos.fecha': -1 } }
+    { $unwind: '$movimientos' }
   ];
   
+  // Filtrar por fechas
+  if (desde || hasta) {
+    const dateMatch = {};
+    if (desde) dateMatch.$gte = desde;
+    if (hasta) dateMatch.$lte = hasta;
+    pipeline.push({ $match: { 'movimientos.fecha': dateMatch } });
+  }
+  
+  // Filtrar por tipo de movimiento
   if (tipoMovimiento) {
     pipeline.push({ $match: { 'movimientos.tipo': tipoMovimiento } });
   }
   
+  pipeline.push({ $sort: { 'movimientos.fecha': -1 } });
+  
   return this.aggregate(pipeline);
+};
+
+// Obtener inventario consolidado por libro (suma de todas las tiendas)
+inventarioSchema.statics.obtenerInventarioConsolidado = function(idLibro = null) {
+  const pipeline = [];
+  
+  if (idLibro) {
+    pipeline.push({ $match: { id_libro: new mongoose.Types.ObjectId(idLibro) } });
+  }
+  
+  pipeline.push(
+    {
+      $group: {
+        _id: '$id_libro',
+        stock_total_consolidado: { $sum: '$stock_total' },
+        stock_disponible_consolidado: { $sum: '$stock_disponible' },
+        stock_reservado_consolidado: { $sum: '$stock_reservado' },
+        tiendas_con_stock: { $sum: { $cond: [{ $gt: ['$stock_total', 0] }, 1, 0] } },
+        tiendas_disponibles: { $sum: { $cond: [{ $gt: ['$stock_disponible', 0] }, 1, 0] } }
+      }
+    },
+    {
+      $lookup: {
+        from: 'libros',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'libro'
+      }
+    },
+    { $unwind: '$libro' }
+  );
+  
+  return this.aggregate(pipeline);
+};
+
+// Verificar consistencia de todos los inventarios
+inventarioSchema.statics.verificarConsistenciaGeneral = async function() {
+  const inventarios = await this.find({});
+  const inconsistencias = [];
+  
+  for (const inventario of inventarios) {
+    const validacion = inventario.validarConsistencia();
+    if (!validacion.valido) {
+      inconsistencias.push({
+        id_inventario: inventario._id,
+        id_libro: inventario.id_libro,
+        id_tienda: inventario.id_tienda,
+        errores: validacion.errores
+      });
+    }
+  }
+  
+  return {
+    total_inventarios: inventarios.length,
+    inconsistencias: inconsistencias.length,
+    detalles: inconsistencias
+  };
+};
+
+// Limpiar reservas expiradas (por ejemplo, carritos abandonados)
+inventarioSchema.statics.limpiarReservasExpiradas = async function(tiempoExpiracionMinutos = 30) {
+  const fechaLimite = new Date();
+  fechaLimite.setMinutes(fechaLimite.getMinutes() - tiempoExpiracionMinutos);
+  
+  const inventarios = await this.find({
+    stock_reservado: { $gt: 0 },
+    'movimientos': {
+      $elemMatch: {
+        tipo: 'reserva',
+        fecha: { $lt: fechaLimite }
+      }
+    }
+  });
+  
+  let reservasLiberadas = 0;
+  
+  for (const inventario of inventarios) {
+    // Buscar reservas expiradas que no hayan sido liberadas
+    const reservasExpiradas = inventario.movimientos.filter(mov => 
+      mov.tipo === 'reserva' && 
+      mov.fecha < fechaLimite &&
+      inventario.obtenerCantidadReservada(mov.id_reserva) > 0
+    );
+    
+    for (const reserva of reservasExpiradas) {
+      const cantidadReservada = inventario.obtenerCantidadReservada(reserva.id_reserva);
+      if (cantidadReservada > 0) {
+        await inventario.liberarReserva(
+          cantidadReservada,
+          null,
+          reserva.id_reserva,
+          'Liberación automática por expiración de tiempo'
+        );
+        reservasLiberadas++;
+      }
+    }
+  }
+  
+  return {
+    inventarios_procesados: inventarios.length,
+    reservas_liberadas: reservasLiberadas,
+    fecha_limite: fechaLimite
+  };
 };
 
 const Inventario = mongoose.model('Inventario', inventarioSchema);

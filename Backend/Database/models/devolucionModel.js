@@ -309,7 +309,6 @@ const devolucionSchema = new Schema({
 // ÍNDICES
 devolucionSchema.index({ id_cliente: 1, fecha_solicitud: -1 });
 devolucionSchema.index({ estado: 1, fecha_solicitud: -1 });
-devolucionSchema.index({ 'qr_code.codigo': 1 });
 
 // MIDDLEWARE
 
