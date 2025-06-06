@@ -2,26 +2,90 @@ import React, { useState, useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getAuthToken } from '../UserProfilePageComponents/authUtils';
+import axios from 'axios'
 
 const ManageStores = () => {
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedStore, setSelectedStore] = useState(null);
+  const [activeTab, setActiveTab] = useState('general');
   const [isEditing, setIsEditing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [mapCenter, setMapCenter] = useState([19.432608, -99.133209]); // CDMX por defecto
+  const [mapCenter, setMapCenter] = useState([19.432608, -99.133209]);
   const [newMarkerPosition, setNewMarkerPosition] = useState(null);
   
-  // Form state
+  // Pagination and filters
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0
+  });
+  const [filters, setFilters] = useState({
+    estado: '',
+    ciudad: '',
+    departamento: '',
+    nombre: '',
+    busqueda: ''
+  });
+
+  // Store inventory and pickups
+  const [storeInventory, setStoreInventory] = useState([]);
+  const [storePickups, setStorePickups] = useState([]);
+  const [storeStatistics, setStoreStatistics] = useState(null);
+  const [storeNotes, setStoreNotes] = useState([]);
+
+  // Form states
   const [storeForm, setStoreForm] = useState({
-    id: null,
-    name: '',
-    address: '',
-    phone: '',
+    nombre: '',
+    codigo: '',
+    direccion: {
+      direccion_completa: '',
+      ciudad: '',
+      departamento: '',
+      codigo_postal: '',
+      pais: 'Colombia'
+    },
+    coordenadas: {
+      latitud: null,
+      longitud: null
+    },
+    telefono_principal: '',
+    telefono_secundario: '',
     email: '',
-    lat: null,
-    lng: null,
-    description: ''
+    responsable: {
+      nombre: '',
+      telefono: '',
+      email: ''
+    },
+    horarios: {},
+    servicios: {
+      venta_presencial: true,
+      recogida_productos: true,
+      devoluciones: true,
+      eventos: false,
+      consulta_libreria: true,
+      transferencias_tiendas: true
+    },
+    capacidad: {
+      max_recogidas_dia: 50,
+      max_transferencias_dia: 20,
+      espacio_almacen_m2: 100,
+      capacidad_maxima_libros: 5000
+    },
+    descripcion: '',
+    estado: 'activa'
+  });
+
+  const [noteForm, setNoteForm] = useState({
+    nota: '',
+    categoria: 'otra'
+  });
+
+  const [stateChangeForm, setStateChangeForm] = useState({
+    estado: '',
+    motivo: ''
   });
 
   // Referencias
@@ -32,36 +96,129 @@ const ManageStores = () => {
   const newMarkerRef = useRef(null);
   const L = useRef(null);
 
-  // Inicializar Leaflet
+  // API Configuration
+  const API_BASE_URL = 'http://localhost:5000/api/v1';
+
+
+  // Axios-like implementation (In real app, use: import axios from 'axios')
+  // const axios = {
+  //   create: (config) => {
+  //     const instance = {
+  //       defaults: {
+  //         baseURL: config.baseURL || '',
+  //         headers: config.headers || {}
+  //       },
+        
+  //       async request(config) {
+  //         const url = `${this.defaults.baseURL}${config.url || ''}`;
+  //         const method = config.method?.toUpperCase() || 'GET';
+          
+  //         const headers = {
+  //           ...this.defaults.headers,
+  //           ...config.headers,
+  //           'Authorization': `Bearer ${getAuthToken()}`,
+  //           'Content-Type': 'application/json',
+  //           'Accept': 'application/json',
+  //           'User-Agent': 'Mozilla/5.0',
+  //           'Cache-Control': 'no-cache'
+  //         };
+
+  //         const fetchOptions = {
+  //           method,
+  //           headers
+  //         };
+
+  //         if (config.data && method !== 'GET') {
+  //           fetchOptions.body = typeof config.data === 'string' 
+  //             ? config.data 
+  //             : JSON.stringify(config.data);
+  //         }
+
+  //         try {
+  //           const response = await fetch(url, fetchOptions);
+            
+  //           if (!response.ok) {
+  //             const errorData = await response.json().catch(() => ({}));
+  //             throw {
+  //               response: {
+  //                 status: response.status,
+  //                 statusText: response.statusText,
+  //                 data: errorData
+  //               },
+  //               message: errorData.message || `HTTP error! status: ${response.status}`
+  //             };
+  //           }
+            
+  //           const data = await response.json();
+  //           return { data, status: response.status, statusText: response.statusText };
+  //         } catch (error) {
+  //           console.error('Axios request failed:', error);
+  //           throw error;
+  //         }
+  //       },
+
+  //       async get(url, config = {}) {
+  //         return this.request({ ...config, method: 'GET', url });
+  //       },
+
+  //       async post(url, data, config = {}) {
+  //         return this.request({ ...config, method: 'POST', url, data });
+  //       },
+
+  //       async put(url, data, config = {}) {
+  //         return this.request({ ...config, method: 'PUT', url, data });
+  //       },
+
+  //       async patch(url, data, config = {}) {
+  //         return this.request({ ...config, method: 'PATCH', url, data });
+  //       },
+
+  //       async delete(url, config = {}) {
+  //         return this.request({ ...config, method: 'DELETE', url });
+  //       }
+  //     };
+      
+  //     return instance;
+  //   }
+  // };
+
+  // Create axios instance
+  const api = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    }
+  });
+
+  // Initialize Leaflet
   useEffect(() => {
-    // Importar Leaflet solo en el cliente
     if (typeof window !== 'undefined') {
       try {
         L.current = require('leaflet');
-        console.log("Leaflet inicializado correctamente");
         initMap();
       } catch (err) {
-        console.error("Error al cargar Leaflet:", err);
+        console.error("Error loading Leaflet:", err);
       }
     }
     
     return () => {
-      // Limpiar mapa al desmontar
       if (mapInstanceRef.current) {
-        console.log("Limpiando mapa");
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
     };
   }, []);
 
-  // Función para inicializar el mapa
+  useEffect(() => {
+    loadStores();
+  }, [pagination.page, filters]);
+
+  // Initialize map
   const initMap = () => {
     if (!L.current || !mapRef.current || mapInstanceRef.current) return;
-    console.log("Inicializando mapa...");
     
     try {
-      // Resolver problema de íconos
       const iconRetinaUrl = require('leaflet/dist/images/marker-icon-2x.png');
       const iconUrl = require('leaflet/dist/images/marker-icon.png');
       const shadowUrl = require('leaflet/dist/images/marker-shadow.png');
@@ -78,482 +235,969 @@ const ManageStores = () => {
         shadowSize: [41, 41]
       });
       
-      // Crear mapa
       mapInstanceRef.current = L.current.map(mapRef.current).setView(mapCenter, 13);
       
-      // Agregar capa de mosaicos
       L.current.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(mapInstanceRef.current);
       
-      // Eventos importantes:
-      
-      // 1. Evento click para seleccionar ubicación
       mapInstanceRef.current.on('click', function(e) {
-        console.log("Click en mapa:", e.latlng);
-        
-        // Solo procesar el clic si estamos en modo edición o adición
         if (isEditing || isAdding) {
           handleMapClick(e.latlng.lat, e.latlng.lng);
-        } else {
-          console.log("Click ignorado: no estamos en modo edición/adición");
         }
       });
       
-      // Cargar marcadores
-      loadStores();
-      
     } catch (err) {
-      console.error("Error en inicialización del mapa:", err);
+      console.error("Error in map initialization:", err);
     }
   };
 
-  // Observar cambios en isEditing/isAdding para actualizar el comportamiento del mapa
-  useEffect(() => {
-    console.log("Estado de edición cambió - isEditing:", isEditing, "isAdding:", isAdding);
-  }, [isEditing, isAdding]);
-
-  // Actualizar vista del mapa cuando cambia el centro
-  useEffect(() => {
-    if (mapInstanceRef.current) {
-      console.log("Actualizando centro del mapa a:", mapCenter);
-      mapInstanceRef.current.setView(mapCenter, 13);
-    }
-  }, [mapCenter]);
-
-  // Actualizar marcadores cuando cambian las tiendas
-  useEffect(() => {
-    if (stores.length > 0) {
-      console.log("Actualizando marcadores de tiendas:", stores.length);
-      updateStoreMarkers();
-    }
-  }, [stores]);
-
-  // Actualizar marcador de nueva ubicación
-  useEffect(() => {
-    if (newMarkerPosition) {
-      console.log("Actualizando posición de nuevo marcador:", newMarkerPosition);
-      updateNewLocationMarker();
-    }
-  }, [newMarkerPosition]);
-
-  // Cargar tiendas
-  const loadStores = () => {
+  // API Calls
+  const loadStores = async () => {
     setLoading(true);
-    console.log("Cargando tiendas...");
-    
-    // Simulación
-    setTimeout(() => {
-      const mockStores = [
-        { 
-          id: 1, 
-          name: 'Librosfera Central', 
-          address: 'Av. Insurgentes Sur 1602, Benito Juárez, 03940 CDMX', 
-          phone: '55 1234 5678', 
-          email: 'central@librosfera.com',
-          description: 'Tienda principal con la mayor variedad de libros y áreas de lectura.',
-          lat: 19.3849, 
-          lng: -99.1732 
+    try {
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v))
+      });
+
+      const response = await axios.get(`${API_BASE_URL}/tiendas/admin/todas?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`, // You'll need to get the token from your auth context/store
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0',
+          'Cache-Control': 'no-cache'
         },
-        { 
-          id: 2, 
-          name: 'Librosfera Norte', 
-          address: 'Av. Eduardo Molina 1623, Gustavo A. Madero, 07820 CDMX', 
-          phone: '55 8765 4321', 
-          email: 'norte@librosfera.com',
-          description: 'Especializada en literatura infantil y juvenil.',
-          lat: 19.4869, 
-          lng: -99.0959 
-        },
-        { 
-          id: 3, 
-          name: 'Librosfera Sur', 
-          address: 'División del Norte 3651, Coyoacán, 04610 CDMX', 
-          phone: '55 2468 1357', 
-          email: 'sur@librosfera.com',
-          description: 'Especializada en literatura académica y científica.',
-          lat: 19.3348, 
-          lng: -99.1551 
-        }
-      ];
-      
-      setStores(mockStores);
-      console.log("Tiendas cargadas correctamente:", mockStores.length);
-      setLoading(false);
-      
-      // Actualizar marcadores
-      if (mapInstanceRef.current) {
+        timeout: 10000, // 10 seconds timeout (equivalent to --connect-timeout 10)
+      });
+
+      if (response.data.status === 'success') {
+        setStores(response.data.data);
+        setPagination(prev => ({
+          ...prev,
+          total: response.data.paginacion.total,
+          totalPages: response.data.paginacion.totalPaginas
+        }));
         updateStoreMarkers();
       }
-    }, 1500);
-  };
-
-  // Actualizar marcadores de tiendas
-  const updateStoreMarkers = () => {
-    if (!L.current || !mapInstanceRef.current) {
-      console.log("No se pueden actualizar marcadores: mapa no inicializado");
-      return;
+    } catch (error) {
+      console.error('Error loading stores:', error);
+      toast.error(error.response?.data?.message || 'Error al cargar las tiendas');
+      
+      // Fallback to mock data for demo
+      const mockStores = [
+        {
+          _id: '1',
+          nombre: 'Librería Central Bogotá',
+          codigo: 'LCB001',
+          direccion: {
+            direccion_completa: 'Carrera 11 # 93-47',
+            ciudad: 'Bogotá',
+            departamento: 'Cundinamarca'
+          },
+          coordenadas: { latitud: 4.678041, longitud: -74.052432 },
+          telefono_principal: '+57 1 234-5678',
+          email: 'bogota@libreria.com',
+          estado: 'activa',
+          responsable: { nombre: 'María González', telefono: '+57 301 234-5678' }
+        },
+        {
+          _id: '2',
+          nombre: 'Librería Norte Medellín',
+          codigo: 'LNM001',
+          direccion: {
+            direccion_completa: 'Calle 50 # 45-30',
+            ciudad: 'Medellín',
+            departamento: 'Antioquia'
+          },
+          coordenadas: { latitud: 6.244203, longitud: -75.581212 },
+          telefono_principal: '+57 4 123-4567',
+          email: 'medellin@libreria.com',
+          estado: 'activa',
+          responsable: { nombre: 'Carlos Pérez', telefono: '+57 301 123-4567' }
+        }
+      ];
+      setStores(mockStores);
+      updateStoreMarkers();
+    } finally {
+      setLoading(false);
     }
-    
-    // Limpiar marcadores existentes
-    storeMarkersRef.current.forEach(marker => {
-      marker.remove();
-    });
-    storeMarkersRef.current = [];
-    
-    // Crear nuevos marcadores
-    stores.forEach(store => {
-      try {
-        const marker = L.current.marker([store.lat, store.lng])
-          .addTo(mapInstanceRef.current);
-        
-        // Contenido del popup
-        const popupContent = document.createElement('div');
-        popupContent.innerHTML = `
-          <div style="text-align: center;">
-            <h3 style="font-weight: bold; font-size: 16px;">${store.name}</h3>
-            <p style="font-size: 14px; margin-top: 4px;">${store.address}</p>
-            ${store.phone ? `<p style="font-size: 14px; margin-top: 4px;">Tel: ${store.phone}</p>` : ''}
-            <div style="margin-top: 8px; display: flex; justify-content: center; gap: 8px;">
-              <button id="edit-store-${store.id}" style="font-size: 12px; background-color: #dbeafe; color: #1d4ed8; padding: 4px 8px; border-radius: 4px; border: none; cursor: pointer;">
-                Editar
-              </button>
-              <button id="delete-store-${store.id}" style="font-size: 12px; background-color: #fee2e2; color: #b91c1c; padding: 4px 8px; border-radius: 4px; border: none; cursor: pointer;">
-                Eliminar
-              </button>
-            </div>
-          </div>
-        `;
-        
-        const popup = L.current.popup()
-          .setContent(popupContent);
-        
-        marker.bindPopup(popup);
-        
-        // Agregar event listeners a los botones cuando se abra el popup
-        marker.on('popupopen', () => {
-          setTimeout(() => {
-            const editBtn = document.getElementById(`edit-store-${store.id}`);
-            const deleteBtn = document.getElementById(`delete-store-${store.id}`);
-            
-            if (editBtn) {
-              editBtn.addEventListener('click', () => {
-                handleEdit(store);
-                marker.closePopup();
-              });
-            }
-            
-            if (deleteBtn) {
-              deleteBtn.addEventListener('click', () => {
-                handleDelete(store.id);
-                marker.closePopup();
-              });
-            }
-          }, 100);
-        });
-        
-        storeMarkersRef.current.push(marker);
-      } catch (err) {
-        console.error("Error al crear marcador para tienda:", err);
-      }
-    });
-    
-    console.log("Marcadores actualizados:", storeMarkersRef.current.length);
   };
 
-  // Actualizar marcador de nueva ubicación
-  const updateNewLocationMarker = () => {
+  const createStore = async (storeData) => {
+    try {
+      const response = await api.post(`${API_BASE_URL}/tiendas/admin`, storeData);
+
+      if (response.data.status === 'success') {
+        toast.success('Tienda creada exitosamente');
+        loadStores();
+        resetForm();
+        return response.data.data;
+      }
+    } catch (error) {
+      console.error('Error creating store:', error);
+      toast.error(error.response?.data?.message || 'Error al crear la tienda');
+      
+      // Mock success for demo
+      const newStore = {
+        _id: Date.now().toString(),
+        ...storeData,
+        estado: 'activa'
+      };
+      setStores(prev => [...prev, newStore]);
+      toast.success('Tienda creada exitosamente (demo)');
+      resetForm();
+    }
+  };
+
+  const updateStore = async (storeId, storeData) => {
+  try {
+    const response = await axios.put(`${API_BASE_URL}/tiendas/admin/${storeId}`, storeData, {
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`, // You'll need to get the token from your auth context/store
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0',
+        'Cache-Control': 'no-cache'
+      },
+      timeout: 30000, // 30 seconds timeout (equivalent to --max-time 30)
+    });
+
+    if (response.data.status === 'success') {
+      toast.success('Tienda actualizada exitosamente');
+      loadStores();
+      resetForm();
+      return response.data.data;
+    }
+  } catch (error) {
+    console.error('Error updating store:', error);
+    toast.error('Error al actualizar la tienda');
+   
+    // Mock success for demo
+    setStores(prev => prev.map(store =>
+      store._id === storeId ? { ...store, ...storeData } : store
+    ));
+    toast.success('Tienda actualizada exitosamente (demo)');
+    resetForm();
+  }
+};
+
+  const getStoreDetails = async (storeId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/tiendas/admin/${storeId}?incluir_estadisticas=true`, {
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`,
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0',
+        'Cache-Control': 'no-cache'
+      },
+      timeout: 30000, // 30 seconds timeout (equivalent to --max-time 30)
+    });
+
+    if (response.data.status === 'success') {
+      setSelectedStore(response.data.data);
+      return response.data.data;
+    }
+  } catch (error) {
+    console.error('Error getting store details:', error);
+    toast.error(error.response?.data?.message || 'Error al obtener detalles de la tienda');
+   
+    // Fallback to existing store data
+    const store = stores.find(s => s._id === storeId);
+    if (store) {
+      setSelectedStore({
+        ...store,
+        notas_internas: [
+          {
+            fecha: new Date().toISOString(),
+            nota: 'Tienda en funcionamiento normal',
+            categoria: 'operativa'
+          }
+        ]
+      });
+    }
+  }
+};
+
+ const changeStoreState = async (storeId, estado, motivo) => {
+    try {
+      const response = await axios.patch(`${API_BASE_URL}/tiendas/admin/${storeId}/estado`, 
+        { estado, motivo }, 
+        {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0',
+            'Cache-Control': 'no-cache'
+          },
+          timeout: 30000,
+        }
+      );
+
+      if (response.data.status === 'success') {
+        toast.success(`Estado cambiado a ${estado}`);
+        loadStores();
+        if (selectedStore && selectedStore._id === storeId) {
+          getStoreDetails(storeId);
+        }
+      }
+    } catch (error) {
+      console.error('Error changing store state:', error);
+      toast.error(error.response?.data?.message || 'Error al cambiar estado');
+    
+      // Mock success for demo
+      setStores(prev => prev.map(store =>
+        store._id === storeId ? { ...store, estado } : store
+      ));
+      if (selectedStore && selectedStore._id === storeId) {
+        setSelectedStore(prev => ({ ...prev, estado }));
+      }
+      toast.success(`Estado cambiado a ${estado} (demo)`);
+    }
+  };
+
+  const getStoreInventory = async (storeId, inventoryFilters = {}) => {
+  try {
+    const params = new URLSearchParams({
+      page: '1',
+      limit: '50',
+      ...inventoryFilters
+    });
+    const response = await axios.get(`${API_BASE_URL}/tiendas/admin/${storeId}/inventario?${params}`, {
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`,
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0',
+        'Cache-Control': 'no-cache'
+      },
+      timeout: 30000,
+    });
+    
+    if (response.data.status === 'success') {
+      setStoreInventory(response.data.data);
+      return response.data;
+    }
+  } catch (error) {
+    console.error('Error getting store inventory:', error);
+    toast.error(error.response?.data?.message || 'Error al obtener inventario');
+  }
+};
+
+  const getStorePickups = async (storeId, pickupFilters = {}) => {
+    try {
+      const params = new URLSearchParams({
+        page: '1',
+        limit: '50',
+        ...pickupFilters
+      });
+
+      const response = await api.get(`${API_BASE_URL}/tiendas/admin/${storeId}/recogidas?${params}`);
+
+      if (response.data.status === 'success') {
+        setStorePickups(response.data.data);
+        return response.data;
+      }
+    } catch (error) {
+      console.error('Error getting store pickups:', error);
+      toast.error(error.response?.data?.message || 'Error al obtener recogidas');
+      
+      // Mock pickups data
+      const mockPickups = [
+        {
+          _id: '1',
+          codigo_recogida: 'REC-ABC123456',
+          id_cliente: {
+            nombres: 'Juan Carlos',
+            apellidos: 'Pérez González',
+            telefono: '+57 301 234-5678'
+          },
+          estado: 'LISTO_PARA_RECOGER',
+          valor_total: 50000,
+          fecha_limite_recogida: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          _id: '2',
+          codigo_recogida: 'REC-DEF789012',
+          id_cliente: {
+            nombres: 'María',
+            apellidos: 'González López',
+            telefono: '+57 301 987-6543'
+          },
+          estado: 'PENDIENTE',
+          valor_total: 35000,
+          fecha_limite_recogida: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString()
+        }
+      ];
+      setStorePickups(mockPickups);
+      toast.success('Recogidas cargadas (demo)');
+    }
+  };
+
+  const processPickup = async (pickupId, action, data = {}) => {
+    try {
+      const response = await api.patch(`${API_BASE_URL}/tiendas/admin/recogidas/${pickupId}`, { 
+        accion: action, 
+        datos: data 
+      });
+
+      if (response.data.status === 'success') {
+        toast.success(`Recogida ${action} procesada exitosamente`);
+        if (selectedStore) {
+          getStorePickups(selectedStore._id);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing pickup:', error);
+      toast.error(error.response?.data?.message || 'Error al procesar recogida');
+      
+      // Mock success for demo
+      const actionMap = {
+        'marcar_preparado': 'LISTO_PARA_RECOGER',
+        'completar_recogida': 'RECOGIDO',
+        'cancelar': 'CANCELADO'
+      };
+      
+      setStorePickups(prev => prev.map(pickup => 
+        pickup._id === pickupId 
+          ? { ...pickup, estado: actionMap[action] || pickup.estado }
+          : pickup
+      ));
+      toast.success(`Recogida ${action} procesada exitosamente (demo)`);
+    }
+  };
+
+  const getStoreStatistics = async (storeId = null, dateRange = {}) => {
+    try {
+      const params = new URLSearchParams({
+        ...(storeId && { tienda_id: storeId }),
+        ...dateRange
+      });
+
+      const response = await api.get(`${API_BASE_URL}/tiendas/admin/estadisticas?${params}`);
+
+      if (response.data.status === 'success') {
+        setStoreStatistics(response.data.data);
+        return response.data.data;
+      }
+    } catch (error) {
+      console.error('Error getting statistics:', error);
+      toast.error(error.response?.data?.message || 'Error al obtener estadísticas');
+      
+      // Mock statistics
+      const mockStats = {
+        tiendas: {
+          total_tiendas: stores.length,
+          tiendas_activas: stores.filter(s => s.estado === 'activa').length
+        },
+        recogidas: {
+          total_recogidas: 150,
+          recogidas_completadas: 130,
+          recogidas_canceladas: 15,
+          tasa_completacion: 86.7
+        }
+      };
+      setStoreStatistics(mockStats);
+      toast.success('Estadísticas cargadas (demo)');
+    }
+  };
+
+  const addStoreNote = async (storeId, noteData) => {
+    try {
+      const response = await api.post(`${API_BASE_URL}/tiendas/admin/${storeId}/notas`, noteData);
+
+      if (response.data.status === 'success') {
+        toast.success('Nota agregada exitosamente');
+        if (selectedStore) {
+          getStoreDetails(storeId);
+        }
+        setNoteForm({ nota: '', categoria: 'otra' });
+      }
+    } catch (error) {
+      console.error('Error adding note:', error);
+      toast.error(error.response?.data?.message || 'Error al agregar nota');
+      
+      // Mock success for demo
+      const newNote = {
+        fecha: new Date().toISOString(),
+        nota: noteData.nota,
+        categoria: noteData.categoria
+      };
+      
+      setSelectedStore(prev => ({
+        ...prev,
+        notas_internas: [...(prev.notas_internas || []), newNote]
+      }));
+      setNoteForm({ nota: '', categoria: 'otra' });
+      toast.success('Nota agregada exitosamente (demo)');
+    }
+  };
+
+  // Map functions
+  const updateStoreMarkers = () => {
     if (!L.current || !mapInstanceRef.current) return;
     
-    // Eliminar marcador existente
-    if (newMarkerRef.current) {
-      newMarkerRef.current.remove();
-      newMarkerRef.current = null;
-    }
+    storeMarkersRef.current.forEach(marker => marker.remove());
+    storeMarkersRef.current = [];
     
-    // Si tenemos una nueva posición, crear marcador
-    if (newMarkerPosition) {
-      try {
-        newMarkerRef.current = L.current.marker(newMarkerPosition, {
-          draggable: true
-        }).addTo(mapInstanceRef.current);
-        
-        // Popup con información
-        const popupContent = document.createElement('div');
-        popupContent.innerHTML = `
-          <div>
-            <h3 style="font-weight: bold; color: #1d4ed8;">Nueva ubicación</h3>
-            <p style="font-size: 14px;">Lat: ${newMarkerPosition[0].toFixed(6)}</p>
-            <p style="font-size: 14px;">Lng: ${newMarkerPosition[1].toFixed(6)}</p>
-            <p style="font-size: 12px; color: #6b7280; margin-top: 4px;">Puedes arrastrar este marcador para ajustar la posición</p>
-          </div>
-        `;
-        
-        newMarkerRef.current.bindPopup(popupContent);
-        
-        // Evento de arrastre
-        newMarkerRef.current.on('dragend', () => {
-          const position = newMarkerRef.current.getLatLng();
-          console.log("Marcador arrastrado a:", position);
+    stores.forEach(store => {
+      if (store.coordenadas) {
+        try {
+          const marker = L.current.marker([store.coordenadas.latitud, store.coordenadas.longitud])
+            .addTo(mapInstanceRef.current);
           
-          setNewMarkerPosition([position.lat, position.lng]);
-          setStoreForm(prev => ({
-            ...prev,
-            lat: position.lat,
-            lng: position.lng
-          }));
-          
-          // Actualizar popup después de arrastrar
-          const newPopupContent = document.createElement('div');
-          newPopupContent.innerHTML = `
-            <div>
-              <h3 style="font-weight: bold; color: #1d4ed8;">Nueva ubicación</h3>
-              <p style="font-size: 14px;">Lat: ${position.lat.toFixed(6)}</p>
-              <p style="font-size: 14px;">Lng: ${position.lng.toFixed(6)}</p>
-              <p style="font-size: 12px; color: #6b7280; margin-top: 4px;">Puedes arrastrar este marcador para ajustar la posición</p>
+          const popupContent = document.createElement('div');
+          popupContent.innerHTML = `
+            <div style="text-align: center;">
+              <h3 style="font-weight: bold; font-size: 16px;">${store.nombre}</h3>
+              <p style="font-size: 14px; margin-top: 4px;">${store.direccion.direccion_completa}</p>
+              <p style="font-size: 12px; color: #666;">Estado: ${store.estado}</p>
+              <div style="margin-top: 8px; display: flex; justify-content: center; gap: 8px;">
+                <button id="view-store-${store._id}" style="font-size: 12px; background-color: #dbeafe; color: #1d4ed8; padding: 4px 8px; border-radius: 4px; border: none; cursor: pointer;">
+                  Ver Detalles
+                </button>
+                <button id="edit-store-${store._id}" style="font-size: 12px; background-color: #f0f9ff; color: #0369a1; padding: 4px 8px; border-radius: 4px; border: none; cursor: pointer;">
+                  Editar
+                </button>
+              </div>
             </div>
           `;
           
-          newMarkerRef.current.setPopupContent(newPopupContent);
-        });
-        
-        // Abrir popup
-        newMarkerRef.current.openPopup();
-      } catch (err) {
-        console.error("Error al crear marcador para nueva ubicación:", err);
+          marker.bindPopup(popupContent);
+          
+          marker.on('popupopen', () => {
+            setTimeout(() => {
+              const viewBtn = document.getElementById(`view-store-${store._id}`);
+              const editBtn = document.getElementById(`edit-store-${store._id}`);
+              
+              if (viewBtn) {
+                viewBtn.addEventListener('click', () => {
+                  handleViewDetails(store);
+                  marker.closePopup();
+                });
+              }
+              
+              if (editBtn) {
+                editBtn.addEventListener('click', () => {
+                  handleEdit(store);
+                  marker.closePopup();
+                });
+              }
+            }, 100);
+          });
+          
+          storeMarkersRef.current.push(marker);
+        } catch (err) {
+          console.error("Error creating marker:", err);
+        }
       }
-    }
+    });
   };
 
-  // Manejar click en el mapa
   const handleMapClick = (lat, lng) => {
-    console.log("Click en mapa procesado: lat=" + lat + ", lng=" + lng);
+    if (!isEditing && !isAdding) return;
     
-    // Asegurarse de que estamos en modo edición o adición
-    if (!isEditing && !isAdding) {
-      console.log("Click ignorado: no estamos en modo edición o adición");
-      return;
-    }
-    
-    // Actualizar posición del marcador
     setNewMarkerPosition([lat, lng]);
-    
-    // Actualizar formulario
     setStoreForm(prev => ({
       ...prev,
-      lat: lat,
-      lng: lng
-    }));
-    
-    toast.info('Posición seleccionada. Para obtener la dirección exacta, usa el buscador.');
-  };
-
-  // Búsqueda de dirección (simulada)
-  const searchAddress = (e) => {
-    e.preventDefault();
-    
-    // Verificar que tenemos acceso al input
-    if (!searchInputRef.current) {
-      console.error("No se pudo acceder al campo de búsqueda");
-      return;
-    }
-    
-    const address = searchInputRef.current.value;
-    console.log("Buscando dirección:", address);
-    
-    if (!address.trim()) {
-      toast.error('Ingresa una dirección para buscar');
-      return;
-    }
-
-    setLoading(true);
-    
-    // Simulación de búsqueda
-    setTimeout(() => {
-      try {
-        // Generar coordenadas aleatorias cerca del centro
-        const offset = (Math.random() - 0.5) * 0.1;
-        const newLat = mapCenter[0] + offset;
-        const newLng = mapCenter[1] + offset;
-        
-        console.log("Ubicación encontrada:", { lat: newLat, lng: newLng, address });
-        
-        // Actualizar estado
-        setNewMarkerPosition([newLat, newLng]);
-        setMapCenter([newLat, newLng]);
-        
-        setStoreForm(prev => ({
-          ...prev,
-          address: address,
-          lat: newLat,
-          lng: newLng
-        }));
-        
-        toast.success('Ubicación encontrada');
-      } catch (err) {
-        console.error("Error en búsqueda de dirección:", err);
-        toast.error('Error al buscar la dirección');
-      } finally {
-        setLoading(false);
+      coordenadas: {
+        latitud: lat,
+        longitud: lng
       }
-    }, 1000);
-  };
-
-  // Manejar cambios en el formulario
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setStoreForm(prev => ({
-      ...prev,
-      [name]: value
     }));
+    
+    toast.info('Posición seleccionada');
   };
 
-  // Guardar tienda
-  const handleSubmit = (e) => {
+  // Form handlers
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    
+    if (name.includes('.')) {
+      const [parent, child] = name.split('.');
+      setStoreForm(prev => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          [child]: type === 'checkbox' ? checked : value
+        }
+      }));
+    } else {
+      setStoreForm(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      }));
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!storeForm.name || !storeForm.address || !storeForm.lat || !storeForm.lng) {
+    if (!storeForm.nombre || !storeForm.codigo || !storeForm.coordenadas.latitud) {
       toast.error('Por favor completa todos los campos obligatorios');
       return;
     }
     
     setLoading(true);
-    console.log("Guardando tienda:", storeForm);
     
-    // Simulación de guardado
-    setTimeout(() => {
-      try {
-        if (isEditing) {
-          // Actualizar tienda existente
-          const updatedStores = stores.map(store => 
-            store.id === storeForm.id ? {...storeForm} : store
-          );
-          setStores(updatedStores);
-          toast.success('Tienda actualizada exitosamente');
-        } else {
-          // Agregar nueva tienda
-          const newStore = {
-            ...storeForm,
-            id: Date.now() // En un sistema real, vendría del backend
-          };
-          setStores(prevStores => [...prevStores, newStore]);
-          toast.success('Tienda agregada exitosamente');
-        }
-        
-        resetForm();
-      } catch (err) {
-        console.error("Error al guardar tienda:", err);
-        toast.error('Error al guardar los datos');
-      } finally {
-        setLoading(false);
+    try {
+      if (isEditing && selectedStore) {
+        await updateStore(selectedStore._id, storeForm);
+      } else {
+        await createStore(storeForm);
       }
-    }, 1000);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Editar tienda
+  const handleViewDetails = async (store) => {
+    await getStoreDetails(store._id || store.id);
+    setActiveTab('general');
+  };
+
   const handleEdit = (store) => {
-    console.log("Editando tienda:", store);
-    
     setSelectedStore(store);
     setStoreForm({
-      id: store.id,
-      name: store.name,
-      address: store.address,
-      phone: store.phone || '',
+      nombre: store.nombre,
+      codigo: store.codigo,
+      direccion: store.direccion || {
+        direccion_completa: store.address || '',
+        ciudad: '',
+        departamento: '',
+        codigo_postal: '',
+        pais: 'Colombia'
+      },
+      coordenadas: store.coordenadas || {
+        latitud: store.lat,
+        longitud: store.lng
+      },
+      telefono_principal: store.telefono_principal || store.phone || '',
+      telefono_secundario: store.telefono_secundario || '',
       email: store.email || '',
-      description: store.description || '',
-      lat: store.lat,
-      lng: store.lng
+      responsable: store.responsable || { nombre: '', telefono: '', email: '' },
+      servicios: store.servicios || {
+        venta_presencial: true,
+        recogida_productos: true,
+        devoluciones: true,
+        eventos: false,
+        consulta_libreria: true,
+        transferencias_tiendas: true
+      },
+      capacidad: store.capacidad || {
+        max_recogidas_dia: 50,
+        max_transferencias_dia: 20,
+        espacio_almacen_m2: 100,
+        capacidad_maxima_libros: 5000
+      },
+      descripcion: store.descripcion || store.description || '',
+      estado: store.estado || 'activa'
     });
     
     setIsEditing(true);
     setIsAdding(false);
-    setMapCenter([store.lat, store.lng]);
-    setNewMarkerPosition([store.lat, store.lng]);
     
-    // Actualizar campo de búsqueda
-    if (searchInputRef.current) {
-      searchInputRef.current.value = store.address;
+    const lat = store.coordenadas?.latitud || store.lat;
+    const lng = store.coordenadas?.longitud || store.lng;
+    if (lat && lng) {
+      setMapCenter([lat, lng]);
+      setNewMarkerPosition([lat, lng]);
     }
   };
 
-  // Eliminar tienda
-  const handleDelete = (id) => {
-    if (window.confirm('¿Estás seguro que deseas eliminar esta tienda?')) {
-      setLoading(true);
-      console.log("Eliminando tienda:", id);
-      
-      // Simulación de eliminación
-      setTimeout(() => {
-        try {
-          const updatedStores = stores.filter(store => store.id !== id);
-          setStores(updatedStores);
-          
-          if (selectedStore && selectedStore.id === id) {
-            setSelectedStore(null);
-            setIsEditing(false);
-          }
-          
-          toast.success('Tienda eliminada exitosamente');
-        } catch (err) {
-          console.error("Error al eliminar tienda:", err);
-          toast.error('Error al eliminar la tienda');
-        } finally {
-          setLoading(false);
-        }
-      }, 1000);
-    }
-  };
-
-  // Agregar nueva tienda
   const handleAddNew = () => {
-    console.log("Agregando nueva tienda");
     resetForm();
     setIsAdding(true);
     setIsEditing(false);
-    
-    // Si el mapa ya está centrado en algún lugar, usamos ese como posición inicial
-    if (mapInstanceRef.current) {
-      const center = mapInstanceRef.current.getCenter();
-      setMapCenter([center.lat, center.lng]);
-    }
+    setActiveTab('general');
   };
 
-  // Cancelar edición/adición
-  const handleCancel = () => {
-    console.log("Cancelando operación");
-    resetForm();
-  };
-
-  // Resetear formulario
   const resetForm = () => {
     setStoreForm({
-      id: null,
-      name: '',
-      address: '',
-      phone: '',
+      nombre: '',
+      codigo: '',
+      direccion: {
+        direccion_completa: '',
+        ciudad: '',
+        departamento: '',
+        codigo_postal: '',
+        pais: 'Colombia'
+      },
+      coordenadas: {
+        latitud: null,
+        longitud: null
+      },
+      telefono_principal: '',
+      telefono_secundario: '',
       email: '',
-      description: '',
-      lat: null,
-      lng: null
+      responsable: {
+        nombre: '',
+        telefono: '',
+        email: ''
+      },
+      horarios: {},
+      servicios: {
+        venta_presencial: true,
+        recogida_productos: true,
+        devoluciones: true,
+        eventos: false,
+        consulta_libreria: true,
+        transferencias_tiendas: true
+      },
+      capacidad: {
+        max_recogidas_dia: 50,
+        max_transferencias_dia: 20,
+        espacio_almacen_m2: 100,
+        capacidad_maxima_libros: 5000
+      },
+      descripcion: '',
+      estado: 'activa'
     });
     
     setSelectedStore(null);
     setIsEditing(false);
     setIsAdding(false);
     setNewMarkerPosition(null);
+    setActiveTab('general');
     
-    // Limpiar marcador temporal
-    if (newMarkerRef.current && mapInstanceRef.current) {
+    if (newMarkerRef.current) {
       newMarkerRef.current.remove();
       newMarkerRef.current = null;
     }
-    
-    // Limpiar campo de búsqueda
-    if (searchInputRef.current) {
-      searchInputRef.current.value = '';
-    }
   };
+
+  const handleStateChange = async (e) => {
+    e.preventDefault();
+    if (!selectedStore || !stateChangeForm.estado || !stateChangeForm.motivo) {
+      toast.error('Complete todos los campos requeridos');
+      return;
+    }
+    
+    await changeStoreState(selectedStore._id, stateChangeForm.estado, stateChangeForm.motivo);
+    setStateChangeForm({ estado: '', motivo: '' });
+  };
+
+  const handleAddNote = async (e) => {
+    e.preventDefault();
+    if (!selectedStore || !noteForm.nota.trim()) {
+      toast.error('Ingrese una nota válida');
+      return;
+    }
+    
+    await addStoreNote(selectedStore._id, noteForm);
+  };
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  // Tab content renderers
+  const renderGeneralTab = () => (
+    <div className="space-y-6">
+      {selectedStore && (
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold mb-4">Información General</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p><strong>Nombre:</strong> {selectedStore.nombre}</p>
+              <p><strong>Código:</strong> {selectedStore.codigo}</p>
+              <p><strong>Estado:</strong> 
+                <span className={`ml-2 px-2 py-1 rounded text-sm ${
+                  selectedStore.estado === 'activa' ? 'bg-green-100 text-green-800' :
+                  selectedStore.estado === 'mantenimiento' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {selectedStore.estado}
+                </span>
+              </p>
+              <p><strong>Email:</strong> {selectedStore.email}</p>
+            </div>
+            <div>
+              <p><strong>Teléfono:</strong> {selectedStore.telefono_principal}</p>
+              <p><strong>Dirección:</strong> {selectedStore.direccion?.direccion_completa}</p>
+              <p><strong>Ciudad:</strong> {selectedStore.direccion?.ciudad}</p>
+              <p><strong>Responsable:</strong> {selectedStore.responsable?.nombre}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* State Change Section */}
+      <div className="bg-white p-4 border rounded-lg">
+        <h4 className="font-semibold mb-3">Cambiar Estado de Tienda</h4>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <select
+              value={stateChangeForm.estado}
+              onChange={(e) => setStateChangeForm(prev => ({ ...prev, estado: e.target.value }))}
+              className="border rounded px-3 py-2"
+            >
+              <option value="">Seleccionar estado</option>
+              <option value="activa">Activa</option>
+              <option value="mantenimiento">Mantenimiento</option>
+              <option value="cerrada_temporal">Cerrada Temporal</option>
+              <option value="cerrada_permanente">Cerrada Permanente</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Motivo del cambio"
+              value={stateChangeForm.motivo}
+              onChange={(e) => setStateChangeForm(prev => ({ ...prev, motivo: e.target.value }))}
+              className="border rounded px-3 py-2"
+            />
+          </div>
+          <button
+            onClick={handleStateChange}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded"
+            disabled={!selectedStore}
+          >
+            Cambiar Estado
+          </button>
+        </div>
+      </div>
+
+      {/* Add Note Section */}
+      <div className="bg-white p-4 border rounded-lg">
+        <h4 className="font-semibold mb-3">Agregar Nota Interna</h4>
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-4">
+            <select
+              value={noteForm.categoria}
+              onChange={(e) => setNoteForm(prev => ({ ...prev, categoria: e.target.value }))}
+              className="border rounded px-3 py-2"
+            >
+              <option value="otra">Otra</option>
+              <option value="operativa">Operativa</option>
+              <option value="mantenimiento">Mantenimiento</option>
+              <option value="incidencia">Incidencia</option>
+              <option value="mejora">Mejora</option>
+            </select>
+            <textarea
+              placeholder="Escribir nota..."
+              value={noteForm.nota}
+              onChange={(e) => setNoteForm(prev => ({ ...prev, nota: e.target.value }))}
+              className="border rounded px-3 py-2 col-span-2"
+              rows="2"
+            />
+          </div>
+          <button
+            onClick={handleAddNote}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+            disabled={!selectedStore}
+          >
+            Agregar Nota
+          </button>
+        </div>
+      </div>
+
+      {/* Notes History */}
+      {selectedStore?.notas_internas && (
+        <div className="bg-white p-4 border rounded-lg">
+          <h4 className="font-semibold mb-3">Historial de Notas</h4>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {selectedStore.notas_internas.map((note, idx) => (
+              <div key={idx} className="border-l-4 border-blue-200 pl-3 py-2">
+                <div className="flex justify-between items-start">
+                  <p className="text-sm">{note.nota}</p>
+                  <span className="text-xs text-gray-500 ml-2">{note.categoria}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  {new Date(note.fecha).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderInventoryTab = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">Inventario de Tienda</h3>
+        <button
+          onClick={() => selectedStore && getStoreInventory(selectedStore._id)}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+          disabled={!selectedStore}
+        >
+          Cargar Inventario
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full bg-white border">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 border text-left">Libro</th>
+              <th className="px-4 py-2 border text-left">Stock Total</th>
+              <th className="px-4 py-2 border text-left">Disponible</th>
+              <th className="px-4 py-2 border text-left">Reservado</th>
+              <th className="px-4 py-2 border text-left">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {storeInventory.map((item, idx) => (
+              <tr key={idx} className="hover:bg-gray-50">
+                <td className="px-4 py-2 border">
+                  <div>
+                    <p className="font-medium">{item.id_libro?.titulo}</p>
+                    <p className="text-sm text-gray-500">{item.id_libro?.autor_nombre_completo}</p>
+                  </div>
+                </td>
+                <td className="px-4 py-2 border">{item.stock_total}</td>
+                <td className="px-4 py-2 border">{item.stock_disponible}</td>
+                <td className="px-4 py-2 border">{item.stock_reservado}</td>
+                <td className="px-4 py-2 border">
+                  <span className={`px-2 py-1 rounded text-sm ${
+                    item.estado === 'disponible' ? 'bg-green-100 text-green-800' :
+                    item.necesita_restock ? 'bg-red-100 text-red-800' :
+                    'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {item.estado}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderPickupsTab = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">Recogidas de Tienda</h3>
+        <button
+          onClick={() => selectedStore && getStorePickups(selectedStore._id)}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+          disabled={!selectedStore}
+        >
+          Cargar Recogidas
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full bg-white border">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 border text-left">Código</th>
+              <th className="px-4 py-2 border text-left">Cliente</th>
+              <th className="px-4 py-2 border text-left">Estado</th>
+              <th className="px-4 py-2 border text-left">Valor</th>
+              <th className="px-4 py-2 border text-left">Fecha Límite</th>
+              <th className="px-4 py-2 border text-left">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {storePickups.map((pickup, idx) => (
+              <tr key={idx} className="hover:bg-gray-50">
+                <td className="px-4 py-2 border">{pickup.codigo_recogida}</td>
+                <td className="px-4 py-2 border">
+                  {pickup.id_cliente?.nombres} {pickup.id_cliente?.apellidos}
+                </td>
+                <td className="px-4 py-2 border">
+                  <span className={`px-2 py-1 rounded text-sm ${
+                    pickup.estado === 'RECOGIDO' ? 'bg-green-100 text-green-800' :
+                    pickup.estado === 'LISTO_PARA_RECOGER' ? 'bg-blue-100 text-blue-800' :
+                    pickup.estado === 'CANCELADO' ? 'bg-red-100 text-red-800' :
+                    'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {pickup.estado}
+                  </span>
+                </td>
+                <td className="px-4 py-2 border">${pickup.valor_total?.toLocaleString()}</td>
+                <td className="px-4 py-2 border">
+                  {new Date(pickup.fecha_limite_recogida).toLocaleDateString()}
+                </td>
+                <td className="px-4 py-2 border">
+                  <div className="space-x-2">
+                    {pickup.estado === 'PENDIENTE' && (
+                      <button
+                        onClick={() => processPickup(pickup._id, 'marcar_preparado')}
+                        className="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-xs"
+                      >
+                        Preparar
+                      </button>
+                    )}
+                    {pickup.estado === 'LISTO_PARA_RECOGER' && (
+                      <button
+                        onClick={() => processPickup(pickup._id, 'completar_recogida', {
+                          documento_presentado: 'CC123456789',
+                          nombre_empleado: 'Sistema'
+                        })}
+                        className="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs"
+                      >
+                        Completar
+                      </button>
+                    )}
+                    <button
+                      onClick={() => processPickup(pickup._id, 'cancelar', {
+                        motivo: 'Cancelado desde administración'
+                      })}
+                      className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderStatsTab = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">Estadísticas</h3>
+        <button
+          onClick={() => getStoreStatistics(selectedStore?._id)}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          Cargar Estadísticas
+        </button>
+      </div>
+
+      {storeStatistics && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-blue-800">Total Tiendas</h4>
+            <p className="text-2xl font-bold text-blue-600">
+              {storeStatistics.tiendas?.total_tiendas || 0}
+            </p>
+          </div>
+          <div className="bg-green-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-green-800">Tiendas Activas</h4>
+            <p className="text-2xl font-bold text-green-600">
+              {storeStatistics.tiendas?.tiendas_activas || 0}
+            </p>
+          </div>
+          <div className="bg-orange-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-orange-800">Total Recogidas</h4>
+            <p className="text-2xl font-bold text-orange-600">
+              {storeStatistics.recogidas?.total_recogidas || 0}
+            </p>
+          </div>
+          <div className="bg-purple-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-purple-800">Tasa Completación</h4>
+            <p className="text-2xl font-bold text-purple-600">
+              {storeStatistics.recogidas?.tasa_completacion || 0}%
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex-1 bg-gray-100 p-6 overflow-y-auto">
@@ -578,50 +1222,72 @@ const ManageStores = () => {
             </button>
           )}
         </div>
-        
-        {/* Buscador de direcciones */}
-        {(isEditing || isAdding) && (
-          <div className="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
-            <h2 className="text-lg font-semibold mb-2 text-gray-700">
-              Buscar ubicación
-            </h2>
-            <form onSubmit={searchAddress} className="flex">
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Ingresa una dirección..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                defaultValue={storeForm.address}
-              />
-              <button
-                type="submit"
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-r-md"
-                disabled={loading}
+
+        {/* Filters */}
+        {!isEditing && !isAdding && (
+          <div className="bg-gray-50 p-4 rounded-lg mb-6">
+            <h3 className="font-semibold mb-3">Filtros</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <select
+                name="estado"
+                value={filters.estado}
+                onChange={handleFilterChange}
+                className="border rounded px-3 py-2"
               >
-                {loading ? (
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    <span>Buscando...</span>
-                  </div>
-                ) : (
-                  <span>Buscar</span>
-                )}
-              </button>
-            </form>
-            <p className="text-sm text-gray-500 mt-1">
-              También puedes hacer clic directamente en el mapa para seleccionar una ubicación
-            </p>
+                <option value="">Todos los estados</option>
+                <option value="activa">Activa</option>
+                <option value="mantenimiento">Mantenimiento</option>
+                <option value="cerrada_temporal">Cerrada Temporal</option>
+                <option value="cerrada_permanente">Cerrada Permanente</option>
+              </select>
+              
+              <input
+                type="text"
+                name="ciudad"
+                placeholder="Ciudad"
+                value={filters.ciudad}
+                onChange={handleFilterChange}
+                className="border rounded px-3 py-2"
+              />
+              
+              <input
+                type="text"
+                name="departamento"
+                placeholder="Departamento"
+                value={filters.departamento}
+                onChange={handleFilterChange}
+                className="border rounded px-3 py-2"
+              />
+              
+              <input
+                type="text"
+                name="nombre"
+                placeholder="Nombre tienda"
+                value={filters.nombre}
+                onChange={handleFilterChange}
+                className="border rounded px-3 py-2"
+              />
+              
+              <input
+                type="text"
+                name="busqueda"
+                placeholder="Búsqueda general"
+                value={filters.busqueda}
+                onChange={handleFilterChange}
+                className="border rounded px-3 py-2"
+              />
+            </div>
           </div>
         )}
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Listado de tiendas */}
+        {/* Store List */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
             <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-700">
-                Tiendas Registradas
+                Tiendas Registradas ({stores.length})
               </h2>
             </div>
             
@@ -632,43 +1298,43 @@ const ManageStores = () => {
                 </div>
               ) : stores.length === 0 ? (
                 <div className="text-center py-8 px-4 text-gray-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
                   <p>No hay tiendas registradas</p>
                 </div>
               ) : (
                 <ul className="divide-y divide-gray-200">
                   {stores.map(store => (
                     <li 
-                      key={store.id} 
-                      className={`p-4 hover:bg-gray-50 transition-colors ${
-                        selectedStore?.id === store.id ? 'bg-blue-50' : ''
+                      key={store._id || store.id} 
+                      className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
+                        selectedStore?._id === store._id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                       }`}
                     >
                       <div className="flex justify-between">
-                        <div>
-                          <h3 className="font-medium text-gray-900">{store.name}</h3>
-                          <p className="text-sm text-gray-500 mt-1">{store.address}</p>
+                        <div onClick={() => handleViewDetails(store)} className="flex-1">
+                          <h3 className="font-medium text-gray-900">{store.nombre}</h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {store.direccion?.direccion_completa || store.address}
+                          </p>
+                          <div className="flex items-center justify-between mt-2">
+                            <p className="text-xs text-gray-400">{store.codigo}</p>
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              store.estado === 'activa' ? 'bg-green-100 text-green-800' :
+                              store.estado === 'mantenimiento' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {store.estado}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex flex-col space-y-2">
+                        <div className="flex flex-col space-y-2 ml-4">
                           <button 
-                            onClick={() => setMapCenter([store.lat, store.lng])}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(store);
+                            }}
                             className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
                           >
-                            Ver en mapa
-                          </button>
-                          <button 
-                            onClick={() => handleEdit(store)}
-                            className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
-                          >
                             Editar
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(store.id)}
-                            className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
-                          >
-                            Eliminar
                           </button>
                         </div>
                       </div>
@@ -677,13 +1343,46 @@ const ManageStores = () => {
                 </ul>
               )}
             </div>
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+              <div className="p-4 border-t flex justify-between items-center">
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
+                  disabled={pagination.page === 1}
+                  className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <span className="text-sm text-gray-600">
+                  Página {pagination.page} de {pagination.totalPages}
+                </span>
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
+                  disabled={pagination.page === pagination.totalPages}
+                  className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
           </div>
         </div>
         
-        {/* Mapa y formulario */}
+        {/* Map and Details */}
         <div className="lg:col-span-2">
-          {/* Mapa */}
+          {/* Map */}
           <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-700">
+                Mapa de Ubicaciones
+                {(isEditing || isAdding) && (
+                  <span className="text-sm text-blue-600 ml-2">
+                    (Haz clic en el mapa para seleccionar ubicación)
+                  </span>
+                )}
+              </h3>
+            </div>
             <div 
               ref={mapRef} 
               id="map-container" 
@@ -691,100 +1390,150 @@ const ManageStores = () => {
             ></div>
           </div>
           
-          {/* Formulario */}
+          {/* Store Form */}
           {(isEditing || isAdding) && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-800">
                 {isEditing ? 'Editar Tienda' : 'Agregar Nueva Tienda'}
               </h2>
               
-              <form onSubmit={handleSubmit}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Nombre de la Tienda *
                     </label>
                     <input
                       type="text"
-                      name="name"
-                      value={storeForm.name}
+                      name="nombre"
+                      value={storeForm.nombre}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Nombre de la tienda"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Teléfono
+                      Código *
                     </label>
                     <input
                       type="text"
-                      name="phone"
-                      value={storeForm.phone}
+                      name="codigo"
+                      value={storeForm.codigo}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Teléfono de contacto"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
                     />
                   </div>
                   
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Dirección *
+                      Dirección Completa *
                     </label>
                     <input
                       type="text"
-                      name="address"
-                      value={storeForm.address}
+                      name="direccion.direccion_completa"
+                      value={storeForm.direccion.direccion_completa}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Dirección completa"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
+                      Ciudad *
+                    </label>
+                    <input
+                      type="text"
+                      name="direccion.ciudad"
+                      value={storeForm.direccion.ciudad}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Departamento *
+                    </label>
+                    <input
+                      type="text"
+                      name="direccion.departamento"
+                      value={storeForm.direccion.departamento}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Teléfono Principal *
+                    </label>
+                    <input
+                      type="text"
+                      name="telefono_principal"
+                      value={storeForm.telefono_principal}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email *
                     </label>
                     <input
                       type="email"
                       name="email"
                       value={storeForm.email}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Correo electrónico"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
                     />
                   </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Descripción
+                      Responsable - Nombre *
                     </label>
                     <input
                       type="text"
-                      name="description"
-                      value={storeForm.description}
+                      name="responsable.nombre"
+                      value={storeForm.responsable.nombre}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Breve descripción de la tienda"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
                     />
                   </div>
                   
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Responsable - Teléfono *
+                    </label>
+                    <input
+                      type="text"
+                      name="responsable.telefono"
+                      value={storeForm.responsable.telefono}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Latitud *
                     </label>
                     <input
                       type="number"
-                      name="lat"
-                      value={storeForm.lat || ''}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
-                      placeholder="Latitud"
+                      value={storeForm.coordenadas.latitud || ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                       step="0.000001"
-                      required
                       readOnly
                     />
                   </div>
@@ -795,31 +1544,114 @@ const ManageStores = () => {
                     </label>
                     <input
                       type="number"
-                      name="lng"
-                      value={storeForm.lng || ''}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
-                      placeholder="Longitud"
+                      value={storeForm.coordenadas.longitud || ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                       step="0.000001"
-                      required
                       readOnly
                     />
                   </div>
+                </div>
+
+                {/* Services */}
+                <div>
+                  <h3 className="text-lg font-medium mb-3">Servicios</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {Object.keys(storeForm.servicios).map(service => (
+                      <label key={service} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          name={`servicios.${service}`}
+                          checked={storeForm.servicios[service]}
+                          onChange={handleInputChange}
+                          className="mr-2"
+                        />
+                        <span className="text-sm capitalize">{service.replace('_', ' ')}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Capacity */}
+                <div>
+                  <h3 className="text-lg font-medium mb-3">Capacidad</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Max Recogidas/Día
+                      </label>
+                      <input
+                        type="number"
+                        name="capacidad.max_recogidas_dia"
+                        value={storeForm.capacidad.max_recogidas_dia}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Max Transferencias/Día
+                      </label>
+                      <input
+                        type="number"
+                        name="capacidad.max_transferencias_dia"
+                        value={storeForm.capacidad.max_transferencias_dia}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Espacio Almacén (m²)
+                      </label>
+                      <input
+                        type="number"
+                        name="capacidad.espacio_almacen_m2"
+                        value={storeForm.capacidad.espacio_almacen_m2}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Capacidad Max Libros
+                      </label>
+                      <input
+                        type="number"
+                        name="capacidad.capacidad_maxima_libros"
+                        value={storeForm.capacidad.capacidad_maxima_libros}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Descripción
+                  </label>
+                  <textarea
+                    name="descripcion"
+                    value={storeForm.descripcion}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
                 </div>
                 
                 <div className="flex justify-end space-x-4">
                   <button
                     type="button"
-                    onClick={handleCancel}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-colors"
+                    onClick={resetForm}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md"
                   >
                     Cancelar
                   </button>
                   
                   <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors flex items-center"
-                    disabled={loading || !storeForm.lat || !storeForm.lng}
+                    onClick={handleSubmit}
+                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md flex items-center"
+                    disabled={loading || !storeForm.coordenadas.latitud}
                   >
                     {loading ? (
                       <>
@@ -831,7 +1663,42 @@ const ManageStores = () => {
                     )}
                   </button>
                 </div>
-              </form>
+              </div>
+            </div>
+          )}
+
+          {/* Store Details Tabs */}
+          {selectedStore && !isEditing && !isAdding && (
+            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="border-b border-gray-200">
+                <nav className="flex space-x-8 px-6 py-3">
+                  {[
+                    { id: 'general', name: 'General' },
+                    { id: 'inventory', name: 'Inventario' },
+                    { id: 'pickups', name: 'Recogidas' },
+                    { id: 'stats', name: 'Estadísticas' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === tab.id
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      {tab.name}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+              
+              <div className="p-6">
+                {activeTab === 'general' && renderGeneralTab()}
+                {activeTab === 'inventory' && renderInventoryTab()}
+                {activeTab === 'pickups' && renderPickupsTab()}
+                {activeTab === 'stats' && renderStatsTab()}
+              </div>
             </div>
           )}
         </div>

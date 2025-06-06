@@ -4,7 +4,7 @@ import { getAuthToken } from './authUtils';
 import CachedImage from '../CachedImage';
 
 // Componente para seguimiento de envío a domicilio
-const DeliveryTracking = ({ envio }) => {
+const DeliveryTracking = ({ envio , Data}) => {
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mb-6">
       <h3 className="text-lg font-bold mb-4 flex items-center">
@@ -14,18 +14,18 @@ const DeliveryTracking = ({ envio }) => {
         Seguimiento del Envío
       </h3>
       
-      {envio.codigo_seguimiento && (
+      {envio.numero_guia && (
         <div className="mb-4 p-3 bg-blue-50 rounded-lg">
           <p className="text-sm text-gray-600">Código de seguimiento:</p>
           <div className="flex justify-between items-center">
-            <p className="font-mono font-bold text-lg">{envio.codigo_seguimiento}</p>
+            <p className="font-mono font-bold text-lg">{envio.numero_guia}</p>
             <button className="text-blue-600 text-sm hover:underline">
               Copiar
             </button>
           </div>
           {envio.empresa_transporte && (
             <p className="text-sm text-gray-600 mt-1">
-              Empresa: {envio.empresa_transporte.toUpperCase()}
+              {/* Empresa: {envio.empresa_transporte.toUpperCase()} */}
             </p>
           )}
         </div>
@@ -67,23 +67,69 @@ const DeliveryTracking = ({ envio }) => {
                 </div>
               </div>
             );
-          })} */}
-          
+          })}
+           */}
           {/* Estado futuro (si no está entregado) */}
-          {envio.estado_envio !== 'ENTREGADO' && (
+          {Data.estado == 'entregado' && (
             <div className="relative flex items-start">
-              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center z-10"></div>
+              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
               <div className="ml-10">
-                <div className="font-medium text-gray-400">ENTREGADO</div>
-                {/* <div className="text-sm text-gray-500">
-                  Fecha estimada: {new Date(envio.fechas.entrega_estimada).toLocaleString('es-MX', {
+                <div className="font-medium ">ENTREGADO</div>
+                <div className="text-sm text-gray-500">
+                  Fecha entrega: {new Date(envio.fecha_envio).toLocaleString('es-MX', {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
                   })}
-                </div> */}
-                <div className="text-sm text-gray-400 mt-1">
-                  Pendiente de entrega
+                </div>
+                
+              </div>
+            </div>
+          )}
+
+          {Data.estado == 'preparando' && (
+            <div className="relative flex items-start">
+              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
+              <div className="ml-10">
+                <div className="font-medium ">Preparando</div>
+                <div className="text-sm text-gray-500">
+                  Fecha Creada: {new Date(envio.direccion.fecha_creacion).toLocaleString('es-MX', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {Data.estado == 'listo_para_envio' && (
+            <div className="relative flex items-start">
+              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
+              <div className="ml-10">
+                <div className="font-medium ">Listo para envio</div>
+                <div className="text-sm text-gray-500">
+                  Fecha Actualizada: {new Date(envio.direccion.fecha_actualizacion).toLocaleString('es-MX', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {Data.estado == 'enviado' && (
+            <div className="relative flex items-start">
+              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
+              <div className="ml-10">
+                <div className="font-medium ">Enviado</div>
+                <div className="text-sm text-gray-500">
+                  Fecha Actualizada: {new Date(envio.direccion.fecha_actualizacion).toLocaleString('es-MX', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
                 </div>
               </div>
             </div>
@@ -187,6 +233,396 @@ const StorePickupTracking = ({ envio }) => {
   );
 };
 
+const RefundModal = ({ 
+  isOpen, 
+  onClose, 
+  refundItems, 
+  setRefundItems, 
+  onSubmit, 
+  loading 
+}) => {
+  const [errors, setErrors] = useState({});
+
+  const motivosDevolucion = [
+    { value: 'producto_defectuoso', label: 'Producto defectuoso' },
+    { value: 'no_corresponde', label: 'No corresponde con la descripción' },
+    { value: 'llegó_dañado', label: 'Llegó dañado' },
+    { value: 'no_me_gustó', label: 'No me gustó' },
+    { value: 'otro', label: 'Otro motivo' }
+  ];
+
+  const handleItemToggle = (index) => {
+    const updated = [...refundItems];
+    updated[index].selected = !updated[index].selected;
+    if (!updated[index].selected) {
+      updated[index].cantidad_devolver = 0;
+      updated[index].motivo = '';
+      updated[index].descripcion = '';
+    }
+    setRefundItems(updated);
+  };
+
+  const handleQuantityChange = (index, quantity) => {
+    const updated = [...refundItems];
+    updated[index].cantidad_devolver = Math.min(
+      Math.max(0, parseInt(quantity) || 0), 
+      updated[index].cantidad_comprada
+    );
+    setRefundItems(updated);
+  };
+
+  const handleFieldChange = (index, field, value) => {
+    const updated = [...refundItems];
+    updated[index][field] = value;
+    setRefundItems(updated);
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    const selectedItems = refundItems.filter(item => item.selected);
+
+    if (selectedItems.length === 0) {
+      newErrors.general = 'Debes seleccionar al menos un producto para devolver';
+    }
+
+    selectedItems.forEach((item, index) => {
+      const realIndex = refundItems.findIndex(i => i.id_item_venta === item.id_item_venta);
+      
+      if (item.cantidad_devolver <= 0) {
+        newErrors[`quantity_${realIndex}`] = 'La cantidad debe ser mayor a 0';
+      }
+      
+      if (!item.motivo) {
+        newErrors[`motivo_${realIndex}`] = 'Debes seleccionar un motivo';
+      }
+      
+      if (!item.descripcion || item.descripcion.trim().length < 10) {
+        newErrors[`descripcion_${realIndex}`] = 'La descripción debe tener al menos 10 caracteres';
+      }
+    });
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = () => {
+    if (validateForm()) {
+      const selectedItems = refundItems
+        .filter(item => item.selected)
+        .map(item => ({
+          id_item_venta: item.id_item_venta,
+          cantidad: item.cantidad_devolver,
+          motivo: item.motivo,
+          descripcion: item.descripcion.trim()
+        }));
+      
+      onSubmit(selectedItems);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-yellow-500 to-orange-500 px-6 py-4 text-white">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold">Solicitar Devolución</h2>
+            <button 
+              onClick={onClose}
+              className="text-white hover:text-gray-200 transition-colors"
+              disabled={loading}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <p className="text-yellow-100 text-sm mt-1">
+            Selecciona los productos que deseas devolver y proporciona los detalles requeridos
+          </p>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+          {errors.general && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {errors.general}
+            </div>
+          )}
+
+          <div className="space-y-6">
+            {refundItems.map((item, index) => (
+              <div key={item.id_item_venta} className="border border-gray-200 rounded-lg p-4">
+                {/* Item Header */}
+                <div className="flex items-start mb-4">
+                  <input
+                    type="checkbox"
+                    checked={item.selected}
+                    onChange={() => handleItemToggle(index)}
+                    className="mt-1 mr-3 h-4 w-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
+                    disabled={loading}
+                  />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">{item.titulo}</h4>
+                    <p className="text-sm text-gray-600">por {item.autor}</p>
+                    <p className="text-sm text-gray-500">
+                      Cantidad comprada: {item.cantidad_comprada} | 
+                      Precio: ${item.precio_unitario?.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Item Details (only if selected) */}
+                {item.selected && (
+                  <div className="ml-7 space-y-4 bg-gray-50 p-4 rounded">
+                    {/* Quantity */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Cantidad a devolver *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={item.cantidad_comprada}
+                        value={item.cantidad_devolver}
+                        onChange={(e) => handleQuantityChange(index, e.target.value)}
+                        className={`w-24 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
+                          errors[`quantity_${index}`] ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        disabled={loading}
+                      />
+                      {errors[`quantity_${index}`] && (
+                        <p className="text-red-500 text-xs mt-1">{errors[`quantity_${index}`]}</p>
+                      )}
+                    </div>
+
+                    {/* Reason */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Motivo de la devolución *
+                      </label>
+                      <select
+                        value={item.motivo}
+                        onChange={(e) => handleFieldChange(index, 'motivo', e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
+                          errors[`motivo_${index}`] ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        disabled={loading}
+                      >
+                        <option value="">Selecciona un motivo</option>
+                        {motivosDevolucion.map(motivo => (
+                          <option key={motivo.value} value={motivo.value}>
+                            {motivo.label}
+                          </option>
+                        ))}
+                      </select>
+                      {errors[`motivo_${index}`] && (
+                        <p className="text-red-500 text-xs mt-1">{errors[`motivo_${index}`]}</p>
+                      )}
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Descripción detallada del problema *
+                      </label>
+                      <textarea
+                        rows="3"
+                        value={item.descripcion}
+                        onChange={(e) => handleFieldChange(index, 'descripcion', e.target.value)}
+                        placeholder="Describe detalladamente el problema con el producto..."
+                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
+                          errors[`descripcion_${index}`] ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        disabled={loading}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        {item.descripcion.length}/200 caracteres (mínimo 10)
+                      </p>
+                      {errors[`descripcion_${index}`] && (
+                        <p className="text-red-500 text-xs mt-1">{errors[`descripcion_${index}`]}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            disabled={loading}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading || refundItems.filter(item => item.selected).length === 0}
+            className="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+          >
+            {loading && (
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            )}
+            {loading ? 'Procesando...' : 'Solicitar Devolución'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Refund Result Modal Component
+const RefundResultModal = ({ isOpen, onClose, result }) => {
+  const handleCopyCode = () => {
+    if (result?.data?.codigo_devolucion) {
+      navigator.clipboard.writeText(result.data.codigo_devolucion);
+    }
+  };
+
+  const handleCopyUrl = () => {
+    if (result?.data?.url_rastreo) {
+      navigator.clipboard.writeText(result.data.url_rastreo);
+    }
+  };
+
+  if (!isOpen || !result) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        {/* Header */}
+        <div className={`px-6 py-4 rounded-t-lg ${
+          result.success 
+            ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+            : 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+        }`}>
+          <div className="flex items-center">
+            {result.success ? (
+              <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            <h2 className="text-xl font-bold">
+              {result.success ? 'Devolución Solicitada' : 'Error en la Solicitud'}
+            </h2>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          <p className="text-gray-700 mb-4">{result.message}</p>
+
+          {result.success && result.data && (
+            <div className="space-y-4">
+              {/* Refund Code */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Código de Devolución:
+                </label>
+                <div className="flex items-center justify-between bg-white border rounded px-3 py-2">
+                  <span className="font-mono font-bold text-lg text-green-700">
+                    {result.data.codigo_devolucion}
+                  </span>
+                  <button
+                    onClick={handleCopyCode}
+                    className="text-green-600 hover:text-green-800 text-sm"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Estado:
+                </label>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 capitalize">
+                  {result.data.estado}
+                </span>
+              </div>
+
+              {/* Deadline */}
+              {result.data.fecha_limite && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Fecha límite:
+                  </label>
+                  <p className="text-gray-600">
+                    {new Date(result.data.fecha_limite).toLocaleDateString('es-MX', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+              )}
+
+              {/* QR Code */}
+              {result.data.qr_code && (
+                <div className="text-center">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Código QR para seguimiento:
+                  </label>
+                  <img 
+                    src={result.data.qr_code} 
+                    alt="QR Code" 
+                    className="mx-auto border rounded-lg"
+                    style={{ maxWidth: '150px' }}
+                  />
+                </div>
+              )}
+
+              {/* Tracking URL */}
+              {result.data.url_rastreo && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    URL de Seguimiento:
+                  </label>
+                  <div className="flex items-center justify-between bg-gray-50 border rounded px-3 py-2">
+                    <span className="text-sm text-blue-600 truncate">
+                      {result.data.url_rastreo}
+                    </span>
+                    <button
+                      onClick={handleCopyUrl}
+                      className="text-blue-600 hover:text-blue-800 text-sm ml-2 flex-shrink-0"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="bg-gray-50 px-6 py-4 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PurchasesPage = () => {
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -196,6 +632,11 @@ const PurchasesPage = () => {
   const [selectedPurchaseNum, setSelectedPurchaseNum] = useState(null);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundItems, setRefundItems] = useState([]);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundResult, setRefundResult] = useState(null);
+  const [showRefundResultModal, setShowRefundResultModal] = useState(false);
 
   useEffect(() => {
     fetchPurchases();
@@ -266,109 +707,58 @@ const PurchasesPage = () => {
       setLoadingDetails(false);
     }
   };
-  const generateMockPurchaseData = (id) => {
-    // Busca la compra en la lista de compras existente
-    const purchase = purchases.find(p => p._id === id);
-    
-    if (!purchase) {
-      return null;
-    }
-    
-    const isDelivery = purchase.envio.tipo === 'domicilio';
-    const orderDate = new Date(purchase.fecha_creacion);
-    
-    const processingDate = new Date(orderDate);
-    processingDate.setHours(orderDate.getHours() + 2);
-    
-    const shippingDate = new Date(processingDate);
-    shippingDate.setDate(processingDate.getDate() + 1);
-    
-    const deliveryDate = new Date(shippingDate);
-    deliveryDate.setDate(shippingDate.getDate() + 1);
-    
-    // Estados posibles según el estado actual de la compra
-    let currentState = 'EN PREPARACION';
-    if (purchase.estado === 'enviado') {
-      currentState = 'ENVIADO';
-    } else if (purchase.estado === 'entregado') {
-      currentState = 'ENTREGADO';
-    }
-    
-    // Construir historial de estados
-    let stateHistory = [
-      {
-        estado_anterior: null,
-        estado_nuevo: 'EN PREPARACION',
-        fecha: processingDate.toISOString(),
-        descripcion: 'Pedido recibido y en preparación'
-      }
-    ];
-    
-    if (currentState === 'ENVIADO' || currentState === 'ENTREGADO') {
-      stateHistory.push({
-        estado_anterior: 'EN PREPARACION',
-        estado_nuevo: 'ENVIADO',
-        fecha: shippingDate.toISOString(),
-        descripcion: 'Pedido enviado al destino'
-      });
-    }
-    
-    if (currentState === 'ENTREGADO') {
-      stateHistory.push({
-        estado_anterior: 'ENVIADO',
-        estado_nuevo: 'ENTREGADO',
-        fecha: deliveryDate.toISOString(),
-        descripcion: 'Pedido entregado satisfactoriamente'
-      });
-    }
-    
-    // Enriquecer los datos de la compra para mostrar los detalles
-    return {
-      ...purchase,
-      envio: {
-        ...purchase.envio,
-        estado_envio: currentState,
-        costo_envio: isDelivery ? 7000 : 0,
-        codigo_seguimiento: isDelivery && (currentState === 'ENVIADO' || currentState === 'ENTREGADO') 
-          ? 'SER' + Math.floor(1000000000 + Math.random() * 9000000000) 
-          : null,
-        empresa_transporte: isDelivery && (currentState === 'ENVIADO' || currentState === 'ENTREGADO') ? 'servientrega' : null,
-        direccion: isDelivery ? {
-          calle: 'Carrera 7 #156-68',
-          ciudad: 'Pereira',
-          estado_provincia: 'Risaralda',
-          codigo_postal: '660001',
-          pais: 'Colombia'
-        } : null,
-        tienda: !isDelivery ? {
-          id: 3,
-          nombre: 'Centro Comercial Victoria',
-          direccion: 'C.C. Victoria Plaza Local 235',
-          ciudad: 'Pereira',
-          telefono: '3332223',
-          horario: 'Lu a Do: 10 a 20 hs.',
-          coordenadas: { lat: 4.8156, lng: -75.6936 }
-        } : null,
-        fechas: {
-          creacion: orderDate.toISOString(),
-          preparacion_completada: (currentState === 'ENVIADO' || currentState === 'ENTREGADO') ? processingDate.toISOString() : null,
-          salida: (currentState === 'ENVIADO' || currentState === 'ENTREGADO') ? shippingDate.toISOString() : null,
-          entrega_estimada: isDelivery ? deliveryDate.toISOString() : shippingDate.toISOString(),
-          entrega_real: currentState === 'ENTREGADO' ? deliveryDate.toISOString() : null
-        },
-        historial_estados: stateHistory
-      },
-      items: purchase.items.map(item => ({
-        ...item,
-        snapshot: {
-          ...item.snapshot,
-          editorial: item.snapshot.editorial || 'Editorial Sudamericana',
-          isbn: item.snapshot.isbn || '9780307474728',
-          imagen_portada: item.snapshot.imagen_portada || 'http://localhost:5000/uploads/libros/Default.png'
+  
+   const handleRefundSubmit = async (refundData) => {
+    setRefundLoading(true);
+    try {
+      const response = await axios.post(
+        `http://localhost:5000/api/v1/ventas/${selectedPurchase.numero_venta}/devolucion`,
+        { items: refundData },
+        {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
         }
-      }))
-    };
+      );
+
+      if (response.data.status === 'success') {
+        setRefundResult({
+          success: true,
+          data: response.data.data,
+          message: response.data.message
+        });
+      }
+    } catch (error) {
+      console.error('Error creating refund request:', error);
+      setRefundResult({
+        success: false,
+        message: error.response?.data?.message || 'Error al procesar la solicitud de devolución'
+      });
+    } finally {
+      setRefundLoading(false);
+      setShowRefundModal(false);
+      setShowRefundResultModal(true);
+    }
   };
+
+  const initializeRefundRequest = () => {
+    const availableItems = selectedPurchase.items.map(item => ({
+      id_item_venta: item._id,
+      titulo: item.snapshot.titulo,
+      autor: item.snapshot.autor,
+      cantidad_comprada: item.cantidad,
+      cantidad_devolver: 0,
+      precio_unitario: item.precios.precio_unitario_base,
+      motivo: '',
+      descripcion: '',
+      selected: false
+    }));
+    setRefundItems(availableItems);
+    setShowRefundModal(true);
+  };
+
 
   const formatDate = (dateString) => {
     const options = { 
@@ -578,8 +968,8 @@ const PurchasesPage = () => {
                 </h4>
                 <p className="text-sm text-gray-600">
                   {selectedPurchase.estado === 'entregado'
-                    ? formatDate(selectedPurchase.envio.fechas?.entrega_real)
-                    : formatDate(selectedPurchase.envio.fechas?.entrega_estimada)}
+                    ? formatDate(selectedPurchase.envio.fecha_entrega_real)
+                    : formatDate(selectedPurchase.envio.fecha_envio)}
                 </p>
               </div>
             </div>
@@ -663,7 +1053,7 @@ const PurchasesPage = () => {
         
         {/* Componente de seguimiento según tipo de envío */}
         {selectedPurchase.envio.tipo === 'domicilio' ? (
-          <DeliveryTracking envio={selectedPurchase.envio} />
+          <DeliveryTracking envio={selectedPurchase.envio} Data={selectedPurchase}/>
         ) : (
           <StorePickupTracking envio={selectedPurchase.envio} />
         )}
@@ -672,16 +1062,37 @@ const PurchasesPage = () => {
         <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6">
           {/* Mostrar botón de devolución solo si el pedido está entregado y tiene menos de 8 días */}
           {selectedPurchase.estado === 'entregado' && 
-            selectedPurchase.envio.fechas?.entrega_real &&
-            new Date() - new Date(selectedPurchase.envio.fechas.entrega_real) < 8 * 24 * 60 * 60 * 1000 && (
-            <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded-md transition-colors shadow-sm font-medium">
+            selectedPurchase.envio.fecha_entrega_real &&
+            new Date() - new Date(selectedPurchase.envio.fecha_entrega_real) < 8 * 24 * 60 * 60 * 1000 && (
+            <button 
+              onClick={initializeRefundRequest}
+              className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded-md transition-colors shadow-sm font-medium"
+            >
               Solicitar Devolución
             </button>
           )}
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md transition-colors shadow-sm font-medium">
+          {/* <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md transition-colors shadow-sm font-medium">
             Contactar Soporte
-          </button>
+          </button> */}
         </div>
+      <RefundModal
+          isOpen={showRefundModal}
+          onClose={() => setShowRefundModal(false)}
+          refundItems={refundItems}
+          setRefundItems={setRefundItems}
+          onSubmit={handleRefundSubmit}
+          loading={refundLoading}
+        />
+
+        {/* Refund Result Modal */}
+        <RefundResultModal
+          isOpen={showRefundResultModal}
+          onClose={() => {
+            setShowRefundResultModal(false);
+            setRefundResult(null);
+          }}
+          result={refundResult}
+        />
       </div>
     );
   }

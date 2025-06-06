@@ -96,7 +96,7 @@ function CheckoutPaymentConfirmation() {
           const parsedShippingInfo = JSON.parse(storedShippingInfo);
           setShippingInfo({ 
             method: parsedShippingInfo.method,
-            storeId: parseInt(parsedShippingInfo.storeId),
+            storeId: parsedShippingInfo.storeId,
             storeName: parsedShippingInfo.storeName || '',
             locationStreet: parsedShippingInfo.locationStreet || '',
             shippingCost: parsedShippingInfo.shippingCost || 0,
@@ -152,6 +152,7 @@ function CheckoutPaymentConfirmation() {
       const requestPayload = {
         id_tarjeta: paymentData.Id,
         tipo_envio: shippingInfo.method === 'recogida_tienda' ? 'recogida_tienda' : 'domicilio',
+        id_tienda_recogida: shippingInfo.storeId,
       // id_tienda_recogida: shippingInfo.method === 'recogida_tienda' ? parseInt(shippingInfo.storeId) : '',
         direccion_envio: {
           direccion_completa: shippingInfo.locationStreet || "Dirección no especificada",
