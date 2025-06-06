@@ -313,37 +313,38 @@ devolucionSchema.index({ estado: 1, fecha_solicitud: -1 });
 // MIDDLEWARE
 
 // Generar QR antes de guardar
-devolucionSchema.pre('save', async function(next) {
-  if (this.isNew) {
-    try {
-      // Generar URL de rastreo
-      const baseUrl = process.env.FRONT_URL || 'http://localhost:3000';
-      this.qr_code.url_rastreo = `${baseUrl}/devolucion/rastreo/${this.codigo_devolucion}`;
+// devolucionSchema.pre('save', async function(next) {
+//   if (this.isNew) {
+//     try {
+//       console.log("Generando código QR para la devolución:", this.codigo_devolucion);
+//       // Generar URL de rastreo
+//       const baseUrl = process.env.FRONT_URL || 'http://localhost:3000';
+//       this.qr_code.url_rastreo = `${baseUrl}/devolucion/rastreo/${this.codigo_devolucion}`;
       
-      // Generar código QR único
-      this.qr_code.codigo = `QR-${this.codigo_devolucion}`;
+//       // Generar código QR único
+//       this.qr_code.codigo = `QR-${this.codigo_devolucion}`;
       
-      // Generar imagen QR en base64
-      const qrOptions = {
-        type: 'png',
-        width: 300,
-        margin: 2,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        }
-      };
+//       // Generar imagen QR en base64
+//       const qrOptions = {
+//         type: 'png',
+//         width: 300,
+//         margin: 2,
+//         color: {
+//           dark: '#000000',
+//           light: '#FFFFFF'
+//         }
+//       };
       
-      this.qr_code.imagen_base64 = await QRCode.toDataURL(this.qr_code.url_rastreo, qrOptions);
+//       this.qr_code.imagen_base64 = await QRCode.toDataURL(this.qr_code.url_rastreo, qrOptions);
       
-    } catch (error) {
-      console.error('Error generando QR:', error);
-      return next(error);
-    }
-  }
+//     } catch (error) {
+//       console.error('Error generando QR:', error);
+//       return next(error);
+//     }
+//   }
   
-  next();
-});
+//   next();
+// });
 
 // MÉTODOS DE INSTANCIA
 

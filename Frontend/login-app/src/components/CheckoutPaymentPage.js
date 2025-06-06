@@ -35,6 +35,7 @@ function CheckoutPaymentPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedCard, setSelectedCard] = useState('');
+  const [isCardSelected, setIsCardSelected] = useState(false);
 
   const axiosConfig = {
     headers: {
@@ -76,6 +77,7 @@ function CheckoutPaymentPage() {
           setExpiry(`${defaultCard.expiryMonth}/${defaultCard.expiryYear}`);
           setCvc('***');
           setCardholderName(defaultCard.cardholderName);
+          setIsCardSelected(true);
         }
       }
     } catch (err) {
@@ -175,6 +177,7 @@ function CheckoutPaymentPage() {
       setExpiry('');
       setCvc('');
       setCardholderName('');
+      setIsCardSelected(false); 
     } else {
       const card = cards.find(c => c.id === cardId);
       if (card) {
@@ -183,6 +186,7 @@ function CheckoutPaymentPage() {
         setExpiry(`${card.expiryMonth}/${card.expiryYear}`);
         setCvc('***');
         setCardholderName(card.cardholderName);
+        setIsCardSelected(true);
       }
     }
   };
@@ -470,7 +474,12 @@ function CheckoutPaymentPage() {
                   
                   <button
                     onClick={handleContinuePayment}
-                    className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors"
+                    disabled={!isCardSelected} // Add this line
+                    className={`w-full py-3 rounded-lg font-medium transition-colors ${
+                      isCardSelected 
+                        ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`} // Modified className
                   >
                     Continuar
                   </button>

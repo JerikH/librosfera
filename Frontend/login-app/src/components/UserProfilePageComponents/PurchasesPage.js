@@ -23,125 +23,137 @@ const DeliveryTracking = ({ envio , Data}) => {
               Copiar
             </button>
           </div>
-          {envio.empresa_transporte && (
+          {/* {envio.empresa_transporte && (
             <p className="text-sm text-gray-600 mt-1">
-              {/* Empresa: {envio.empresa_transporte.toUpperCase()} */}
+              Empresa: {envio.empresa_transporte.toUpperCase()}
             </p>
-          )}
+          )} */}
         </div>
       )}
       
       <div className="relative">
         <div className="absolute left-5 top-0 h-full w-0.5 bg-gray-200"></div>
         <div className="space-y-8">
-          {/* {envio.historial_estados.map((estado, index) => {
-            const isCompleted = true; // Para los estados pasados
-            const isCurrent = index === envio.historial_estados.length - 1;
-            return (
-              <div key={index} className="relative flex items-start">
-                <div className={`absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full ${
-                  isCompleted ? 'bg-green-500' : 'bg-gray-300'
-                } flex items-center justify-center z-10`}>
-                  {isCompleted && (
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </div>
-                <div className="ml-10">
-                  <div className={`font-medium ${isCurrent ? 'text-green-600' : 'text-gray-900'}`}>
-                    {estado.estado_nuevo}
+          {Data.historial && Data.historial.length > 0 ? (
+            Data.historial.map((estado, index) => {
+              const isCompleted = true; // Para los estados pasados
+              const isCurrent = index === Data.historial.length - 1;
+              const isLastStep = Data.estado === 'entregado' && isCurrent;
+              
+              return (
+                <div key={index} className="relative flex items-start">
+                  <div className={`absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full ${
+                    isCompleted ? (isLastStep ? 'bg-green-600' : 'bg-green-500') : 'bg-gray-300'
+                  } flex items-center justify-center z-10`}>
+                    {isCompleted && (
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
                   </div>
-                  <div className="text-sm text-gray-500">
-                    {new Date(estado.fecha).toLocaleString('es-MX', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+                  <div className="ml-10">
+                    <div className={`font-medium ${
+                      isCurrent ? 'text-green-600' : 'text-gray-900'
+                    }`}>
+                      {estado.estado_nuevo ? estado.estado_nuevo.toUpperCase() : estado.descripcion}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {new Date(estado.fecha).toLocaleString('es-MX', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {estado.descripcion}
+                    </div>
+                    {estado.usuario_responsable && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Responsable: {estado.usuario_responsable}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {estado.descripcion}
+                </div>
+              );
+            })
+          ) : (
+            // Fallback to current status display if no history available
+            <>
+              {Data.estado == 'entregado' && (
+                <div className="relative flex items-start">
+                  <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
+                  <div className="ml-10">
+                    <div className="font-medium ">ENTREGADO</div>
+                    <div className="text-sm text-gray-500">
+                      Fecha entrega: {new Date(envio.fecha_envio).toLocaleString('es-MX', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-           */}
-          {/* Estado futuro (si no está entregado) */}
-          {Data.estado == 'entregado' && (
-            <div className="relative flex items-start">
-              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
-              <div className="ml-10">
-                <div className="font-medium ">ENTREGADO</div>
-                <div className="text-sm text-gray-500">
-                  Fecha entrega: {new Date(envio.fecha_envio).toLocaleString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </div>
-                
-              </div>
-            </div>
-          )}
+              )}
 
-          {Data.estado == 'preparando' && (
-            <div className="relative flex items-start">
-              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
-              <div className="ml-10">
-                <div className="font-medium ">Preparando</div>
-                <div className="text-sm text-gray-500">
-                  Fecha Creada: {new Date(envio.direccion.fecha_creacion).toLocaleString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+              {Data.estado == 'preparando' && (
+                <div className="relative flex items-start">
+                  <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
+                  <div className="ml-10">
+                    <div className="font-medium ">Preparando</div>
+                    <div className="text-sm text-gray-500">
+                      Fecha Creada: {new Date(envio.direccion.fecha_creacion).toLocaleString('es-MX', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          {Data.estado == 'listo_para_envio' && (
-            <div className="relative flex items-start">
-              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
-              <div className="ml-10">
-                <div className="font-medium ">Listo para envio</div>
-                <div className="text-sm text-gray-500">
-                  Fecha Actualizada: {new Date(envio.direccion.fecha_actualizacion).toLocaleString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+              {Data.estado == 'listo_para_envio' && (
+                <div className="relative flex items-start">
+                  <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
+                  <div className="ml-10">
+                    <div className="font-medium ">Listo para envio</div>
+                    <div className="text-sm text-gray-500">
+                      Fecha Actualizada: {new Date(envio.direccion.fecha_actualizacion).toLocaleString('es-MX', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          {Data.estado == 'enviado' && (
-            <div className="relative flex items-start">
-              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
-              <div className="ml-10">
-                <div className="font-medium ">Enviado</div>
-                <div className="text-sm text-gray-500">
-                  Fecha Actualizada: {new Date(envio.direccion.fecha_actualizacion).toLocaleString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+              {Data.estado == 'enviado' && (
+                <div className="relative flex items-start">
+                  <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
+                  <div className="ml-10">
+                    <div className="font-medium ">Enviado</div>
+                    <div className="text-sm text-gray-500">
+                      Fecha Actualizada: {new Date(envio.direccion.fecha_actualizacion).toLocaleString('es-MX', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>
     </div>
   );
-};
+};  
 
 // Componente para seguimiento de recogida en tienda
-const StorePickupTracking = ({ envio }) => {
+const StorePickupTracking = ({ envio, data}) => {
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mb-6">
       <h3 className="text-lg font-bold mb-4 flex items-center">
@@ -173,59 +185,70 @@ const StorePickupTracking = ({ envio }) => {
       <div className="relative">
         <div className="absolute left-5 top-0 h-full w-0.5 bg-gray-200"></div>
         <div className="space-y-8">
-          {envio.historial_estados.map((estado, index) => {
-            const isCompleted = true;
-            const isCurrent = index === envio.historial_estados.length - 1;
-            return (
-              <div key={index} className="relative flex items-start">
-                <div className={`absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full ${
-                  isCompleted ? 'bg-green-500' : 'bg-gray-300'
-                } flex items-center justify-center z-10`}>
-                  {isCompleted && (
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </div>
-                <div className="ml-10">
-                  <div className={`font-medium ${isCurrent ? 'text-green-600' : 'text-gray-900'}`}>
-                    {estado.estado_nuevo}
+          {data.historial && data.historial.length > 0 ? (
+            data.historial.map((estado, index) => {
+              const isCompleted = true;
+              const isCurrent = index === data.historial.length - 1;
+              const isReadyForPickup = estado.estado_nuevo === 'listo_para_recoger';
+              
+              return (
+                <div key={index} className="relative flex items-start">
+                  <div className={`absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full ${
+                    isCompleted ? (isReadyForPickup ? 'bg-blue-500' : 'bg-green-500') : 'bg-gray-300'
+                  } flex items-center justify-center z-10`}>
+                    {isCompleted && (
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
                   </div>
+                  <div className="ml-10">
+                    <div className={`font-medium ${
+                      isCurrent ? (isReadyForPickup ? 'text-blue-600' : 'text-green-600') : 'text-gray-900'
+                    }`}>
+                      {estado.estado_nuevo ? estado.estado_nuevo.toUpperCase() : estado.descripcion}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {new Date(estado.fecha).toLocaleString('es-MX', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {estado.descripcion}
+                    </div>
+                    {estado.usuario_responsable && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Responsable: {estado.usuario_responsable}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            // Si no hay historial disponible, mostrar estado futuro si no está entregado
+            envio.estado_envio !== 'ENTREGADO' && (
+              <div className="relative flex items-start">
+                <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center z-10"></div>
+                <div className="ml-10">
+                  <div className="font-medium text-gray-400">LISTO PARA RECOGER</div>
                   <div className="text-sm text-gray-500">
-                    {new Date(estado.fecha).toLocaleString('es-MX', {
+                    Disponible aproximadamente: {new Date(envio.fechas?.entrega_estimada || envio.fecha_envio).toLocaleString('es-MX', {
                       year: 'numeric',
                       month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
+                      day: 'numeric'
                     })}
                   </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {estado.descripcion}
+                  <div className="text-sm text-gray-400 mt-1">
+                    Te notificaremos cuando tu pedido esté listo para recoger
                   </div>
                 </div>
               </div>
-            );
-          })}
-          
-          {/* Si no está listo para recoger */}
-          {envio.estado_envio !== 'ENTREGADO' && (
-            <div className="relative flex items-start">
-              <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center z-10"></div>
-              <div className="ml-10">
-                <div className="font-medium text-gray-400">LISTO PARA RECOGER</div>
-                <div className="text-sm text-gray-500">
-                  Disponible aproximadamente: {new Date(envio.fechas.entrega_estimada).toLocaleString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </div>
-                <div className="text-sm text-gray-400 mt-1">
-                  Te notificaremos cuando tu pedido esté listo para recoger
-                </div>
-              </div>
-            </div>
+            )
           )}
         </div>
       </div>
@@ -1055,7 +1078,7 @@ const PurchasesPage = () => {
         {selectedPurchase.envio.tipo === 'domicilio' ? (
           <DeliveryTracking envio={selectedPurchase.envio} Data={selectedPurchase}/>
         ) : (
-          <StorePickupTracking envio={selectedPurchase.envio} />
+          <StorePickupTracking envio={selectedPurchase.envio} data={selectedPurchase} />
         )}
         
         {/* Botones de acción */}
