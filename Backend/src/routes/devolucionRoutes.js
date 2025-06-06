@@ -17,7 +17,9 @@ const {
   procesarReembolso,
   obtenerEstadisticas,
   cancelarDevolucionAdmin,
-  agregarComunicacion
+  agregarComunicacion,
+  obtenerResumenDevolucionesPorVenta,
+  procesarDevolucionesExpiradas
 } = require('../controllers/devolucionController');
 
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -28,7 +30,6 @@ const storage = multer.diskStorage({
     const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
     const devolucionesDir = path.join(uploadDir, 'devoluciones', 'temp');
     
-    // Crear directorio si no existe
     const fs = require('fs');
     if (!fs.existsSync(devolucionesDir)) {
       fs.mkdirSync(devolucionesDir, { recursive: true });
@@ -44,7 +45,6 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  // Permitir imágenes, videos y PDFs
   const allowedTypes = [
     'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
     'video/mp4', 'video/avi', 'video/mov', 'video/wmv',
@@ -71,7 +71,7 @@ router.use(protect);
 
 // RUTAS DE CLIENTE
 
-// Obtener mis devoluciones
+// Obtener mis devoluciones (CON INFORMACIÓN DE VENTA)
 router.get('/mis-devoluciones', authorize('cliente'), obtenerMisDevoluciones);
 
 // Cancelar mi devolución (cliente)
@@ -86,10 +86,22 @@ router.post('/:codigoDevolucion/documentos',
 
 // RUTAS ADMINISTRATIVAS
 
-// Obtener estadísticas de devoluciones
+// Obtener estadísticas de devoluciones (CON MÉTRICAS MEJORADAS)
 router.get('/estadisticas', authorize('administrador', 'root'), obtenerEstadisticas);
 
-// Obtener todas las devoluciones (admin)
+// NUEVO: Obtener resumen de devoluciones por venta específica
+router.get('/venta/:numeroVenta/resumen', 
+  authorize('administrador', 'root'), 
+  obtenerResumenDevolucionesPorVenta
+);
+
+// NUEVO: Procesar devoluciones expiradas automáticamente
+router.post('/procesar-expiradas', 
+  authorize('administrador', 'root'), 
+  procesarDevolucionesExpiradas
+);
+
+// Obtener todas las devoluciones (admin) - CON INFORMACIÓN DE VENTA
 router.get('/admin/todas', authorize('administrador', 'root'), obtenerDevoluciones);
 
 // Aprobar devolución
@@ -107,7 +119,7 @@ router.patch('/:codigoDevolucion/items/:idItem/inspeccionar',
   inspeccionarItem
 );
 
-// Procesar reembolso
+// Procesar reembolso (CON SINCRONIZACIÓN COMPLETA)
 router.patch('/:codigoDevolucion/reembolsar', authorize('administrador', 'root'), procesarReembolso);
 
 // Cancelar devolución (admin)
@@ -121,7 +133,7 @@ router.post('/:codigoDevolucion/comunicaciones',
 
 // RUTAS MIXTAS (Cliente para sus devoluciones, Admin para cualquiera)
 
-// Obtener detalle de devolución específica
+// Obtener detalle de devolución específica (CON INFORMACIÓN COMPLETA DE VENTA)
 router.get('/:codigoDevolucion', obtenerDetalleDevolucion);
 
 // Middleware de manejo de errores de multer

@@ -4,7 +4,7 @@ const AppError = require('../utils/appError');
 const catchAsync = require('../utils/catchAsync');
 
 /**
- * @desc    Obtener mis devoluciones (cliente)
+ * @desc    Obtener mis devoluciones ACTUALIZADO CON INFORMACIÓN DE VENTA
  * @route   GET /api/v1/devoluciones/mis-devoluciones
  * @access  Private/Cliente
  */
@@ -13,13 +13,15 @@ const obtenerMisDevoluciones = catchAsync(async (req, res, next) => {
     const {
       page = 1,
       limit = 10,
-      estado
+      estado,
+      incluir_venta = 'true'
     } = req.query;
 
     const resultado = await devolucionService.obtenerDevolucionesCliente(req.user._id, {
       page: parseInt(page),
       limit: parseInt(limit),
-      estado
+      estado,
+      incluir_venta: incluir_venta === 'true'
     });
 
     res.status(200).json({
@@ -35,7 +37,7 @@ const obtenerMisDevoluciones = catchAsync(async (req, res, next) => {
 });
 
 /**
- * @desc    Obtener detalle de una devolución
+ * @desc    Obtener detalle de una devolución ACTUALIZADO CON INFORMACIÓN COMPLETA
  * @route   GET /api/v1/devoluciones/:codigoDevolucion
  * @access  Private/Cliente o Admin
  */
@@ -53,7 +55,11 @@ const obtenerDetalleDevolucion = catchAsync(async (req, res, next) => {
 
     res.status(200).json({
       status: 'success',
-      data: resultado
+      data: {
+        devolucion: resultado.devolucion,
+        venta_info: resultado.venta_info,
+        resumen_devolucion_venta: resultado.resumen_devolucion_venta
+      }
     });
   } catch (error) {
     console.error('Error obteniendo detalle de devolución:', error);
@@ -172,7 +178,7 @@ const subirDocumento = catchAsync(async (req, res, next) => {
 // CONTROLADORES ADMINISTRATIVOS
 
 /**
- * @desc    Obtener todas las devoluciones (admin)
+ * @desc    Obtener todas las devoluciones (admin) ACTUALIZADO CON INFORMACIÓN DE VENTA
  * @route   GET /api/v1/devoluciones
  * @access  Private/Admin
  */
@@ -186,6 +192,7 @@ const obtenerDevoluciones = catchAsync(async (req, res, next) => {
       codigo,
       fecha_desde,
       fecha_hasta,
+      incluir_venta = 'true',
       ordenar = '-fecha_solicitud'
     } = req.query;
 
@@ -198,7 +205,8 @@ const obtenerDevoluciones = catchAsync(async (req, res, next) => {
     }, {
       page: parseInt(page),
       limit: parseInt(limit),
-      ordenar
+      ordenar,
+      incluir_venta: incluir_venta === 'true'
     });
 
     res.status(200).json({
@@ -443,7 +451,7 @@ const procesarReembolso = catchAsync(async (req, res, next) => {
 });
 
 /**
- * @desc    Obtener estadísticas de devoluciones
+ * @desc    Obtener estadísticas de devoluciones ACTUALIZADO
  * @route   GET /api/v1/devoluciones/estadisticas
  * @access  Private/Admin
  */
@@ -461,11 +469,68 @@ const obtenerEstadisticas = catchAsync(async (req, res, next) => {
 
     res.status(200).json({
       status: 'success',
-      data: estadisticas
+      data: {
+        ...estadisticas,
+        periodo: {
+          fecha_inicio,
+          fecha_fin
+        }
+      }
     });
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);
     return next(new AppError('Error al obtener estadísticas', 500));
+  }
+});
+
+/**
+ * NUEVO ENDPOINT: Obtener resumen de devoluciones por venta
+ * @route   GET /api/v1/devoluciones/venta/:numeroVenta/resumen
+ * @access  Private/Admin
+ */
+const obtenerResumenDevolucionesPorVenta = catchAsync(async (req, res, next) => {
+  try {
+    const { numeroVenta } = req.params;
+
+    const resumen = await devolucionService.obtenerResumenDevolucionesPorVenta(numeroVenta);
+
+    res.status(200).json({
+      status: 'success',
+      data: resumen
+    });
+  } catch (error) {
+    console.error('Error obteniendo resumen de devoluciones por venta:', error);
+    
+    if (error.message.includes('Venta no encontrada')) {
+      return next(new AppError('Venta no encontrada', 404));
+    }
+    
+    return next(new AppError('Error al obtener resumen de devoluciones', 500));
+  }
+});
+
+/**
+ * NUEVO ENDPOINT: Procesar devoluciones expiradas
+ * @route   POST /api/v1/devoluciones/procesar-expiradas
+ * @access  Private/Admin
+ */
+const procesarDevolucionesExpiradas = catchAsync(async (req, res, next) => {
+  try {
+    const resultado = await devolucionService.procesarDevolucionesExpiradas();
+
+    await req.logActivity('administracion', 'procesar_devoluciones_expiradas', {
+      cantidad_procesada: resultado.procesadas,
+      fecha_ejecucion: resultado.fecha_ejecucion
+    }, 'medio');
+
+    res.status(200).json({
+      status: 'success',
+      message: `Se procesaron ${resultado.procesadas} devoluciones expiradas`,
+      data: resultado
+    });
+  } catch (error) {
+    console.error('Error procesando devoluciones expiradas:', error);
+    return next(new AppError('Error al procesar devoluciones expiradas', 500));
   }
 });
 
@@ -571,5 +636,7 @@ module.exports = {
   procesarReembolso,
   obtenerEstadisticas,
   cancelarDevolucionAdmin,
-  agregarComunicacion
+  agregarComunicacion,
+  obtenerResumenDevolucionesPorVenta,
+  procesarDevolucionesExpiradas
 };
