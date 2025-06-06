@@ -22,7 +22,8 @@ const carritoRoutes = require('./routes/carritoRoutes');
 const ventaRoutes = require('./routes/ventaRoutes');
 const devolucionRoutes = require('./routes/devolucionRoutes');
 const direccionRoutes = require('./routes/direccionRoutes');
-const tiendaRoutes = require('./routes/tiendaRoutes'); // NUEVA RUTA
+const tiendaRoutes = require('./routes/tiendaRoutes');
+const mensajeriaRoutes = require('./routes/mensajeriaRoutes');
 
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
@@ -56,6 +57,7 @@ const fs = require('fs');
 const librosPath = path.join(uploadsPath, 'libros');
 const profilesPath = path.join(uploadsPath, 'profiles');
 const devolucionesPath = path.join(uploadsPath, 'devoluciones');
+const mensajesPath = path.join(uploadsPath, 'mensajes');
 try {
   if (!fs.existsSync(uploadsPath)) {
     fs.mkdirSync(uploadsPath, { recursive: true });
@@ -73,6 +75,10 @@ try {
     fs.mkdirSync(devolucionesPath, { recursive: true });
     console.log('Directorio de documentos de devoluciones creado:', devolucionesPath);
   }
+  if (!fs.existsSync(mensajesPath)) {
+    fs.mkdirSync(mensajesPath, { recursive: true });
+    console.log('Directorio de archivos de mensajes creado:', mensajesPath);
+  }
 } catch (error) {
   console.error('Error creando directorios:', error);
 }
@@ -88,7 +94,8 @@ app.use('/api/v1/carrito', carritoRoutes);
 app.use('/api/v1/ventas', ventaRoutes);
 app.use('/api/v1/devoluciones', devolucionRoutes);
 app.use('/api/v1/direcciones', direccionRoutes);
-app.use('/api/v1/tiendas', tiendaRoutes); // NUEVA RUTA AGREGADA
+app.use('/api/v1/tiendas', tiendaRoutes);
+app.use('/api/v1/mensajeria', mensajeriaRoutes);
 
 // Ruta de estado
 app.get('/api/health', (req, res) => {
