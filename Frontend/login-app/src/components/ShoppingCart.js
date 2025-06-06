@@ -19,68 +19,90 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
 
   // Efecto para cargar los elementos del carrito del localStorage
   useEffect(() => {
-    const fetchCartItems = async () => {
-      setIsLoading(true);
-      try {
-        // Obtener carrito del localStorage
+  const fetchCartItems = async () => {
+    setIsLoading(true);
+    try {
+      // REMOVED: localStorage.removeItem('shoppingCart'); - This was causing the reload cycle
+      
+      const response = await axios.get(`${API_BASE_URL}/carrito`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`
+        }
+      });
 
-        const response = await axios.get(`${API_BASE_URL}/carrito`, {
-          headers: {
-            'Authorization': `Bearer ${getAuthToken()}`
+      if (response.data.status === 'success' && response.data.data) {
+        const { carrito, items } = response.data.data;
+        
+        const cartWithDetails = items.map(item => ({
+          bookId: item.id_libro,
+          quantity: item.cantidad,
+          bookDetails: {
+            _id: item.id_libro,
+            titulo: item.metadatos.titulo_libro,
+            autor_nombre_completo: item.metadatos.autor_libro,
+            precio: item.precios.precio_base,
+            precio_info: {
+              descuentos: item.codigos_aplicados.map(codigo => ({
+                activo: true,
+                tipo: 'porcentaje',
+                valor: codigo.tipo_descuento === 'porcentaje' ? (codigo.descuento_aplicado / item.precios.precio_base) * 100 : 0
+              }))
+            },
+            imagenes: item.metadatos.imagen_portada ? [{ url: item.metadatos.imagen_portada }] : [],
+            stock: item.metadatos.disponible ? 10 : 0,
+            editorial: '',
+            estado: 'nuevo',
+            anio_publicacion: ''
+          },
+          itemId: item._id,
+          subtotal: item.subtotal
+        }));
+        
+        setCartItems(cartWithDetails);
+        setCartTotals(carrito);
+        
+        // Save to localStorage - same format as CartPage
+        const localStorageCart = cartWithDetails.map(item => ({
+          bookId: item.bookId,
+          quantity: item.quantity
+        }));
+        
+        localStorage.setItem('shoppingCart', JSON.stringify(localStorageCart));
+        localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+        
+        // Dispatch events - same as CartPage
+        const cartChangeEvent = new CustomEvent('cartUpdated', {
+          bubbles: true,
+          detail: {
+            action: 'sync',
+            timestamp: Date.now()
           }
         });
-
-        if (response.data.status === 'success' && response.data.data) {
-        const { carrito, items } = response.data.data;
-          
-          // Obtener detalles adicionales de los libros
-          const cartWithDetails = items.map(item => ({
-            bookId: item.id_libro,
-            quantity: item.cantidad,
-            bookDetails: {
-              _id: item.id_libro,
-              titulo: item.metadatos.titulo_libro,
-              autor_nombre_completo: item.metadatos.autor_libro,
-              precio: item.precios.precio_base,
-              precio_info: {
-                descuentos: item.codigos_aplicados.map(codigo => ({
-                  activo: true,
-                  tipo: 'porcentaje',
-                  valor: codigo.tipo_descuento === 'porcentaje' ? (codigo.descuento_aplicado / item.precios.precio_base) * 100 : 0
-                }))
-              },
-              imagenes: item.metadatos.imagen_portada ? [{ url: item.metadatos.imagen_portada }] : [],
-              stock: item.metadatos.disponible ? 10 : 0, // API doesn't provide stock, using placeholder
-              editorial: '', // Not provided in API
-              estado: 'nuevo', // Not provided in API
-              anio_publicacion: '' // Not provided in API
-            },
-            itemId: item._id,
-            subtotal: item.subtotal
-          }));
-          
-          setCartItems(cartWithDetails);
-          setCartTotals(carrito);
-          
-          // Actualizar el contador del carrito en el componente padre si existe la función
-          // updateCartCount(parsedCart.reduce((total, item) => total + item.quantity, 0));
-          updateCartCount(carrito.n_libros_diferentes);
-          console.log("carrito:", carrito);
-        } else {
-          setCartItems([]);
-          updateCartCount(0);
-        }
-      } catch (error) {
-        console.error('Error al cargar elementos del carrito:', error);
-      } finally {
-        setIsLoading(false);
+        window.dispatchEvent(cartChangeEvent);
+        window.dispatchEvent(new Event('globalCartUpdate'));
+        
+        updateCartCount(carrito.n_libros_diferentes);
+      } else {
+        setCartItems([]);
+        setCartTotals({});
+        
+        // Only clear localStorage when cart is actually empty from server
+        localStorage.removeItem('shoppingCart');
+        localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+        
+        updateCartCount(0);
       }
-    };
-
-    if (isOpen) {
-      fetchCartItems();
+    } catch (error) {
+      console.error('Error al cargar elementos del carrito:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [isOpen, updateCartCount]);
+  };
+
+  if (isOpen) {
+    fetchCartItems();
+  }
+}, [isOpen, updateCartCount]);
 
   // Efecto para cerrar el carrito al hacer clic fuera de él
   useEffect(() => {
@@ -99,15 +121,6 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
     };
   }, [isOpen, onClose]);
 
-  // Función para calcular el subtotal
-  const calculateSubtotal = () => {
-    return cartItems.reduce((total, item) => {
-      const itemPrice = item.bookDetails?.precio || 0;
-      const discount = item.bookDetails?.precio_info?.descuentos?.find(d => d.activo && d.tipo === 'porcentaje')?.valor || 0;
-      const finalPrice = itemPrice - (itemPrice * (discount / 100));
-      return total + (finalPrice * item.quantity);
-    }, 0);
-  };
 
   // Función para actualizar la cantidad de un item
   const updateQuantity = useCallback(async (itemId, newQuantity, item) => {
@@ -160,31 +173,28 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
 
   // Función para eliminar un item del carrito
   const removeItem = async (itemId, bookId) => {
-  console.log("Delete:", itemId);
   try {
-    // Call API to remove item from server
     await axios.delete(`${API_BASE_URL}/carrito/item/${bookId}`, {
       headers: {
         'Authorization': `Bearer ${getAuthToken()}`
       }
     });
 
-    // Update local state
-    const updatedCart = cartItems.filter(item => item.bookId._id !== itemId);
+    const updatedCart = cartItems.filter(item => item.itemId !== itemId);
     setCartItems(updatedCart);
     
-    // Actualizar localStorage
+    // Update localStorage - same format as CartPage
     const simplifiedCart = updatedCart.map(item => ({
-      bookId: item.bookDetails?._id,
+      bookId: item.bookId,
       quantity: item.quantity
     }));
     
     localStorage.setItem('shoppingCart', JSON.stringify(simplifiedCart));
+    localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
     
-    // Actualizar el contador del carrito en el componente padre si existe la función
     updateCartCount(simplifiedCart.reduce((total, item) => total + item.quantity, 0));
 
-    // Dispatch events
+    // Dispatch events - same as CartPage
     const cartChangeEvent = new CustomEvent('cartUpdated', {
       bubbles: true,
       detail: {
@@ -197,22 +207,22 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
 
   } catch (error) {
     console.error('Error removing item from cart:', error);
-    // Still update UI even if API call fails to maintain consistency
-    const updatedCart = cartItems.filter(item => item.bookDetails?._id !== itemId);
+    // Still update UI and localStorage even if API call fails
+    const updatedCart = cartItems.filter(item => item.itemId !== itemId);
     setCartItems(updatedCart);
     
-    // Actualizar localStorage
     const simplifiedCart = updatedCart.map(item => ({
-      bookId: item.bookDetails?._id,
+      bookId: item.bookId,
       quantity: item.quantity
     }));
     
     localStorage.setItem('shoppingCart', JSON.stringify(simplifiedCart));
+    localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
     
-    // Actualizar el contador del carrito en el componente padre si existe la función
     updateCartCount(simplifiedCart.reduce((total, item) => total + item.quantity, 0));
   }
 };
+
 
   // Función para vaciar todo el carrito utilizando la utilidad importada
   const clearCart = () => {
@@ -223,10 +233,36 @@ const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
   };
 
   // Función para ir al checkout
-  const goToCheckout = () => {
+  const fetchCartTotals = useCallback(async () => {
+  try {
+    const responseTotal = await axios.get(`${API_BASE_URL}/carrito/total`, {
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`
+      }
+    });
+
+    if (responseTotal.data.status === 'success' && responseTotal.data.data) {
+      return responseTotal.data.data.totales;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error fetching cart totals:', error);
+    return null;
+  }
+}, []);
+
+  // Función para ir al checkout
+  const goToCheckout = useCallback(async () => {
+    // Always fetch fresh cart totals before saving
+    const freshCartTotals = await fetchCartTotals();
+    
+    // Save the fresh cart totals to localStorage
+    const dataToSave = freshCartTotals || cartTotals;
+    localStorage.setItem('CartPrices', JSON.stringify(dataToSave));
+    
     onClose();
     navigate('/checkout');
-  };
+  }, [navigate, cartTotals, fetchCartTotals, onClose]);
 
   if (!isOpen) return null;
 

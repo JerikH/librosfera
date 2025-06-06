@@ -15,7 +15,7 @@ const CheckoutStoreSelectionPage = () => {
   // Lista de tiendas disponibles (ampliada con más detalles)
   const availableStores = [
     { 
-      id: 1, 
+      id: 113548423154, 
       nombre: 'Sede Principal - Centro', 
       direccion: 'Carrera 8 #23-45', 
       ciudad: 'Pereira',

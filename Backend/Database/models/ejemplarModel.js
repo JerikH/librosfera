@@ -233,7 +233,7 @@ ejemplarSchema.statics.contarPorTienda = async function(idLibro) {
   return this.aggregate([
     { $match: { id_libro: mongoose.Types.ObjectId(idLibro), disponible: true } },
     { $group: { _id: '$id_tienda', cantidad: { $sum: 1 } } },
-    { $lookup: { from: 'tienda_fisicas', localField: '_id', foreignField: '_id', as: 'tienda' } },
+    { $lookup: { from: 'tienda_fisicas', localField: '_id', foreignField: '_id', as: 'recogida_tienda' } },
     { $unwind: '$tienda' },
     { $project: { 
       _id: 0, 
