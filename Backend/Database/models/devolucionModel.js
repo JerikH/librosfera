@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const QRCode = require('qrcode');
 const addressSchema = require('./schemas/addressSchema');
+const crypto = require('crypto');
 
 // Esquema para los items a devolver
 const devolucionItemSchema = new Schema({
@@ -100,6 +101,14 @@ const devolucionSchema = new Schema({
       const random = Math.random().toString(36).substr(2, 6).toUpperCase();
       return `DEV-${año}${mes}${dia}-${random}`;
     }
+  },
+  id_devolucion: {
+    type: String,
+    default: function() {
+      return crypto.randomUUID();
+    },
+    unique: true,
+    index: true
   },
   
   // Referencia a la venta original
