@@ -100,7 +100,6 @@ const carritoItemSchema = new Schema({
     id_tienda_reservado: {
       type: Schema.Types.ObjectId,
       ref: 'Tienda_Fisica',
-      index: true
     },
     fecha_reserva: {
       type: Date,
@@ -114,7 +113,6 @@ const carritoItemSchema = new Schema({
       type: String,
       enum: ['PENDIENTE', 'RESERVADO', 'LIBERADO', 'CONVERTIDO_VENTA'],
       default: 'PENDIENTE',
-      index: true
     },
     observaciones_reserva: String
   },

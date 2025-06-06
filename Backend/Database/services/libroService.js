@@ -5,6 +5,7 @@ const Inventario = require('../models/inventarioModel');
 const Busqueda = require('../models/busquedaModel');
 const fs = require('fs').promises;
 const path = require('path');
+const TiendaFisica = require('../models/tiendaFisicaModel');
 
 /**
  * Servicio de Libros - Encapsula la lógica de negocio y acceso a datos para libros
@@ -82,18 +83,58 @@ const libroService = {
         
         console.log('Libro creado con ID:', nuevoLibro._id);
 
-        // Crear registro de inventario para el libro
-        const nuevoInventario = new Inventario({
-          id_libro: nuevoLibro._id,
-          stock_total: libroData.stock || 0,
-          stock_disponible: libroData.stock || 0
-        });
-        await nuevoInventario.save({ session });
-        console.log('Inventario creado con ID:', nuevoInventario._id);
+        // NUEVO: Obtener todas las tiendas activas
+        const tiendasActivas = await TiendaFisica.find({ 
+          estado: 'activa' 
+        }).session(session);
+        
+        console.log(`Encontradas ${tiendasActivas.length} tiendas activas para distribuir inventario`);
+        
+        if (tiendasActivas.length === 0) {
+          throw new Error('No hay tiendas activas disponibles para crear inventario');
+        }
+
+        // NUEVO: Distribuir stock entre tiendas
+        const stockTotal = libroData.stock || 0;
+        const stockPorTienda = this._distribuirStockEntreTiendas(stockTotal, tiendasActivas.length);
+        
+        console.log('Distribución de stock:', stockPorTienda);
+
+        // NUEVO: Crear inventario en cada tienda activa
+        const inventariosCreados = [];
+        
+        for (let i = 0; i < tiendasActivas.length; i++) {
+          const tienda = tiendasActivas[i];
+          const stockAsignado = stockPorTienda[i] || 0;
+          
+          const nuevoInventario = new Inventario({
+            id_libro: nuevoLibro._id,
+            id_tienda: tienda._id,
+            stock_total: stockAsignado,
+            stock_disponible: stockAsignado,
+            stock_reservado: 0
+          });
+          
+          await nuevoInventario.save({ session });
+          inventariosCreados.push({
+            tienda: tienda.nombre,
+            stock: stockAsignado
+          });
+          
+          console.log(`Inventario creado en tienda ${tienda.nombre}: ${stockAsignado} unidades`);
+        }
+
+        // Actualizar el stock total del libro con la suma real distribuida
+        const stockTotalDistribuido = stockPorTienda.reduce((sum, stock) => sum + stock, 0);
+        nuevoLibro.stock = stockTotalDistribuido;
+        await nuevoLibro.save({ session });
 
         // Confirmar la transacción
         await session.commitTransaction();
         session.endSession();
+
+        console.log(`Libro creado exitosamente con inventario distribuido en ${tiendasActivas.length} tiendas`);
+        console.log('Inventarios creados:', inventariosCreados);
 
         return nuevoLibro.toObject();
       } catch (error) {
@@ -109,6 +150,36 @@ const libroService = {
   },
 
   /**
+   * Distribuye stock de manera equitativa entre tiendas
+   * @private
+   * @param {Number} stockTotal - Cantidad total de stock a distribuir
+   * @param {Number} numeroTiendas - Número de tiendas activas
+   * @returns {Array} Array con la cantidad asignada a cada tienda
+   */
+  _distribuirStockEntreTiendas(stockTotal, numeroTiendas) {
+    if (stockTotal <= 0 || numeroTiendas <= 0) {
+      return new Array(numeroTiendas).fill(0);
+    }
+
+    // Calcular distribución base
+    const stockBasePorTienda = Math.floor(stockTotal / numeroTiendas);
+    const stockRestante = stockTotal % numeroTiendas;
+    
+    // Crear array con distribución base
+    const distribucion = new Array(numeroTiendas).fill(stockBasePorTienda);
+    
+    // Distribuir el stock restante en las primeras tiendas
+    for (let i = 0; i < stockRestante; i++) {
+      distribucion[i] += 1;
+    }
+    
+    console.log(`Distribución calculada: ${stockTotal} total = ${stockBasePorTienda} base + ${stockRestante} extra`);
+    console.log(`Resultado: [${distribucion.join(', ')}]`);
+    
+    return distribucion;
+  },
+
+  /**
    * Obtiene un libro por su ID
    * @param {String} libroId - ID del libro a buscar
    * @returns {Promise<Object>} El libro encontrado
@@ -118,21 +189,31 @@ const libroService = {
       console.log('Servicio: Buscando libro con ID:', libroId);
       let libro;
 
-      // Verificar si es un ObjectId válido de MongoDB
       if (mongoose.Types.ObjectId.isValid(libroId)) {
         libro = await Libro.findById(libroId);
-        console.log('Búsqueda por _id:', libro ? 'Encontrado' : 'No encontrado');
       } else {
-        // Si no es un ObjectId, buscar por id_libro
         libro = await Libro.findOne({ id_libro: libroId });
-        console.log('Búsqueda por id_libro:', libro ? 'Encontrado' : 'No encontrado');
       }
 
       if (!libro) {
         throw new Error(`Libro no encontrado con ID: ${libroId}`);
       }
 
-      return libro.toObject();
+      // Obtener stock consolidado REAL
+      const stockConsolidado = await this._obtenerStockConsolidado(libro._id);
+      
+      const libroConStock = libro.toObject();
+      
+      // IMPORTANTE: Sobrescribir con valores REALES
+      libroConStock.stock = stockConsolidado.stock_total;
+      libroConStock.stock_disponible = stockConsolidado.stock_disponible;
+      libroConStock.stock_reservado = stockConsolidado.stock_reservado;
+      libroConStock.tiendas_con_stock = stockConsolidado.tiendas_con_stock;
+      libroConStock.stock_consolidado = stockConsolidado;
+      
+      console.log(`Stock REAL - Total: ${stockConsolidado.stock_total}, Disponible: ${stockConsolidado.stock_disponible}, Reservado: ${stockConsolidado.stock_reservado}`);
+
+      return libroConStock;
     } catch (error) {
       console.error('Error obteniendo libro por ID:', error);
       throw error;
@@ -189,6 +270,12 @@ const libroService = {
           }
         }
 
+        // NUEVO: Manejar actualización de stock
+        if (datosActualizados.stock !== undefined) {
+          await this._redistribuirStockEntreTiendas(libro._id, datosActualizados.stock, session);
+          console.log(`Stock redistribuido: ${datosActualizados.stock} unidades entre tiendas activas`);
+        }
+
         // Actualizar fecha de última actualización
         datosActualizados.ultima_actualizacion = new Date();
 
@@ -212,40 +299,9 @@ const libroService = {
           throw new Error('Libro no encontrado después de intentar actualizar');
         }
 
-        // Si se actualizó el stock, actualizar el inventario
+        // NUEVO: Verificar si se quedó sin stock y liberar reservas si es necesario
         if (datosActualizados.stock !== undefined) {
-          const inventario = await Inventario.findOne({ id_libro: libroActualizado._id }).session(session);
-          
-          if (inventario) {
-            const diferencia = datosActualizados.stock - (libro.stock || 0);
-            
-            if (diferencia > 0) {
-              // Aumentó el stock
-              await inventario.registrarEntrada(
-                diferencia, 
-                'ajuste_auditoria',
-                null, 
-                'Actualización manual del stock'
-              );
-            } else if (diferencia < 0) {
-              // Disminuyó el stock
-              await inventario.registrarSalida(
-                Math.abs(diferencia), 
-                'ajuste_auditoria',
-                null, 
-                null, 
-                'Actualización manual del stock'
-              );
-            }
-          } else {
-            // Crear inventario si no existe
-            const nuevoInventario = new Inventario({
-              id_libro: libroActualizado._id,
-              stock_total: datosActualizados.stock,
-              stock_disponible: datosActualizados.stock
-            });
-            await nuevoInventario.save({ session });
-          }
+          await this._verificarYLiberarReservasSinStock(libroActualizado._id, session);
         }
 
         // Confirmar la transacción
@@ -253,7 +309,9 @@ const libroService = {
         session.endSession();
         
         console.log('Libro actualizado exitosamente:', libroActualizado._id);
-        return libroActualizado.toObject();
+        
+        // Devolver libro con stock consolidado
+        return await this.obtenerLibroPorId(libroActualizado._id);
       } catch (error) {
         // Si algo falla, abortar la transacción
         await session.abortTransaction();
@@ -267,6 +325,162 @@ const libroService = {
   },
 
   /**
+   * Verificar y liberar reservas si un libro se queda sin stock
+   * @private
+   * @param {String} idLibro - ID del libro
+   * @param {Object} session - Sesión de MongoDB
+   */
+  async _verificarYLiberarReservasSinStock(idLibro, session) {
+    try {
+      // Obtener stock consolidado actual
+      const stockConsolidado = await this._obtenerStockConsolidado(idLibro);
+      
+      // Si no hay stock disponible, liberar todas las reservas
+      if (stockConsolidado.stock_disponible === 0 && stockConsolidado.stock_reservado > 0) {
+        console.log(`Libro ${idLibro} sin stock disponible, liberando ${stockConsolidado.stock_reservado} reservas`);
+        
+        // Liberar todas las reservas
+        await this._liberarTodasLasReservasLibro(idLibro, session);
+        
+        // Quitar de todos los carritos
+        const { carritoService } = require('./index');
+        await carritoService.quitarProductoDeCarritos(
+          idLibro, 
+          'Producto sin stock disponible'
+        );
+      }
+    } catch (error) {
+      console.error('Error verificando reservas sin stock:', error);
+      // No propagar el error para no romper el flujo principal
+    }
+  },
+
+  /**
+   * Redistribuye el stock de un libro entre todas las tiendas activas
+   * @private
+   * @param {String} idLibro - ID del libro
+   * @param {Number} nuevoStockTotal - Nuevo stock total a distribuir
+   * @param {Object} session - Sesión de MongoDB para transacción
+   */
+  async _redistribuirStockEntreTiendas(idLibro, nuevoStockTotal, session) {
+    try {
+      console.log(`Redistribuyendo stock del libro ${idLibro}: ${nuevoStockTotal} unidades`);
+      
+      // Importar TiendaFisica
+      const TiendaFisica = require('../models/tiendaFisicaModel');
+      
+      // Obtener inventarios actuales del libro
+      const inventariosActuales = await Inventario.find({
+        id_libro: idLibro
+      }).populate('id_tienda').session(session);
+      
+      console.log(`Encontrados ${inventariosActuales.length} inventarios existentes`);
+      
+      // Verificar si hay stock reservado que no se puede redistribuir
+      const stockReservadoTotal = inventariosActuales.reduce((total, inv) => 
+        total + (inv.stock_reservado || 0), 0
+      );
+      
+      if (stockReservadoTotal > nuevoStockTotal) {
+        throw new Error(`No se puede reducir el stock a ${nuevoStockTotal} porque hay ${stockReservadoTotal} unidades reservadas`);
+      }
+      
+      // Obtener todas las tiendas activas
+      const tiendasActivas = await TiendaFisica.find({ 
+        estado: 'activa' 
+      }).session(session);
+      
+      if (tiendasActivas.length === 0) {
+        throw new Error('No hay tiendas activas para redistribuir el stock');
+      }
+      
+      // Calcular stock disponible para redistribuir (total - reservado)
+      const stockDisponibleParaRedistribuir = nuevoStockTotal - stockReservadoTotal;
+      
+      // Distribuir el stock disponible
+      const distribucionDisponible = this._distribuirStockEntreTiendas(
+        stockDisponibleParaRedistribuir, 
+        tiendasActivas.length
+      );
+      
+      console.log(`Stock reservado: ${stockReservadoTotal}, Disponible para redistribuir: ${stockDisponibleParaRedistribuir}`);
+      
+      // Crear mapa de inventarios existentes por tienda
+      const inventariosPorTienda = new Map();
+      inventariosActuales.forEach(inv => {
+        if (inv.id_tienda && inv.id_tienda.estado === 'activa') {
+          inventariosPorTienda.set(inv.id_tienda._id.toString(), inv);
+        }
+      });
+      
+      // Actualizar o crear inventarios para cada tienda activa
+      for (let i = 0; i < tiendasActivas.length; i++) {
+        const tienda = tiendasActivas[i];
+        const stockDisponibleAsignado = distribucionDisponible[i] || 0;
+        const tiendaId = tienda._id.toString();
+        
+        if (inventariosPorTienda.has(tiendaId)) {
+          // Actualizar inventario existente
+          const inventarioExistente = inventariosPorTienda.get(tiendaId);
+          const stockReservadoTienda = inventarioExistente.stock_reservado || 0;
+          const nuevoStockTotal = stockDisponibleAsignado + stockReservadoTienda;
+          
+          // Registrar el cambio como un ajuste
+          if (nuevoStockTotal !== inventarioExistente.stock_total) {
+            const diferencia = nuevoStockTotal - inventarioExistente.stock_total;
+            
+            if (diferencia > 0) {
+              await inventarioExistente.registrarEntrada(
+                diferencia,
+                'ajuste_auditoria',
+                null,
+                `Redistribución de stock: ${inventarioExistente.stock_total} → ${nuevoStockTotal}`
+              );
+            } else if (diferencia < 0) {
+              await inventarioExistente.registrarSalida(
+                Math.abs(diferencia),
+                'ajuste_auditoria',
+                null,
+                null,
+                `Redistribución de stock: ${inventarioExistente.stock_total} → ${nuevoStockTotal}`
+              );
+            }
+          }
+          
+          console.log(`Tienda ${tienda.nombre}: Stock actualizado a ${nuevoStockTotal} (${stockDisponibleAsignado} disponible + ${stockReservadoTienda} reservado)`);
+        } else {
+          // Crear nuevo inventario para esta tienda
+          const nuevoInventario = new Inventario({
+            id_libro: idLibro,
+            id_tienda: tienda._id,
+            stock_total: stockDisponibleAsignado,
+            stock_disponible: stockDisponibleAsignado,
+            stock_reservado: 0
+          });
+          
+          await nuevoInventario.save({ session });
+          console.log(`Tienda ${tienda.nombre}: Nuevo inventario creado con ${stockDisponibleAsignado} unidades`);
+        }
+      }
+      
+      // Eliminar inventarios de tiendas que ya no están activas (si los hay)
+      for (const [tiendaId, inventario] of inventariosPorTienda) {
+        const tiendaAunActiva = tiendasActivas.some(t => t._id.toString() === tiendaId);
+        if (!tiendaAunActiva && inventario.stock_reservado === 0) {
+          await Inventario.findByIdAndDelete(inventario._id).session(session);
+          console.log(`Inventario eliminado de tienda inactiva: ${inventario.id_tienda.nombre}`);
+        }
+      }
+      
+      console.log('Redistribución de stock completada exitosamente');
+      
+    } catch (error) {
+      console.error('Error redistribuyendo stock:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Elimina lógicamente un libro (marca como inactivo)
    * @param {String} libroId - ID del libro a desactivar
    * @returns {Promise<Boolean>} True si se desactivó correctamente
@@ -275,45 +489,68 @@ const libroService = {
     try {
       console.log('Desactivando libro con ID:', libroId);
       
-      // Verificar si el libro existe
-      const libroExistente = await this.obtenerLibroPorId(libroId);
+      // Iniciar sesión de transacción
+      const session = await mongoose.startSession();
+      session.startTransaction();
 
-      if (!libroExistente) {
-        throw new Error('Libro no encontrado para desactivar');
-      }
+      try {
+        // Verificar que el libro existe
+        const libroExistente = await this.obtenerLibroPorId(libroId);
 
-      // Desactivar lógicamente el libro (marcar como inactivo)
-      let resultado;
-      if (mongoose.Types.ObjectId.isValid(libroId)) {
-        resultado = await Libro.findByIdAndUpdate(
-          libroId,
-          { 
-            $set: { 
-              activo: false,
-              ultima_actualizacion: new Date()
-            }
-          },
-          { new: true }
+        if (!libroExistente) {
+          throw new Error('Libro no encontrado para desactivar');
+        }
+
+        // NUEVO: Liberar todas las reservas de este libro antes de desactivarlo
+        await this._liberarTodasLasReservasLibro(libroId, session);
+
+        // NUEVO: Quitar el libro de todos los carritos
+        const { carritoService } = require('./index'); // Importar carritoService
+        await carritoService.quitarProductoDeCarritos(
+          libroId, 
+          'Libro desactivado por administrador'
         );
-      } else {
-        resultado = await Libro.findOneAndUpdate(
-          { id_libro: libroId },
-          { 
-            $set: { 
-              activo: false,
-              ultima_actualizacion: new Date()
-            }
-          },
-          { new: true }
-        );
-      }
 
-      if (!resultado) {
-        throw new Error('Error al desactivar el libro');
+        // Desactivar lógicamente el libro (marcar como inactivo)
+        let resultado;
+        if (mongoose.Types.ObjectId.isValid(libroId)) {
+          resultado = await Libro.findByIdAndUpdate(
+            libroId,
+            { 
+              $set: { 
+                activo: false,
+                ultima_actualizacion: new Date()
+              }
+            },
+            { new: true, session }
+          );
+        } else {
+          resultado = await Libro.findOneAndUpdate(
+            { id_libro: libroId },
+            { 
+              $set: { 
+                activo: false,
+                ultima_actualizacion: new Date()
+              }
+            },
+            { new: true, session }
+          );
+        }
+
+        if (!resultado) {
+          throw new Error('Error al desactivar el libro');
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+        
+        console.log('Libro desactivado correctamente y reservas liberadas:', resultado._id);
+        return true;
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
       }
-      
-      console.log('Libro desactivado correctamente:', resultado._id);
-      return true;
     } catch (error) {
       console.error('Error desactivando libro:', error);
       throw error;
@@ -346,6 +583,20 @@ const libroService = {
           throw new Error('Libro no encontrado para eliminación física');
         }
 
+        // NUEVO: Liberar todas las reservas de este libro
+        await this._liberarTodasLasReservasLibro(libroExistente._id, session);
+
+        // NUEVO: Quitar el libro de todos los carritos
+        const { carritoService } = require('./index'); // Importar carritoService
+        await carritoService.quitarProductoDeCarritos(
+          libroExistente._id, 
+          'Libro eliminado permanentemente'
+        );
+
+        // Eliminar todos los inventarios asociados
+        await Inventario.deleteMany({ id_libro: libroExistente._id }).session(session);
+        console.log('Inventarios eliminados');
+
         // Eliminar físicamente el libro
         let resultado;
         if (mongoose.Types.ObjectId.isValid(libroId)) {
@@ -357,9 +608,6 @@ const libroService = {
         if (!resultado) {
           throw new Error('Error al eliminar físicamente el libro');
         }
-
-        // Eliminar inventario asociado
-        await Inventario.findOneAndDelete({ id_libro: libroExistente._id }).session(session);
 
         // Eliminar imágenes físicas asociadas al libro
         if (libroExistente.imagenes && libroExistente.imagenes.length > 0) {
@@ -385,7 +633,7 @@ const libroService = {
         await session.commitTransaction();
         session.endSession();
         
-        console.log('Libro eliminado permanentemente:', libroExistente._id);
+        console.log('Libro eliminado permanentemente y reservas liberadas:', libroExistente._id);
         return true;
       } catch (error) {
         // Si algo falla, abortar la transacción
@@ -395,6 +643,75 @@ const libroService = {
       }
     } catch (error) {
       console.error('Error eliminando físicamente libro:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Libera todas las reservas de un libro específico en todos los inventarios
+   * @private
+   * @param {String} idLibro - ID del libro
+   * @param {Object} session - Sesión de MongoDB para transacción
+   */
+  async _liberarTodasLasReservasLibro(idLibro, session) {
+    try {
+      console.log(`Liberando todas las reservas del libro ${idLibro}`);
+      
+      // Obtener todos los inventarios del libro que tengan stock reservado
+      const inventariosConReservas = await Inventario.find({
+        id_libro: idLibro,
+        stock_reservado: { $gt: 0 }
+      }).session(session);
+      
+      console.log(`Encontrados ${inventariosConReservas.length} inventarios con reservas`);
+      
+      let totalReservasLiberadas = 0;
+      
+      for (const inventario of inventariosConReservas) {
+        const stockReservado = inventario.stock_reservado;
+        
+        if (stockReservado > 0) {
+          // Crear movimiento de liberación masiva
+          const stockAnterior = {
+            total: inventario.stock_total,
+            disponible: inventario.stock_disponible,
+            reservado: inventario.stock_reservado
+          };
+          
+          // Mover todo el stock reservado a disponible
+          inventario.stock_disponible += stockReservado;
+          inventario.stock_reservado = 0;
+          
+          const stockPosterior = {
+            total: inventario.stock_total,
+            disponible: inventario.stock_disponible,
+            reservado: inventario.stock_reservado
+          };
+          
+          // Registrar movimiento de liberación masiva
+          inventario.movimientos.push({
+            tipo: 'liberacion_reserva',
+            cantidad: stockReservado,
+            fecha: new Date(),
+            id_usuario: null, // Sistema
+            motivo: 'expiracion_reserva',
+            id_reserva: null, // Liberación masiva
+            notas: 'Liberación masiva por desactivación/eliminación del libro',
+            stock_anterior: stockAnterior,
+            stock_posterior: stockPosterior
+          });
+          
+          await inventario.save({ session });
+          totalReservasLiberadas += stockReservado;
+          
+          console.log(`Liberadas ${stockReservado} reservas del inventario en tienda ${inventario.id_tienda}`);
+        }
+      }
+      
+      console.log(`Total de reservas liberadas: ${totalReservasLiberadas}`);
+      
+    } catch (error) {
+      console.error('Error liberando reservas del libro:', error);
       throw error;
     }
   },
@@ -413,33 +730,42 @@ const libroService = {
       console.log(`Listando libros - Página ${pagina}, Límite ${limite}, Orden ${ordenarPor} ${direccion}`);
       console.log('Filtros:', JSON.stringify(filtros, null, 2));
       
-      // Calcular índice para paginación
       const skip = (pagina - 1) * limite;
-
-      // Obtener query base según criterios
       const query = Libro.buscarPorCriterios(filtros);
-
-      // Contar total de resultados para la paginación
       const total = await Libro.countDocuments(query.getQuery());
-
-      // Definir ordenamiento
+      
       const ordenamiento = {};
       ordenamiento[ordenarPor] = direccion === 'asc' ? 1 : -1;
 
-      // Ejecutar la consulta con paginación
+      // Obtener libros
       const libros = await query
         .skip(skip)
         .limit(limite)
         .sort(ordenamiento);
 
-      // Calcular el total de páginas
+      // CORREGIDO: Obtener stock consolidado REAL para cada libro
+      const librosConStockReal = await Promise.all(
+        libros.map(async (libro) => {
+          const stockConsolidado = await this._obtenerStockConsolidado(libro._id);
+          const libroObj = libro.toObject();
+          
+          // IMPORTANTE: Sobrescribir con valores REALES
+          libroObj.stock = stockConsolidado.stock_total;
+          libroObj.stock_disponible = stockConsolidado.stock_disponible;
+          libroObj.stock_reservado = stockConsolidado.stock_reservado;
+          libroObj.tiendas_con_stock = stockConsolidado.tiendas_con_stock;
+          libroObj.stock_consolidado = stockConsolidado;
+          
+          return libroObj;
+        })
+      );
+
       const totalPaginas = Math.ceil(total / limite) || 1;
 
       console.log(`Libros encontrados: ${libros.length}, Total: ${total}`);
       
-      // Devolver resultados con metadatos de paginación
       return {
-        datos: libros.map(l => l.toObject()),
+        datos: librosConStockReal,
         paginacion: {
           total,
           pagina,
@@ -450,6 +776,123 @@ const libroService = {
     } catch (error) {
       console.error('Error listando libros:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Obtener tiendas que tienen stock de un libro específico
+   * @param {String} idLibro - ID del libro
+   * @returns {Promise<Array>} Lista de tiendas con stock disponible
+   */
+  async obtenerTiendasConStock(idLibro) {
+    try {
+      console.log(`Obteniendo tiendas con stock del libro ${idLibro}`);
+      
+      // Buscar inventarios que tengan stock del libro
+      const inventarios = await Inventario.find({
+        id_libro: idLibro,
+        stock_total: { $gt: 0 }
+      })
+      .populate({
+        path: 'id_tienda',
+        match: { estado: 'activa' },
+        select: 'nombre codigo direccion coordenadas servicios estado'
+      })
+      .lean();
+      
+      // Filtrar solo inventarios con tienda activa y formatear respuesta
+      const tiendasConStock = inventarios
+        .filter(inv => inv.id_tienda)
+        .map(inv => ({
+          tienda: inv.id_tienda,
+          stock_total: inv.stock_total,
+          stock_disponible: inv.stock_disponible,
+          stock_reservado: inv.stock_reservado,
+          estado_inventario: inv.estado,
+          puede_reservar: inv.stock_disponible > 0 && inv.id_tienda.servicios.recogida_productos
+        }));
+      
+      console.log(`Encontradas ${tiendasConStock.length} tiendas con stock del libro`);
+      
+      return tiendasConStock;
+    } catch (error) {
+      console.error('Error obteniendo tiendas con stock:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtiene el stock consolidado de un libro sumando todas las tiendas
+   * @private
+   * @param {String} idLibro - ID del libro
+   * @returns {Promise<Object>} Información de stock consolidado
+   */
+  async _obtenerStockConsolidado(idLibro) {
+    try {
+      // Obtener TODOS los inventarios de este libro en tiendas activas
+      const inventarios = await Inventario.find({
+        id_libro: idLibro
+      }).populate({
+        path: 'id_tienda',
+        match: { estado: 'activa' },
+        select: 'estado servicios'
+      });
+
+      // Filtrar solo inventarios de tiendas activas
+      const inventariosActivos = inventarios.filter(inv => 
+        inv.id_tienda && 
+        inv.id_tienda.estado === 'activa'
+      );
+
+      if (inventariosActivos.length === 0) {
+        return {
+          stock_total: 0,
+          stock_disponible: 0,
+          stock_reservado: 0,
+          tiendas_con_stock: 0,
+          tiendas_disponibles: 0
+        };
+      }
+
+      // Sumar stock real de todas las tiendas activas
+      let stockTotal = 0;
+      let stockDisponible = 0;
+      let stockReservado = 0;
+      let tiendasConStock = 0;
+      let tiendasDisponibles = 0;
+
+      for (const inv of inventariosActivos) {
+        stockTotal += inv.stock_total || 0;
+        stockDisponible += inv.stock_disponible || 0;
+        stockReservado += inv.stock_reservado || 0;
+        
+        if (inv.stock_total > 0) {
+          tiendasConStock++;
+        }
+        
+        if (inv.stock_disponible > 0) {
+          tiendasDisponibles++;
+        }
+      }
+
+      console.log(`Stock consolidado para libro ${idLibro}: Total=${stockTotal}, Disponible=${stockDisponible}, Reservado=${stockReservado}`);
+
+      return {
+        stock_total: stockTotal,
+        stock_disponible: stockDisponible,
+        stock_reservado: stockReservado,
+        tiendas_con_stock: tiendasConStock,
+        tiendas_disponibles: tiendasDisponibles
+      };
+    } catch (error) {
+      console.error('Error obteniendo stock consolidado:', error);
+      return {
+        stock_total: 0,
+        stock_disponible: 0,
+        stock_reservado: 0,
+        tiendas_con_stock: 0,
+        tiendas_disponibles: 0
+      };
     }
   },
 
@@ -566,33 +1009,140 @@ const libroService = {
       // Etapa 2: Aplicar filtros adicionales con $match
       const matchConditions = { activo: true };
       
-      // Aplicar filtros específicos
+      // Aplicar filtros específicos (excepto solo_disponibles)
       this.aplicarFiltrosAtlasSearch(matchConditions, filtros);
       
       // Agregar etapa $match al pipeline
       pipeline.push({ $match: matchConditions });
       
-      // Etapa 3: Obtener documentos usando aggregate con el pipeline
+      // NUEVO: Si se solicita solo disponibles, hacer lookup con inventarios
+      if (filtros.solo_disponibles) {
+        pipeline.push(
+          // Lookup para obtener inventarios
+          {
+            $lookup: {
+              from: 'inventarios',
+              localField: '_id',
+              foreignField: 'id_libro',
+              as: 'inventarios'
+            }
+          },
+          // Lookup para verificar que las tiendas estén activas
+          {
+            $lookup: {
+              from: 'tienda_fisicas',
+              localField: 'inventarios.id_tienda',
+              foreignField: '_id',
+              as: 'tiendas'
+            }
+          },
+          // Calcular stock disponible total
+          {
+            $addFields: {
+              stock_disponible_total: {
+                $sum: {
+                  $map: {
+                    input: '$inventarios',
+                    as: 'inv',
+                    in: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $gt: ['$$inv.stock_disponible', 0] },
+                            {
+                              $in: [
+                                '$$inv.id_tienda',
+                                {
+                                  $map: {
+                                    input: {
+                                      $filter: {
+                                        input: '$tiendas',
+                                        cond: { 
+                                          $and: [
+                                            { $eq: ['$$this.estado', 'activa'] },
+                                            { $eq: ['$$this.servicios.recogida_productos', true] }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    as: 'tienda',
+                                    in: '$$tienda._id'
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        '$$inv.stock_disponible',
+                        0
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          // Filtrar solo libros con stock disponible > 0
+          {
+            $match: {
+              stock_disponible_total: { $gt: 0 }
+            }
+          },
+          // Limpiar campos temporales
+          {
+            $project: {
+              inventarios: 0,
+              tiendas: 0,
+              stock_disponible_total: 0
+            }
+          }
+        );
+      }
+      
+      // Etapa final: Limitar resultados
+      pipeline.push({ $limit: limite });
+      
+      // Ejecutar búsqueda
       let libros;
       
       if (pipeline.length > 0) {
         // Si hay búsqueda de texto o filtros, usar pipeline completo
-        libros = await Libro.aggregate(pipeline).limit(limite);
-        
-        // Para búsquedas de texto, los resultados ya vienen ordenados por relevancia (score)
-        // Para búsquedas solo con filtros, podríamos añadir un $sort si es necesario
-        
-        console.log(`Libros encontrados: ${libros.length}`);
+        libros = await Libro.aggregate(pipeline);
+        console.log(`Libros encontrados con pipeline: ${libros.length}`);
       } else {
         // Si no hay búsqueda ni filtros, devolver libros por defecto (más recientes)
-        libros = await Libro.find({ activo: true }).sort({ fecha_registro: -1 }).limit(limite);
+        const query = { activo: true };
+        
+        // Aplicar filtro de solo disponibles si es necesario
+        if (filtros.solo_disponibles) {
+          // Para la consulta simple, usar un método más directo
+          const librosConStock = await this._obtenerLibrosConStockDisponible(limite);
+          libros = librosConStock;
+        } else {
+          libros = await Libro.find(query).sort({ fecha_registro: -1 }).limit(limite);
+        }
+        
         console.log(`No se especificaron criterios, mostrando ${libros.length} libros recientes`);
       }
+      
+      // Agregar información de stock consolidado a cada libro
+      const librosConStockConsolidado = await Promise.all(
+        libros.map(async (libro) => {
+          const stockConsolidado = await this._obtenerStockConsolidado(libro._id);
+          return {
+            ...libro,
+            stock_consolidado: stockConsolidado,
+            stock: stockConsolidado.stock_total,
+            stock_disponible: stockConsolidado.stock_disponible,
+            stock_reservado: stockConsolidado.stock_reservado
+          };
+        })
+      );
       
       // Registrar la búsqueda en el historial
       const busquedaData = {
         termino: termino || '',
-        total_resultados: libros.length,
+        total_resultados: librosConStockConsolidado.length,
         filtros
       };
       
@@ -607,12 +1157,120 @@ const libroService = {
       console.log('Búsqueda registrada con ID:', nuevaBusqueda._id);
       
       return {
-        resultados: libros,
+        resultados: librosConStockConsolidado,
         id_busqueda: nuevaBusqueda._id
       };
     } catch (error) {
       console.error('Error en búsqueda de libros con Atlas Search:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Obtener libros que tienen stock disponible en tiendas activas
+   * @private
+   * @param {Number} limite - Cantidad máxima de resultados
+   * @returns {Promise<Array>} Lista de libros con stock
+   */
+  async _obtenerLibrosConStockDisponible(limite = 20) {
+    try {
+      const pipeline = [
+        // Lookup con inventarios
+        {
+          $lookup: {
+            from: 'inventarios',
+            localField: '_id',
+            foreignField: 'id_libro',
+            as: 'inventarios'
+          }
+        },
+        // Lookup con tiendas para verificar que estén activas
+        {
+          $lookup: {
+            from: 'tienda_fisicas',
+            localField: 'inventarios.id_tienda',
+            foreignField: '_id',
+            as: 'tiendas'
+          }
+        },
+        // Calcular stock disponible en tiendas activas
+        {
+          $addFields: {
+            stock_disponible_total: {
+              $sum: {
+                $map: {
+                  input: '$inventarios',
+                  as: 'inv',
+                  in: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $gt: ['$$inv.stock_disponible', 0] },
+                          {
+                            $in: [
+                              '$$inv.id_tienda',
+                              {
+                                $map: {
+                                  input: {
+                                    $filter: {
+                                      input: '$tiendas',
+                                      cond: { 
+                                        $and: [
+                                          { $eq: ['$$this.estado', 'activa'] },
+                                          { $eq: ['$$this.servicios.recogida_productos', true] }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  as: 'tienda',
+                                  in: '$$tienda._id'
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      '$$inv.stock_disponible',
+                      0
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        // Filtrar solo libros activos con stock > 0
+        {
+          $match: {
+            activo: true,
+            stock_disponible_total: { $gt: 0 }
+          }
+        },
+        // Limpiar campos temporales
+        {
+          $project: {
+            inventarios: 0,
+            tiendas: 0,
+            stock_disponible_total: 0
+          }
+        },
+        // Ordenar por fecha de registro (más recientes primero)
+        {
+          $sort: { fecha_registro: -1 }
+        },
+        // Limitar resultados
+        {
+          $limit: limite
+        }
+      ];
+      
+      const libros = await Libro.aggregate(pipeline);
+      console.log(`Encontrados ${libros.length} libros con stock disponible`);
+      
+      return libros;
+    } catch (error) {
+      console.error('Error obteniendo libros con stock disponible:', error);
+      return [];
     }
   },
 
@@ -2139,6 +2797,232 @@ const libroService = {
       }
     } catch (error) {
       console.error('Error liberando stock reservado:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener reporte de consistencia de inventarios
+   * @returns {Promise<Object>} Reporte de consistencia
+   */
+  async obtenerReporteConsistencia() {
+    try {
+      console.log('Generando reporte de consistencia de inventarios');
+      
+      // Verificar consistencia general de inventarios
+      const consistenciaInventarios = await Inventario.verificarConsistenciaGeneral();
+      
+      // Verificar libros con stock inconsistente
+      const librosInconsistentes = [];
+      const libros = await Libro.find({ activo: true }, '_id titulo stock');
+      
+      for (const libro of libros) {
+        const stockConsolidado = await this._obtenerStockConsolidado(libro._id);
+        
+        if (libro.stock !== stockConsolidado.stock_total) {
+          librosInconsistentes.push({
+            id_libro: libro._id,
+            titulo: libro.titulo,
+            stock_libro: libro.stock,
+            stock_consolidado: stockConsolidado.stock_total,
+            diferencia: libro.stock - stockConsolidado.stock_total
+          });
+        }
+      }
+      
+      // Verificar tiendas sin inventario
+      const tiendasActivas = await TiendaFisica.find({ estado: 'activa' }, '_id nombre');
+      const tiendasSinInventario = [];
+      
+      for (const tienda of tiendasActivas) {
+        const inventarios = await Inventario.countDocuments({ id_tienda: tienda._id });
+        
+        if (inventarios === 0) {
+          tiendasSinInventario.push({
+            id_tienda: tienda._id,
+            nombre: tienda.nombre
+          });
+        }
+      }
+      
+      const reporte = {
+        fecha_reporte: new Date(),
+        consistencia_inventarios: consistenciaInventarios,
+        libros_inconsistentes: {
+          cantidad: librosInconsistentes.length,
+          detalles: librosInconsistentes
+        },
+        tiendas_sin_inventario: {
+          cantidad: tiendasSinInventario.length,
+          detalles: tiendasSinInventario
+        },
+        resumen: {
+          inventarios_totales: consistenciaInventarios.total_inventarios,
+          inventarios_inconsistentes: consistenciaInventarios.inconsistencias,
+          libros_con_stock_inconsistente: librosInconsistentes.length,
+          tiendas_sin_inventario: tiendasSinInventario.length
+        }
+      };
+      
+      console.log('Reporte de consistencia generado:', reporte.resumen);
+      
+      return reporte;
+    } catch (error) {
+      console.error('Error generando reporte de consistencia:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Reparar inconsistencias de stock automáticamente
+   * @returns {Promise<Object>} Resultado de las reparaciones
+   */
+  async repararInconsistenciasStock() {
+    try {
+      console.log('Iniciando reparación automática de inconsistencias');
+      
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      
+      try {
+        // Obtener reporte de consistencia
+        const reporte = await this.obtenerReporteConsistencia();
+        
+        let reparaciones = 0;
+        let errores = 0;
+        
+        // Reparar libros con stock inconsistente
+        for (const libro of reporte.libros_inconsistentes.detalles) {
+          try {
+            await this.sincronizarStockLibro(libro.id_libro);
+            reparaciones++;
+            console.log(`Stock reparado para libro ${libro.titulo}: ${libro.stock_libro} → ${libro.stock_consolidado}`);
+          } catch (error) {
+            console.error(`Error reparando libro ${libro.titulo}:`, error);
+            errores++;
+          }
+        }
+        
+        // Crear inventarios faltantes para tiendas sin inventario
+        for (const tienda of reporte.tiendas_sin_inventario.detalles) {
+          try {
+            // Por ahora solo registramos, no creamos inventarios automáticamente
+            console.log(`Tienda sin inventario detectada: ${tienda.nombre}`);
+          } catch (error) {
+            console.error(`Error procesando tienda ${tienda.nombre}:`, error);
+          }
+        }
+        
+        await session.commitTransaction();
+        session.endSession();
+        
+        const resultado = {
+          fecha_reparacion: new Date(),
+          problemas_detectados: {
+            inventarios_inconsistentes: reporte.consistencia_inventarios.inconsistencias,
+            libros_inconsistentes: reporte.libros_inconsistentes.cantidad,
+            tiendas_sin_inventario: reporte.tiendas_sin_inventario.cantidad
+          },
+          reparaciones_realizadas: {
+            stocks_sincronizados: reparaciones,
+            errores: errores
+          }
+        };
+        
+        console.log('Reparación completada:', resultado);
+        
+        return resultado;
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error en reparación automática:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Sincronizar stock de todos los libros con su stock consolidado
+   * @returns {Promise<Object>} Estadísticas de sincronización
+   */
+  async sincronizarTodosLosStocks() {
+    try {
+      console.log('Iniciando sincronización masiva de stocks');
+      
+      // Obtener todos los libros activos
+      const libros = await Libro.find({ activo: true }, '_id titulo');
+      
+      let sincronizados = 0;
+      let errores = 0;
+      
+      for (const libro of libros) {
+        try {
+          await this.sincronizarStockLibro(libro._id);
+          sincronizados++;
+        } catch (error) {
+          console.error(`Error sincronizando libro ${libro._id}:`, error);
+          errores++;
+        }
+      }
+      
+      console.log(`Sincronización completada: ${sincronizados} exitosos, ${errores} errores`);
+      
+      return {
+        total_libros: libros.length,
+        sincronizados,
+        errores,
+        fecha_sincronizacion: new Date()
+      };
+    } catch (error) {
+      console.error('Error en sincronización masiva:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Sincronizar el campo stock del libro con el stock consolidado real
+   * @param {String} idLibro - ID del libro
+   * @returns {Promise<Object>} Libro actualizado
+   */
+  async sincronizarStockLibro(idLibro) {
+    try {
+      console.log(`Sincronizando stock del libro ${idLibro}`);
+      
+      const stockConsolidado = await this._obtenerStockConsolidado(idLibro);
+      
+      // Actualizar el campo stock del libro
+      let libroActualizado;
+      if (mongoose.Types.ObjectId.isValid(idLibro)) {
+        libroActualizado = await Libro.findByIdAndUpdate(
+          idLibro,
+          {
+            $set: {
+              stock: stockConsolidado.stock_total,
+              ultima_actualizacion: new Date()
+            }
+          },
+          { new: true }
+        );
+      } else {
+        libroActualizado = await Libro.findOneAndUpdate(
+          { id_libro: idLibro },
+          {
+            $set: {
+              stock: stockConsolidado.stock_total,
+              ultima_actualizacion: new Date()
+            }
+          },
+          { new: true }
+        );
+      }
+      
+      console.log(`Stock sincronizado: ${stockConsolidado.stock_total} para libro ${idLibro}`);
+      
+      return libroActualizado;
+    } catch (error) {
+      console.error('Error sincronizando stock del libro:', error);
       throw error;
     }
   },

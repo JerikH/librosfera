@@ -1,4 +1,4 @@
-// Database/services/ventaService.js (CORREGIDO)
+// Database/services/ventaService.js (MEJORADO - MANEJO DE CONCURRENCIA)
 const mongoose = require('mongoose');
 const Venta = require('../models/ventaModel');
 const Devolucion = require('../models/devolucionModel');
@@ -16,57 +16,102 @@ class VentaService {
   }
 
   /**
-   * Crear una venta desde un carrito CON MANEJO CORRECTO DE STOCK RESERVADO
+   * Ejecutar operación con retry automático para WriteConflicts
+   * @private
+   */
+  async _ejecutarConRetry(operacion, maxReintentos = 3, delayBase = 100) {
+    for (let intento = 1; intento <= maxReintentos; intento++) {
+      try {
+        return await operacion();
+      } catch (error) {
+        // Si es WriteConflict y no es el último intento, reintentar
+        if (error.code === 112 && intento < maxReintentos) {
+          console.log(`WriteConflict detectado (intento ${intento}/${maxReintentos}), reintentando...`);
+          
+          // Delay exponencial con jitter
+          const delay = delayBase * Math.pow(2, intento - 1) + Math.random() * 100;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // Si no es WriteConflict o se agotaron los reintentos, propagar error
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Mapea y valida la dirección de envío desde el request al schema requerido
+   * @private
+   */
+  _mapearDireccionEnvio(direccionEnvio) {
+    if (!direccionEnvio) {
+      throw new Error('La dirección de envío es obligatoria');
+    }
+
+    const direccionMapeada = {
+      direccion_completa: direccionEnvio.calle || direccionEnvio.direccion_completa || direccionEnvio.direccion,
+      ciudad: direccionEnvio.ciudad,
+      departamento: direccionEnvio.departamento || direccionEnvio.estado_provincia || direccionEnvio.estado,
+      codigo_postal: direccionEnvio.codigo_postal,
+      pais: direccionEnvio.pais || 'Colombia',
+      referencia: direccionEnvio.referencias || direccionEnvio.referencia,
+      telefono_contacto: direccionEnvio.telefono_contacto || direccionEnvio.telefono
+    };
+
+    // Validar campos obligatorios
+    if (!direccionMapeada.direccion_completa) {
+      throw new Error('La dirección completa es obligatoria (calle, carrera, etc.)');
+    }
+
+    if (!direccionMapeada.ciudad) {
+      throw new Error('La ciudad es obligatoria');
+    }
+
+    if (!direccionMapeada.departamento) {
+      throw new Error('El departamento/estado es obligatorio');
+    }
+
+    console.log('Dirección mapeada:', direccionMapeada);
+    
+    return direccionMapeada;
+  }
+
+  /**
+   * Crear una venta desde un carrito CON MANEJO ROBUSTO DE CONCURRENCIA
    */
   async crearVenta(idUsuario, datosVenta) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    console.log('Iniciando creación de venta con manejo de concurrencia mejorado');
+    
+    // 1. FASE DE PREPARACIÓN (sin transacción)
+    let carrito, items, tarjeta, totalFinalAPagar;
     
     try {
-      console.log('Iniciando creación de venta desde carrito con stock reservado');
-      
-      // 1. Obtener y validar el carrito
-      const carrito = await Carrito.findOne({ 
+      // Obtener y validar el carrito
+      carrito = await Carrito.findOne({ 
         id_usuario: idUsuario, 
         estado: 'activo' 
-      }).session(session);
+      });
       
       if (!carrito || carrito.n_item === 0) {
         throw new Error('No hay un carrito activo con productos');
       }
       
-      // 2. Obtener items del carrito con información completa
-      const items = await CarritoItem.find({ id_carrito: carrito._id })
-        .populate('id_libro')
-        .session(session);
+      // Obtener items del carrito con información completa
+      items = await CarritoItem.find({ id_carrito: carrito._id })
+        .populate('id_libro');
       
       if (items.length === 0) {
         throw new Error('El carrito está vacío');
       }
       
-      // 3. VALIDAR QUE TODAS LAS RESERVAS ESTÉN CORRECTAS
-      console.log('Validando reservas existentes...');
-      for (const item of items) {
-        const reservaInfo = await this._verificarReservaItem(carrito._id, item.id_libro._id, session);
-        
-        if (!reservaInfo.valida) {
-          throw new Error(`Reserva inválida para "${item.id_libro.titulo}": ${reservaInfo.mensaje}`);
-        }
-        
-        if (reservaInfo.cantidadReservada < item.cantidad) {
-          throw new Error(`Stock reservado insuficiente para "${item.id_libro.titulo}". Reservado: ${reservaInfo.cantidadReservada}, Necesario: ${item.cantidad}`);
-        }
-      }
-      
-      // 4. Calcular costo de envío
+      // Calcular totales y validar método de pago
       const costoEnvio = this._calcularCostoEnvio(datosVenta.tipo_envio);
-      
-      // 5. Recalcular totales considerando impuesto opcional y envío
       const totalSinEnvio = carrito.totales.total_final;
       const totalConEnvio = totalSinEnvio + costoEnvio;
       
-      // 6. Manejar impuesto opcional
-      let totalFinalAPagar = totalConEnvio;
+      // Manejar impuesto opcional
+      totalFinalAPagar = totalConEnvio;
       let impuestoPagadoPorCliente = false;
       let montoImpuestoExcluido = 0;
       
@@ -80,108 +125,229 @@ class VentaService {
         }
       }
       
-      // 7. Validar método de pago con el monto final
-      const tarjeta = await this._validarMetodoPago(
+      // Validar método de pago
+      tarjeta = await this._validarMetodoPago(
         idUsuario, 
         datosVenta.id_tarjeta, 
         totalFinalAPagar
       );
       
-      // 8. Preparar items de la venta
-      const itemsVenta = items.map(item => ({
-        id_libro: item.id_libro._id,
-        snapshot: {
-          titulo: item.id_libro.titulo,
-          autor: item.id_libro.autor_nombre_completo,
-          isbn: item.id_libro.ISBN,
-          editorial: item.id_libro.editorial,
-          imagen_portada: item.id_libro.imagen_portada
-        },
-        cantidad: item.cantidad,
-        precios: {
-          precio_unitario_base: item.precios.precio_base,
-          descuento_aplicado: item.precios.total_descuentos,
-          precio_unitario_final: item.precios.precio_con_impuestos,
-          impuesto: item.precios.impuesto,
-          subtotal: item.subtotal
-        },
-        // Nuevo: información de la tienda donde está reservado
-        id_tienda_origen: item.metadatos?.id_tienda_reservado
-      }));
+      console.log(`Fase de preparación completada. Total a pagar: $${totalFinalAPagar.toLocaleString()}`);
       
-      // 9. Crear la venta con información de impuesto
-      const nuevaVenta = new Venta({
-        id_cliente: idUsuario,
-        id_carrito_origen: carrito._id,
-        items: itemsVenta,
-        totales: {
-          subtotal_sin_descuentos: carrito.totales.subtotal_base,
-          total_descuentos: carrito.totales.total_descuentos,
-          subtotal_con_descuentos: carrito.totales.subtotal_con_descuentos,
-          total_impuestos: impuestoPagadoPorCliente ? 0 : carrito.totales.total_impuestos,
-          costo_envio: costoEnvio,
-          total_final: totalFinalAPagar
-        },
-        pago: {
-          metodo: tarjeta.tipo === 'debito' ? 'tarjeta_debito' : 'tarjeta_credito',
-          id_tarjeta: tarjeta.id_tarjeta,
-          ultimos_digitos: tarjeta.ultimos_digitos,
-          marca_tarjeta: tarjeta.marca
-        },
-        envio: {
-          tipo: datosVenta.tipo_envio,
-          direccion: datosVenta.direccion_envio,
-          id_tienda_recogida: datosVenta.id_tienda_recogida,
-          costo: costoEnvio,
-          notas_envio: datosVenta.notas_envio
-        },
-        descuentos_aplicados: carrito.codigos_carrito?.map(c => ({
-          codigo: c.codigo,
-          tipo: 'codigo_promocional'
-        })) || [],
-        impuesto_info: {
-          pagado_por_cliente: impuestoPagadoPorCliente,
-          monto_excluido: montoImpuestoExcluido,
-          monto_incluido: impuestoPagadoPorCliente ? 0 : carrito.totales.total_impuestos
-        }
-      });
-      
-      // 10. Guardar la venta en la base de datos
-      await nuevaVenta.save({ session });
-      
-      // 11. Procesar el pago
-      try {
-        await this._procesarPago(tarjeta, totalFinalAPagar, nuevaVenta.numero_venta);
-        nuevaVenta.aprobarPago();
-        await nuevaVenta.save({ session });
-      } catch (errorPago) {
-        nuevaVenta.rechazarPago(errorPago.message);
-        await nuevaVenta.save({ session });
-        throw new Error(`Error procesando el pago: ${errorPago.message}`);
-      }
-      
-      // 12. CONVERTIR RESERVAS EN VENTAS DEFINITIVAS
-      console.log('Convirtiendo reservas en ventas definitivas...');
+    } catch (error) {
+      console.error('Error en fase de preparación:', error);
+      throw error;
+    }
+    
+    // 2. FASE DE VALIDACIÓN DE RESERVAS (sin transacción)
+    try {
+      console.log('Validando reservas existentes...');
       for (const item of items) {
-        await this._convertirReservaEnVenta(
-          carrito._id,
-          item.id_libro._id,
-          item.cantidad,
-          idUsuario,
-          nuevaVenta._id,
-          session
+        const reservaInfo = await this._verificarReservaItem(carrito._id, item.id_libro._id);
+        
+        if (!reservaInfo.valida) {
+          throw new Error(`Reserva inválida para "${item.id_libro.titulo}": ${reservaInfo.mensaje}`);
+        }
+        
+        if (reservaInfo.cantidadReservada < item.cantidad) {
+          throw new Error(`Stock reservado insuficiente para "${item.id_libro.titulo}". Reservado: ${reservaInfo.cantidadReservada}, Necesario: ${item.cantidad}`);
+        }
+      }
+      console.log('Todas las reservas están válidas');
+      
+    } catch (error) {
+      console.error('Error validando reservas:', error);
+      throw error;
+    }
+    
+    // 3. FASE DE PROCESAMIENTO DE PAGO (antes de la transacción principal)
+    let pagoRealizado = false;
+    try {
+      console.log('Procesando pago...');
+      await this._procesarPago(tarjeta, totalFinalAPagar, `TEMP-${Date.now()}`);
+      pagoRealizado = true;
+      console.log('Pago procesado exitosamente');
+      
+    } catch (errorPago) {
+      console.error('Error procesando pago:', errorPago);
+      throw new Error(`Error procesando el pago: ${errorPago.message}`);
+    }
+    
+    // 4. FASE DE TRANSACCIÓN PRINCIPAL (con retry automático)
+    return await this._ejecutarConRetry(async () => {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      
+      try {
+        console.log('Iniciando transacción principal de venta');
+        
+        // Preparar información de envío
+        let direccionEnvioMapeada = null;
+        if (datosVenta.direccion_envio) {
+          direccionEnvioMapeada = this._mapearDireccionEnvio(datosVenta.direccion_envio);
+        }
+        
+        let infoEnvio = {};
+        
+        if (datosVenta.tipo_envio === 'domicilio') {
+          if (!direccionEnvioMapeada) {
+            throw new Error('La dirección de envío es obligatoria para envío a domicilio');
+          }
+          
+          infoEnvio = {
+            tipo: 'domicilio',
+            direccion: direccionEnvioMapeada,
+            costo: this._calcularCostoEnvio(datosVenta.tipo_envio),
+            notas_envio: datosVenta.notas_envio || ''
+          };
+        } else if (datosVenta.tipo_envio === 'recogida_tienda') {
+          infoEnvio = {
+            tipo: 'recogida_tienda',
+            id_tienda_recogida: datosVenta.id_tienda_recogida,
+            costo: 0
+          };
+        }
+        
+        // Preparar items de la venta
+        const itemsVenta = items.map(item => ({
+          id_libro: item.id_libro._id,
+          snapshot: {
+            titulo: item.id_libro.titulo,
+            autor: item.id_libro.autor_nombre_completo,
+            isbn: item.id_libro.ISBN,
+            editorial: item.id_libro.editorial,
+            imagen_portada: item.id_libro.imagen_portada
+          },
+          cantidad: item.cantidad,
+          precios: {
+            precio_unitario_base: item.precios.precio_base,
+            descuento_aplicado: item.precios.total_descuentos,
+            precio_unitario_final: item.precios.precio_con_impuestos,
+            impuesto: item.precios.impuesto,
+            subtotal: item.subtotal
+          },
+          id_tienda_origen: item.metadatos?.id_tienda_reservado
+        }));
+        
+        // Crear la venta
+        const nuevaVenta = new Venta({
+          id_cliente: idUsuario,
+          id_carrito_origen: carrito._id,
+          items: itemsVenta,
+          totales: {
+            subtotal_sin_descuentos: carrito.totales.subtotal_base,
+            total_descuentos: carrito.totales.total_descuentos,
+            subtotal_con_descuentos: carrito.totales.subtotal_con_descuentos,
+            total_impuestos: datosVenta.cliente_pagara_impuesto ? 0 : carrito.totales.total_impuestos,
+            costo_envio: this._calcularCostoEnvio(datosVenta.tipo_envio),
+            total_final: totalFinalAPagar
+          },
+          pago: {
+            metodo: tarjeta.tipo === 'debito' ? 'tarjeta_debito' : 'tarjeta_credito',
+            id_tarjeta: tarjeta.id_tarjeta,
+            ultimos_digitos: tarjeta.ultimos_digitos,
+            marca_tarjeta: tarjeta.marca,
+            estado_pago: 'aprobado', // Ya se procesó el pago
+            fecha_pago: new Date()
+          },
+          envio: infoEnvio,
+          descuentos_aplicados: carrito.codigos_carrito?.map(c => ({
+            codigo: c.codigo,
+            tipo: 'codigo_promocional'
+          })) || [],
+          impuesto_info: {
+            pagado_por_cliente: datosVenta.cliente_pagara_impuesto || false,
+            monto_excluido: datosVenta.cliente_pagara_impuesto ? carrito.totales.total_impuestos : 0,
+            monto_incluido: datosVenta.cliente_pagara_impuesto ? 0 : carrito.totales.total_impuestos
+          },
+          estado: 'pago_aprobado' // Iniciar en estado correcto
+        });
+        
+        // Guardar la venta
+        await nuevaVenta.save({ session });
+        console.log(`Venta creada: ${nuevaVenta.numero_venta}`);
+        
+        // Marcar como preparando automáticamente
+        nuevaVenta.cambiarEstado('preparando', null, 'Orden en preparación automática');
+        await nuevaVenta.save({ session });
+        
+        // Convertir reservas en ventas definitivas
+        console.log('Convirtiendo reservas en ventas definitivas...');
+        for (const item of items) {
+          await this._convertirReservaEnVenta(
+            carrito._id,
+            item.id_libro._id,
+            item.cantidad,
+            idUsuario,
+            nuevaVenta._id,
+            session
+          );
+        }
+        
+        // Si es recogida en tienda, crear registro de recogida
+        if (datosVenta.tipo_envio === 'recogida_tienda') {
+          await this._crearRecogidaTienda(nuevaVenta, datosVenta.id_tienda_recogida, session);
+        }
+        
+        // Limpiar carrito de forma segura
+        await this._limpiarCarritoSeguro(carrito, session);
+        
+        // Confirmar transacción
+        await session.commitTransaction();
+        session.endSession();
+        
+        console.log('Venta creada exitosamente con manejo robusto de concurrencia');
+        
+        // Enviar confirmación por email (no bloqueante)
+        this._enviarConfirmacionCompra(nuevaVenta, idUsuario).catch(err => 
+          console.error('Error enviando email de confirmación:', err)
         );
+        
+        return nuevaVenta;
+        
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        
+        // Si el pago ya se realizó pero falló la transacción, intentar reembolso
+        if (pagoRealizado) {
+          console.error('Transacción falló después del pago, intentando reembolso automático...');
+          try {
+            await this._reembolsoDeEmergencia(tarjeta, totalFinalAPagar, idUsuario);
+            console.log('Reembolso de emergencia procesado');
+          } catch (reembolsoError) {
+            console.error('ERROR CRÍTICO: No se pudo procesar reembolso automático:', reembolsoError);
+            // Aquí deberías alertar al equipo de administración
+            await this._alertarReembolsoFallido(idUsuario, totalFinalAPagar, error, reembolsoError);
+          }
+        }
+        
+        throw error;
+      }
+    }, 3, 200); // Máximo 3 reintentos con delay base de 200ms
+  }
+
+  /**
+   * Limpiar carrito de forma segura para evitar WriteConflicts
+   * @private
+   */
+  async _limpiarCarritoSeguro(carrito, session) {
+    try {
+      console.log('Limpiando carrito de forma segura...');
+      
+      // Método 1: Eliminar items uno por uno para evitar conflictos masivos
+      const items = await CarritoItem.find({ id_carrito: carrito._id }).session(session);
+      
+      for (const item of items) {
+        await CarritoItem.findByIdAndDelete(item._id).session(session);
       }
       
-      // 13. Si es recogida en tienda, crear registro de recogida
-      if (datosVenta.tipo_envio === 'recogida_tienda') {
-        await this._crearRecogidaTienda(nuevaVenta, datosVenta.id_tienda_recogida, session);
-      }
+      console.log(`${items.length} items eliminados individualmente`);
       
-      // 14. Limpiar carrito
-      await CarritoItem.deleteMany({ id_carrito: carrito._id }).session(session);
+      // Actualizar estado del carrito
       carrito.estado = 'convertido_a_compra';
       carrito.n_item = 0;
+      carrito.n_libros_diferentes = 0;
       carrito.totales = {
         subtotal_base: 0,
         total_descuentos: 0,
@@ -190,26 +356,84 @@ class VentaService {
         costo_envio: 0,
         total_final: 0
       };
+      carrito.codigos_carrito = [];
+      carrito.problemas = [];
+      
       await carrito.save({ session });
-      
-      // 15. Confirmar transacción
-      await session.commitTransaction();
-      
-      console.log('Venta creada exitosamente con stock correctamente manejado');
-      
-      // 16. Enviar confirmación por email (no bloqueante)
-      this._enviarConfirmacionCompra(nuevaVenta, idUsuario).catch(err => 
-        console.error('Error enviando email de confirmación:', err)
-      );
-      
-      return nuevaVenta;
+      console.log('Carrito actualizado a estado convertido_a_compra');
       
     } catch (error) {
-      await session.abortTransaction();
-      console.error('Error creando venta:', error);
-      throw error;
-    } finally {
-      session.endSession();
+      console.error('Error limpiando carrito:', error);
+      
+      // Si falla el método individual, intentar deleteMany como último recurso
+      try {
+        console.log('Intentando limpieza masiva como fallback...');
+        await CarritoItem.deleteMany({ id_carrito: carrito._id }).session(session);
+        
+        carrito.estado = 'convertido_a_compra';
+        carrito.n_item = 0;
+        carrito.n_libros_diferentes = 0;
+        await carrito.save({ session });
+        
+        console.log('Limpieza masiva exitosa');
+      } catch (fallbackError) {
+        console.error('Error en limpieza masiva fallback:', fallbackError);
+        throw fallbackError;
+      }
+    }
+  }
+
+  /**
+   * Reembolso de emergencia cuando la transacción falla después del pago
+   * @private
+   */
+  async _reembolsoDeEmergencia(tarjeta, monto, idUsuario) {
+    try {
+      if (tarjeta.tipo === 'debito') {
+        await tarjetaService.modificarSaldo(
+          tarjeta.id_tarjeta,
+          idUsuario,
+          monto, // Devolver el monto
+          `REEMBOLSO DE EMERGENCIA - Fallo en transacción de venta`
+        );
+        console.log(`Reembolso de emergencia procesado: $${monto.toLocaleString()}`);
+      } else {
+        console.log('Tarjeta de crédito - reembolso manual requerido');
+      }
+    } catch (error) {
+      throw new Error(`Error procesando reembolso de emergencia: ${error.message}`);
+    }
+  }
+
+  /**
+   * Alertar sobre un reembolso fallido - para monitoreo crítico
+   * @private
+   */
+  async _alertarReembolsoFallido(idUsuario, monto, errorOriginal, errorReembolso) {
+    const alerta = {
+      timestamp: new Date(),
+      tipo: 'REEMBOLSO_FALLIDO_CRITICO',
+      usuario: idUsuario,
+      monto: monto,
+      error_transaccion: errorOriginal.message,
+      error_reembolso: errorReembolso.message,
+      requiere_atencion_inmediata: true
+    };
+    
+    console.error('🚨 ALERTA CRÍTICA 🚨', alerta);
+    
+    // Aquí deberías implementar:
+    // - Envío de email urgente al equipo de administración
+    // - Notificación a Slack/Discord
+    // - Creación de ticket en sistema de soporte
+    // - Log en sistema de monitoreo
+    
+    // Por ahora, al menos guardarlo en un log especial
+    try {
+      const AlertaCritica = require('../models/alertaCriticaModel'); // Si tienes este modelo
+      await AlertaCritica.create(alerta);
+    } catch (err) {
+      console.error('No se pudo guardar alerta crítica:', err);
     }
   }
 
@@ -217,7 +441,7 @@ class VentaService {
    * Verificar que la reserva de un item está correcta
    * @private
    */
-  async _verificarReservaItem(idCarrito, idLibro, session) {
+  async _verificarReservaItem(idCarrito, idLibro, session = null) {
     try {
       // Buscar inventario con reservas de este carrito
       const inventario = await Inventario.findOne({
@@ -311,24 +535,93 @@ class VentaService {
    */
   async _crearRecogidaTienda(venta, idTienda, session) {
     try {
-      // Solo importar cuando se necesite para evitar dependencias circulares
       const tiendaService = require('./tiendaService');
-      
-      // Crear recogida desde la venta
       const recogida = await tiendaService.crearRecogidaDesdeVenta(venta, idTienda);
-      
       console.log(`Recogida creada para venta ${venta.numero_venta} en tienda ${idTienda}`);
       return recogida;
     } catch (error) {
       console.error('Error creando recogida en tienda:', error);
-      // No es crítico, la venta puede continuar
       throw error;
     }
   }
 
+  // ==========================================
+  // MÉTODOS PRIVADOS EXISTENTES (mantenidos)
+  // ==========================================
+
   /**
-   * Cancelar una venta CON DEVOLUCIÓN DE STOCK
+   * Validar método de pago
+   * @private
    */
+  async _validarMetodoPago(idUsuario, idTarjeta, montoTotal) {
+    const tarjeta = await tarjetaService.obtenerTarjetaPorId(idTarjeta, idUsuario);
+    
+    if (!tarjeta) {
+      throw new Error('Tarjeta no encontrada');
+    }
+    
+    if (!tarjeta.activa) {
+      throw new Error('La tarjeta no está activa');
+    }
+    
+    const verificacion = await tarjetaService.verificarTarjeta(idTarjeta);
+    if (!verificacion.valida) {
+      throw new Error(verificacion.mensaje);
+    }
+    
+    if (tarjeta.tipo === 'debito') {
+      if (tarjeta.saldo < montoTotal) {
+        throw new Error(`Saldo insuficiente. Disponible: $${tarjeta.saldo.toLocaleString()}, Requerido: $${montoTotal.toLocaleString()}`);
+      }
+    }
+    
+    return tarjeta;
+  }
+  
+  /**
+   * Procesar pago
+   * @private
+   */
+  async _procesarPago(tarjeta, monto, numeroVenta) {
+    try {
+      if (tarjeta.tipo === 'debito') {
+        await tarjetaService.modificarSaldo(
+          tarjeta.id_tarjeta,
+          tarjeta.id_usuario,
+          -monto,
+          `Pago de orden ${numeroVenta}`
+        );
+      } else {
+        console.log(`Procesando pago de $${monto} con tarjeta de crédito ${tarjeta.ultimos_digitos}`);
+      }
+      
+      return true;
+    } catch (error) {
+      throw new Error(`Error procesando pago: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Enviar email de confirmación
+   * @private
+   */
+  async _enviarConfirmacionCompra(venta, idUsuario) {
+    try {
+      const usuario = await mongoose.model('Usuario').findById(idUsuario);
+      await emailService.sendPurchaseConfirmation(
+        usuario.email,
+        venta,
+        usuario
+      );
+    } catch (error) {
+      console.error('Error enviando confirmación:', error);
+    }
+  }
+
+  // ==========================================
+  // RESTO DE MÉTODOS EXISTENTES (sin cambios)
+  // ==========================================
+
   async cancelarVenta(numeroVenta, motivo, solicitadaPor, idUsuario) {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -362,7 +655,7 @@ class VentaService {
         await this._devolverStockPorCancelacion(
           item.id_libro,
           item.cantidad,
-          item.id_tienda_origen, // Devolver a la tienda original si existe
+          item.id_tienda_origen,
           idUsuario,
           venta._id,
           session
@@ -470,83 +763,31 @@ class VentaService {
     }
   }
 
-  // ==========================================
-  // MÉTODOS PRIVADOS EXISTENTES (mantenidos)
-  // ==========================================
-
   /**
-   * Validar método de pago
+   * Procesar reembolso
    * @private
    */
-  async _validarMetodoPago(idUsuario, idTarjeta, montoTotal) {
-    const tarjeta = await tarjetaService.obtenerTarjetaPorId(idTarjeta, idUsuario);
-    
-    if (!tarjeta) {
-      throw new Error('Tarjeta no encontrada');
-    }
-    
-    if (!tarjeta.activa) {
-      throw new Error('La tarjeta no está activa');
-    }
-    
-    const verificacion = await tarjetaService.verificarTarjeta(idTarjeta);
-    if (!verificacion.valida) {
-      throw new Error(verificacion.mensaje);
-    }
-    
-    if (tarjeta.tipo === 'debito') {
-      if (tarjeta.saldo < montoTotal) {
-        throw new Error(`Saldo insuficiente. Disponible: $${tarjeta.saldo.toLocaleString()}, Requerido: $${montoTotal.toLocaleString()}`);
-      }
-    }
-    
-    return tarjeta;
-  }
-  
-  /**
-   * Procesar pago
-   * @private
-   */
-  async _procesarPago(tarjeta, monto, numeroVenta) {
+  async _procesarReembolso(venta) {
     try {
-      if (tarjeta.tipo === 'debito') {
+      const tarjeta = await tarjetaService.obtenerTarjetaPorId(venta.pago.id_tarjeta);
+      
+      if (tarjeta && tarjeta.tipo === 'debito') {
         await tarjetaService.modificarSaldo(
           tarjeta.id_tarjeta,
-          tarjeta.id_usuario,
-          -monto,
-          `Pago de orden ${numeroVenta}`
+          venta.id_cliente,
+          venta.totales.total_final,
+          `Reembolso de orden ${venta.numero_venta}`
         );
-      } else {
-        console.log(`Procesando pago de $${monto} con tarjeta de crédito ${tarjeta.ultimos_digitos}`);
       }
       
       return true;
     } catch (error) {
-      throw new Error(`Error procesando pago: ${error.message}`);
+      console.error('Error procesando reembolso:', error);
+      throw error;
     }
   }
-  
-  /**
-   * Enviar email de confirmación
-   * @private
-   */
-  async _enviarConfirmacionCompra(venta, idUsuario) {
-    try {
-      const usuario = await mongoose.model('Usuario').findById(idUsuario);
-      await emailService.sendPurchaseConfirmation(
-        usuario.email,
-        venta,
-        usuario
-      );
-    } catch (error) {
-      console.error('Error enviando confirmación:', error);
-    }
-  }
-  
-  // ==========================================
-  // MÉTODOS PÚBLICOS EXISTENTES (mantenidos)
-  // ==========================================
 
+  // Resto de métodos públicos sin cambios...
   async obtenerVentasCliente(idCliente, opciones = {}) {
     const ventas = await Venta.obtenerVentasCliente(idCliente, opciones);
     
@@ -561,6 +802,25 @@ class VentaService {
       }
     ]);
     
+    return {
+      ventas,
+      resumen: totales[0] || { total_compras: 0, monto_total: 0 }
+    };
+  }
+
+  async obtenerVentasAdmin(filtros = {}, opciones = {}) {
+    const ventas = await Venta.obtenerVentasAdmin(filtros, opciones);
+
+    const totales = await Venta.aggregate([
+      { $match: filtros },
+      {
+        $group: {
+          _id: null,
+          total_compras: { $sum: 1 },
+          monto_total: { $sum: '$totales.total_final' }
+        }
+      }
+    ]);
     return {
       ventas,
       resumen: totales[0] || { total_compras: 0, monto_total: 0 }
@@ -727,30 +987,6 @@ class VentaService {
       ...estadisticas,
       productos_mas_vendidos: productosMasVendidos
     };
-  }
-
-  /**
-   * Procesar reembolso
-   * @private
-   */
-  async _procesarReembolso(venta) {
-    try {
-      const tarjeta = await tarjetaService.obtenerTarjetaPorId(venta.pago.id_tarjeta);
-      
-      if (tarjeta && tarjeta.tipo === 'debito') {
-        await tarjetaService.modificarSaldo(
-          tarjeta.id_tarjeta,
-          venta.id_cliente,
-          venta.totales.total_final,
-          `Reembolso de orden ${venta.numero_venta}`
-        );
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Error procesando reembolso:', error);
-      throw error;
-    }
   }
   
   // Métodos de notificación (mantenidos)
