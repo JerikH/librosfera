@@ -1,11 +1,11 @@
-// Database/services/carritoService.js
+// Database/services/carritoService.js (CORREGIDO)
 const mongoose = require('mongoose');
-const { Carrito, Cliente } = require('../models');
+const { Carrito, Cliente, Inventario } = require('../models');
 const CarritoItem = require('../models/carritoItemsModel');
 const Libro = require('../models/libroModel');
 
 /**
- * Servicio de Carrito
+ * Servicio de Carrito con Sistema de Reservas Automáticas
  */
 const carritoService = {
   /**
@@ -32,6 +32,9 @@ const carritoService = {
       // Obtener items del carrito
       const items = await CarritoItem.obtenerItemsCarrito(carrito._id);
       
+      // Verificar y limpiar items expirados o con problemas
+      await this._verificarYLimpiarItemsCarrito(carrito._id, items);
+      
       // Verificar problemas en items
       await carrito.verificarProblemas();
       
@@ -49,13 +52,16 @@ const carritoService = {
   },
 
   /**
-   * Agregar un libro al carrito
+   * Agregar un libro al carrito CON RESERVA AUTOMÁTICA
    * @param {String} idUsuario - ID del usuario
    * @param {String} idLibro - ID del libro
    * @param {Number} cantidad - Cantidad a agregar
    * @returns {Promise<Object>} Resultado de la operación
    */
   async agregarLibroAlCarrito(idUsuario, idLibro, cantidad = 1) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
       console.log(`Agregando ${cantidad} del libro ${idLibro} al carrito del usuario ${idUsuario}`);
       
@@ -69,53 +75,24 @@ const carritoService = {
       }
       
       // Verificar que el libro existe y está disponible
-      const libro = await Libro.findById(idLibro);
+      const libro = await Libro.findById(idLibro).session(session);
       if (!libro) {
         throw new Error('Libro no encontrado');
       }
-      
-      console.log('Libro encontrado:', {
-        id: libro._id,
-        titulo: libro.titulo,
-        precio: libro.precio,
-        precio_info: libro.precio_info ? 'Tiene precio_info' : 'No tiene precio_info',
-        stock: libro.stock,
-        activo: libro.activo
-      });
       
       if (!libro.activo) {
         throw new Error('El libro no está disponible');
       }
 
-      const inventario = await Inventario.findOne({ id_libro: idLibro });
+      // Obtener inventario (preferiblemente de la tienda más cercana o con más stock)
+      const inventario = await this._obtenerMejorInventarioDisponible(idLibro, cantidad, session);
       
-      let stockDisponible = 0;
-      let detalleStock = '';
-      
-      if (inventario) {
-        stockDisponible = inventario.stock_disponible;
-        detalleStock = `Stock disponible: ${inventario.stock_disponible}, ` +
-                      `Stock reservado: ${inventario.stock_reservado}, ` +
-                      `Stock total: ${inventario.stock_total}`;
-      } else {
-        stockDisponible = libro.stock;
-        detalleStock = `Stock básico: ${libro.stock} (sin inventario detallado)`;
-      }
-      
-      console.log('Verificación de stock:', detalleStock);
-      
-      if (stockDisponible < cantidad) {
-        const razonFalta = this._determinarRazonFaltaStock(inventario, libro, cantidad);
-        throw new Error(`Stock insuficiente para "${libro.titulo}". ${razonFalta}`);
+      if (!inventario) {
+        throw new Error(`No hay stock suficiente de "${libro.titulo}" en ninguna tienda`);
       }
       
       // Obtener carrito del usuario
       const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
-      console.log('Carrito obtenido:', {
-        id: carrito._id,
-        id_usuario: carrito.id_usuario,
-        n_item: carrito.n_item
-      });
       
       // Verificar límite de libros diferentes
       const librosDiferentes = await CarritoItem.distinct('id_libro', { id_carrito: carrito._id });
@@ -132,17 +109,40 @@ const carritoService = {
         if (nuevaCantidad > 3) {
           throw new Error('No se pueden tener más de 3 ejemplares del mismo libro');
         }
-        if (stockDisponible < nuevaCantidad) {
-          const razonFalta = this._determinarRazonFaltaStock(inventario, libro, nuevaCantidad);
-          throw new Error(`Stock insuficiente para ${nuevaCantidad} unidades de "${libro.titulo}". ${razonFalta}`);
+        
+        // Verificar que hay suficiente stock disponible para la nueva cantidad total
+        const reservaActual = await this._obtenerReservaExistente(carrito._id, idLibro, session);
+        const stockNecesario = nuevaCantidad - (reservaActual?.cantidad || 0);
+        
+        if (stockNecesario > 0 && inventario.stock_disponible < stockNecesario) {
+          throw new Error(`Stock insuficiente. Disponible: ${inventario.stock_disponible}, necesario: ${stockNecesario}`);
+        }
+        
+        // Reservar stock adicional si es necesario
+        if (stockNecesario > 0) {
+          await inventario.reservarEjemplares(
+            stockNecesario,
+            idUsuario,
+            carrito._id,
+            `Carrito - aumentar cantidad de ${itemExistente.cantidad} a ${nuevaCantidad}`
+          );
         }
         
         await itemExistente.actualizarCantidad(nuevaCantidad);
-        console.log(`Cantidad actualizada a ${nuevaCantidad}`);
+        console.log(`Cantidad actualizada a ${nuevaCantidad} y stock reservado`);
       } else {
-        // Crear nuevo item en el carrito con estructura de precios inicial
+        // Crear nuevo item en el carrito
+        
+        // RESERVAR STOCK PRIMERO
+        await inventario.reservarEjemplares(
+          cantidad,
+          idUsuario,
+          carrito._id,
+          `Carrito - agregar ${cantidad} ejemplar(es) de "${libro.titulo}"`
+        );
+        
+        // Crear item con estructura de precios
         const precioBase = libro.precio_info?.precio_base || libro.precio;
-        console.log('Precio base determinado:', precioBase);
         
         const nuevoItem = new CarritoItem({
           id_carrito: carrito._id,
@@ -150,8 +150,8 @@ const carritoService = {
           cantidad: cantidad,
           precios: {
             precio_base: precioBase,
-            precio_con_descuentos: precioBase, // Se calculará automáticamente
-            precio_con_impuestos: precioBase, // Se calculará automáticamente
+            precio_con_descuentos: precioBase,
+            precio_con_impuestos: precioBase,
             impuesto: {
               tipo: 'ninguno',
               porcentaje: 0,
@@ -164,11 +164,10 @@ const carritoService = {
             autor_libro: libro.autor_nombre_completo,
             imagen_portada: libro.imagen_portada,
             isbn: libro.ISBN,
-            disponible: libro.stock > 0
+            disponible: true,
+            id_tienda_reservado: inventario.id_tienda // Guardar qué tienda tiene la reserva
           }
         });
-        
-        console.log('Nuevo item creado, calculando precios...');
         
         // Calcular precios con descuentos automáticos e impuestos
         try {
@@ -176,79 +175,54 @@ const carritoService = {
           console.log('Precios calculados exitosamente');
         } catch (precioError) {
           console.error('Error calculando precios:', precioError);
-          // Continuar con precios básicos si hay error
-          nuevoItem.precios.precio_con_descuentos = precioBase;
-          nuevoItem.precios.precio_con_impuestos = precioBase;
-          await nuevoItem.save();
+          // Si hay error en precios, liberar la reserva antes de fallar
+          await inventario.liberarReserva(
+            cantidad,
+            idUsuario,
+            carrito._id,
+            'Error calculando precios - liberando reserva'
+          );
+          throw new Error(`Error calculando precios: ${precioError.message}`);
         }
         
-        console.log('Nuevo item agregado al carrito:');
-        console.log(`- Precio base: $${nuevoItem.precios.precio_base}`);
-        console.log(`- Precio con descuentos: $${nuevoItem.precios.precio_con_descuentos}`);
-        console.log(`- Precio con impuestos: $${nuevoItem.precios.precio_con_impuestos}`);
-        console.log(`- Subtotal: $${nuevoItem.subtotal}`);
+        await nuevoItem.save({ session });
+        console.log('Nuevo item agregado al carrito con stock reservado');
       }
       
-      console.log('Actualizando totales del carrito...');
       // Actualizar totales del carrito
       await carrito.actualizarTotales();
-      console.log('Totales actualizados exitosamente');
+      
+      await session.commitTransaction();
       
       return {
         exito: true,
-        mensaje: `${cantidad} ejemplar(es) agregado(s) al carrito`,
+        mensaje: `${cantidad} ejemplar(es) agregado(s) al carrito y reservado(s)`,
         carrito: carrito.toObject(),
         stock_info: {
-          stock_disponible: stockDisponible,
-          stock_despues_agregar: stockDisponible,
-          detalle: detalleStock
+          stock_reservado: cantidad,
+          tienda_reserva: inventario.id_tienda
         }
       };
     } catch (error) {
+      await session.abortTransaction();
       console.error('Error agregando libro al carrito:', error);
       throw error;
+    } finally {
+      session.endSession();
     }
   },
 
   /**
-   * Determinar la razón específica de falta de stock (método auxiliar)
-   * @param {Object} inventario - Objeto de inventario  
-   * @param {Object} libro - Objeto del libro
-   * @param {Number} cantidadSolicitada - Cantidad solicitada
-   * @returns {String} Descripción de la razón
-   */
-  _determinarRazonFaltaStock(inventario, libro, cantidadSolicitada) {
-    if (!inventario) {
-      return `Stock básico insuficiente: disponible ${libro.stock}, solicitado ${cantidadSolicitada}.`;
-    }
-    
-    const stockTotal = inventario.stock_total;
-    const stockDisponible = inventario.stock_disponible;
-    const stockReservado = inventario.stock_reservado;
-    
-    if (stockTotal === 0) {
-      return 'El libro está completamente agotado.';
-    }
-    
-    if (stockDisponible === 0 && stockReservado > 0) {
-      return `Todas las ${stockTotal} unidades están reservadas por otros usuarios.`;
-    }
-    
-    if (stockDisponible > 0 && stockDisponible < cantidadSolicitada) {
-      return `Solo hay ${stockDisponible} unidades disponibles de ${stockTotal} en total (${stockReservado} reservadas).`;
-    }
-    
-    return `Stock insuficiente: disponible ${stockDisponible}, solicitado ${cantidadSolicitada}.`;
-  },
-
-  /**
-   * Actualizar cantidad de un item en el carrito
+   * Actualizar cantidad de un item en el carrito CON MANEJO DE RESERVAS
    * @param {String} idUsuario - ID del usuario
    * @param {String} idLibro - ID del libro
    * @param {Number} nuevaCantidad - Nueva cantidad
    * @returns {Promise<Object>} Resultado de la operación
    */
   async actualizarCantidadItem(idUsuario, idLibro, nuevaCantidad) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
       console.log(`Actualizando cantidad del libro ${idLibro} a ${nuevaCantidad}`);
       
@@ -263,18 +237,53 @@ const carritoService = {
         throw new Error('Item no encontrado en el carrito');
       }
       
+      const cantidadAnterior = item.cantidad;
+      
       if (nuevaCantidad === 0) {
-        // Eliminar item del carrito
-        await CarritoItem.findByIdAndDelete(item._id);
-        console.log('Item eliminado del carrito');
+        // Eliminar item del carrito - LIBERAR TODA LA RESERVA
+        await this._liberarReservaCompleta(carrito._id, idLibro, idUsuario, session);
+        await CarritoItem.findByIdAndDelete(item._id).session(session);
+        console.log('Item eliminado del carrito y reserva liberada');
       } else {
-        // Actualizar cantidad
+        // Actualizar cantidad - AJUSTAR RESERVA
+        const diferencia = nuevaCantidad - cantidadAnterior;
+        
+        if (diferencia > 0) {
+          // Aumentar cantidad - necesita más reserva
+          const inventario = await this._obtenerInventarioDeReserva(carrito._id, idLibro, session);
+          if (!inventario || inventario.stock_disponible < diferencia) {
+            throw new Error(`Stock insuficiente para aumentar cantidad. Disponible: ${inventario?.stock_disponible || 0}`);
+          }
+          
+          await inventario.reservarEjemplares(
+            diferencia,
+            idUsuario,
+            carrito._id,
+            `Carrito - aumentar de ${cantidadAnterior} a ${nuevaCantidad}`
+          );
+        } else if (diferencia < 0) {
+          // Disminuir cantidad - liberar parte de la reserva
+          const cantidadALiberar = Math.abs(diferencia);
+          const inventario = await this._obtenerInventarioDeReserva(carrito._id, idLibro, session);
+          
+          if (inventario) {
+            await inventario.liberarReserva(
+              cantidadALiberar,
+              idUsuario,
+              carrito._id,
+              `Carrito - disminuir de ${cantidadAnterior} a ${nuevaCantidad}`
+            );
+          }
+        }
+        
         await item.actualizarCantidad(nuevaCantidad);
-        console.log(`Cantidad actualizada a ${nuevaCantidad}`);
+        console.log(`Cantidad actualizada a ${nuevaCantidad} y reserva ajustada`);
       }
       
       // Actualizar totales del carrito
       await carrito.actualizarTotales();
+      
+      await session.commitTransaction();
       
       return {
         exito: true,
@@ -282,13 +291,16 @@ const carritoService = {
         carrito: carrito.toObject()
       };
     } catch (error) {
+      await session.abortTransaction();
       console.error('Error actualizando cantidad:', error);
       throw error;
+    } finally {
+      session.endSession();
     }
   },
 
   /**
-   * Quitar un libro del carrito
+   * Quitar un libro del carrito CON LIBERACIÓN DE RESERVA
    * @param {String} idUsuario - ID del usuario
    * @param {String} idLibro - ID del libro
    * @returns {Promise<Object>} Resultado de la operación
@@ -303,34 +315,233 @@ const carritoService = {
   },
 
   /**
-   * Vaciar carrito de un usuario
+   * Vaciar carrito de un usuario CON LIBERACIÓN DE TODAS LAS RESERVAS
    * @param {String} idUsuario - ID del usuario
    * @returns {Promise<Object>} Resultado de la operación
    */
   async vaciarCarrito(idUsuario) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
       console.log('Vaciando carrito del usuario:', idUsuario);
       
       const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
+      const items = await CarritoItem.find({ id_carrito: carrito._id }).session(session);
+      
+      // Liberar todas las reservas
+      for (const item of items) {
+        await this._liberarReservaCompleta(carrito._id, item.id_libro, idUsuario, session);
+      }
+      
+      // Vaciar carrito
       await carrito.vaciar();
+      
+      await session.commitTransaction();
+      
+      console.log(`Carrito vaciado y ${items.length} reservas liberadas`);
       
       return {
         exito: true,
-        mensaje: 'Carrito vaciado exitosamente',
+        mensaje: 'Carrito vaciado exitosamente y reservas liberadas',
+        reservas_liberadas: items.length,
         carrito: carrito.toObject()
       };
     } catch (error) {
+      await session.abortTransaction();
       console.error('Error vaciando carrito:', error);
       throw error;
+    } finally {
+      session.endSession();
     }
   },
 
   /**
-   * Aplicar código de descuento al carrito
+   * Confirmar compra - CONVERTIR RESERVAS EN VENTAS
    * @param {String} idUsuario - ID del usuario
-   * @param {String} codigoDescuento - Código del descuento
+   * @param {Object} datosVenta - Datos de la venta
    * @returns {Promise<Object>} Resultado de la operación
    */
+  async confirmarCompra(idUsuario, datosVenta) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      console.log('Confirmando compra y convirtiendo reservas en ventas');
+      
+      const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
+      const items = await CarritoItem.find({ id_carrito: carrito._id }).session(session);
+      
+      if (items.length === 0) {
+        throw new Error('El carrito está vacío');
+      }
+      
+      // Convertir todas las reservas en ventas definitivas
+      for (const item of items) {
+        const inventario = await this._obtenerInventarioDeReserva(carrito._id, item.id_libro, session);
+        
+        if (inventario && inventario.stock_reservado >= item.cantidad) {
+          // Registrar salida definitiva (reduce del stock reservado)
+          await inventario.registrarSalida(
+            item.cantidad,
+            'venta',
+            idUsuario,
+            null, // Se completará con el ID de transacción después
+            `Venta confirmada desde carrito ${carrito._id}`
+          );
+        } else {
+          throw new Error(`Error en reserva del libro: ${item.metadatos.titulo_libro}`);
+        }
+      }
+      
+      await session.commitTransaction();
+      
+      console.log('Reservas convertidas en ventas exitosamente');
+      
+      return {
+        exito: true,
+        mensaje: 'Compra confirmada y stock actualizado',
+        items_procesados: items.length
+      };
+    } catch (error) {
+      await session.abortTransaction();
+      console.error('Error confirmando compra:', error);
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  },
+
+  // ==========================================
+  // MÉTODOS AUXILIARES PRIVADOS
+  // ==========================================
+
+  /**
+   * Obtener el mejor inventario disponible para un libro
+   * @private
+   */
+  async _obtenerMejorInventarioDisponible(idLibro, cantidad, session) {
+    const inventarios = await Inventario.find({
+      id_libro: idLibro,
+      stock_disponible: { $gte: cantidad },
+      estado: 'disponible'
+    })
+    .populate('id_tienda', 'estado nombre')
+    .session(session)
+    .sort({ stock_disponible: -1 }); // Priorizar tiendas con más stock
+    
+    // Filtrar solo tiendas activas
+    const inventariosActivos = inventarios.filter(inv => 
+      inv.id_tienda && inv.id_tienda.estado === 'activa'
+    );
+    
+    return inventariosActivos.length > 0 ? inventariosActivos[0] : null;
+  },
+
+  /**
+   * Obtener inventario donde está la reserva
+   * @private
+   */
+  async _obtenerInventarioDeReserva(idCarrito, idLibro, session) {
+    // Buscar en los movimientos de inventario cuál tienda tiene la reserva de este carrito
+    const inventarios = await Inventario.find({
+      id_libro: idLibro,
+      'movimientos': {
+        $elemMatch: {
+          tipo: 'reserva',
+          id_reserva: idCarrito
+        }
+      }
+    }).session(session);
+    
+    return inventarios.length > 0 ? inventarios[0] : null;
+  },
+
+  /**
+   * Obtener reserva existente de un carrito para un libro
+   * @private
+   */
+  async _obtenerReservaExistente(idCarrito, idLibro, session) {
+    const inventario = await this._obtenerInventarioDeReserva(idCarrito, idLibro, session);
+    
+    if (!inventario) return null;
+    
+    // Calcular cantidad reservada sumando movimientos de reserva
+    let cantidadReservada = 0;
+    
+    for (const movimiento of inventario.movimientos) {
+      if (movimiento.id_reserva && movimiento.id_reserva.equals(idCarrito)) {
+        if (movimiento.tipo === 'reserva') {
+          cantidadReservada += movimiento.cantidad;
+        } else if (movimiento.tipo === 'liberacion_reserva') {
+          cantidadReservada -= movimiento.cantidad;
+        }
+      }
+    }
+    
+    return {
+      inventario,
+      cantidad: cantidadReservada
+    };
+  },
+
+  /**
+   * Liberar reserva completa de un libro en el carrito
+   * @private
+   */
+  async _liberarReservaCompleta(idCarrito, idLibro, idUsuario, session) {
+    const reservaInfo = await this._obtenerReservaExistente(idCarrito, idLibro, session);
+    
+    if (reservaInfo && reservaInfo.cantidad > 0) {
+      await reservaInfo.inventario.liberarReserva(
+        reservaInfo.cantidad,
+        idUsuario,
+        idCarrito,
+        `Carrito - eliminar item completamente`
+      );
+      
+      console.log(`Liberada reserva de ${reservaInfo.cantidad} para libro ${idLibro}`);
+    }
+  },
+
+  /**
+   * Verificar y limpiar items del carrito con problemas
+   * @private
+   */
+  async _verificarYLimpiarItemsCarrito(idCarrito, items) {
+    try {
+      for (const item of items) {
+        // Verificar si el libro sigue existiendo y activo
+        const libro = await Libro.findById(item.id_libro);
+        
+        if (!libro || !libro.activo) {
+          console.log(`Eliminando item de libro inactivo/eliminado: ${item.id_libro}`);
+          await this._liberarReservaCompleta(idCarrito, item.id_libro, item.id_carrito, null);
+          await CarritoItem.findByIdAndDelete(item._id);
+          continue;
+        }
+        
+        // Verificar si aún hay reserva válida
+        const reservaInfo = await this._obtenerReservaExistente(idCarrito, item.id_libro, null);
+        
+        if (!reservaInfo || reservaInfo.cantidad < item.cantidad) {
+          console.log(`Problema con reserva del item ${item.id_libro}, actualizando...`);
+          // Aquí podrías intentar re-reservar o eliminar el item
+          // Por simplicidad, marcaremos el item como con problemas
+          item.estado = 'sin_stock';
+          item.mensaje_precio = 'Problema con la reserva - verificar disponibilidad';
+          await item.save();
+        }
+      }
+    } catch (error) {
+      console.error('Error verificando items del carrito:', error);
+    }
+  },
+
+  // ==========================================
+  // MÉTODOS EXISTENTES (mantenidos)
+  // ==========================================
+
   async aplicarCodigoDescuento(idUsuario, codigoDescuento) {
     try {
       console.log(`Aplicando código ${codigoDescuento} al carrito del usuario ${idUsuario}`);
@@ -341,7 +552,6 @@ const carritoService = {
         throw new Error('No se puede aplicar código a un carrito vacío');
       }
       
-      // Verificar si el código ya está aplicado
       const yaAplicado = carrito.codigos_carrito.some(c => c.codigo === codigoDescuento);
       if (yaAplicado) {
         throw new Error('Este código ya está aplicado al carrito');
@@ -362,18 +572,11 @@ const carritoService = {
     }
   },
 
-  /**
-   * Quitar código de descuento del carrito
-   * @param {String} idUsuario - ID del usuario
-   * @param {String} codigoDescuento - Código del descuento
-   * @returns {Promise<Object>} Resultado de la operación
-   */
   async quitarCodigoDescuento(idUsuario, codigoDescuento) {
     try {
       console.log(`Quitando código ${codigoDescuento} del carrito del usuario ${idUsuario}`);
       
       const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
-      
       const resultado = await carrito.quitarCodigoDescuento(codigoDescuento);
       
       return {
@@ -388,12 +591,6 @@ const carritoService = {
     }
   },
 
-  /**
-   * Confirmar cambios de precio en items del carrito
-   * @param {String} idUsuario - ID del usuario
-   * @param {String} idLibro - ID del libro (opcional, si no se especifica confirma todos)
-   * @returns {Promise<Object>} Resultado de la operación
-   */
   async confirmarCambiosPrecio(idUsuario, idLibro = null) {
     try {
       console.log(`Confirmando cambios de precio para usuario ${idUsuario}`);
@@ -431,11 +628,6 @@ const carritoService = {
     }
   },
 
-  /**
-   * Calcular total del carrito
-   * @param {String} idUsuario - ID del usuario
-   * @returns {Promise<Object>} Totales del carrito
-   */
   async calcularTotalCarrito(idUsuario) {
     try {
       const carrito = await Carrito.obtenerCarritoActivo(idUsuario);
@@ -463,11 +655,7 @@ const carritoService = {
     }
   },
 
-  // MÉTODOS ADMINISTRATIVOS (simplificados, manteniendo solo los esenciales)
-
-  /**
-   * Obtener todos los carritos con filtros y paginación
-   */
+  // Métodos administrativos mantenidos iguales...
   async listarCarritos(filtros = {}, pagina = 1, limite = 10) {
     try {
       console.log('Listando carritos con filtros:', JSON.stringify(filtros, null, 2));
@@ -520,9 +708,6 @@ const carritoService = {
     }
   },
 
-  /**
-   * Obtener estadísticas de carritos para administradores
-   */
   async obtenerEstadisticasAdmin() {
     try {
       console.log('Obteniendo estadísticas administrativas de carritos');
@@ -553,117 +738,98 @@ const carritoService = {
     }
   },
 
-  /**
-   * Quitar un producto específico de todos los carritos
-   */
   async quitarProductoDeCarritos(idLibro, razon = 'Producto descontinuado') {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
     try {
       console.log(`Quitando libro ${idLibro} de todos los carritos. Razón: ${razon}`);
       
-      const session = await mongoose.startSession();
-      session.startTransaction();
+      const items = await CarritoItem.find({ id_libro: idLibro }).session(session);
+      const carritosAfectados = [...new Set(items.map(item => item.id_carrito.toString()))];
       
-      try {
-        const items = await CarritoItem.find({ id_libro: idLibro }).session(session);
-        const carritosAfectados = [...new Set(items.map(item => item.id_carrito.toString()))];
-        
-        await CarritoItem.deleteMany({ id_libro: idLibro }).session(session);
-        
-        for (const idCarrito of carritosAfectados) {
-          const carrito = await Carrito.findById(idCarrito).session(session);
-          if (carrito) {
-            await carrito.actualizarTotales();
-          }
+      // Liberar todas las reservas antes de eliminar los items
+      for (const item of items) {
+        await this._liberarReservaCompleta(item.id_carrito, idLibro, null, session);
+      }
+      
+      await CarritoItem.deleteMany({ id_libro: idLibro }).session(session);
+      
+      for (const idCarrito of carritosAfectados) {
+        const carrito = await Carrito.findById(idCarrito).session(session);
+        if (carrito) {
+          await carrito.actualizarTotales();
         }
-        
-        await session.commitTransaction();
-        session.endSession();
-        
-        console.log(`Libro eliminado de ${carritosAfectados.length} carritos`);
-        
-        return {
-          exito: true,
-          mensaje: `Producto eliminado de ${carritosAfectados.length} carritos`,
-          carritos_afectados: carritosAfectados.length,
-          items_eliminados: items.length
-        };
-      } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        throw error;
-      }
-    } catch (error) {
-      console.error('Error quitando producto de carritos:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Vaciar carrito de un cliente específico (admin)
-   */
-  async vaciarCarritoCliente(idUsuario) {
-    try {
-      console.log('Admin vaciando carrito del usuario:', idUsuario);
-      
-      const carrito = await Carrito.findOne({ id_usuario: idUsuario, estado: 'activo' });
-      if (!carrito) {
-        throw new Error('Carrito no encontrado');
       }
       
-      await carrito.vaciar();
+      await session.commitTransaction();
+      
+      console.log(`Libro eliminado de ${carritosAfectados.length} carritos y reservas liberadas`);
       
       return {
         exito: true,
-        mensaje: 'Carrito del cliente vaciado exitosamente',
-        carrito: carrito.toObject()
+        mensaje: `Producto eliminado de ${carritosAfectados.length} carritos y reservas liberadas`,
+        carritos_afectados: carritosAfectados.length,
+        items_eliminados: items.length
       };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  },
+
+  async vaciarCarritoCliente(idUsuario) {
+    try {
+      console.log('Admin vaciando carrito del usuario:', idUsuario);
+      return await this.vaciarCarrito(idUsuario); // Usar el método que ya maneja reservas
     } catch (error) {
       console.error('Error vaciando carrito de cliente:', error);
       throw error;
     }
   },
 
-  /**
-   * Vaciar todos los carritos activos
-   */
   async vaciarTodosLosCarritos() {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
     try {
       console.log('Vaciando todos los carritos activos');
       
-      const session = await mongoose.startSession();
-      session.startTransaction();
+      const carritosActivos = await Carrito.find({ estado: 'activo' }).session(session);
+      let totalReservasLiberadas = 0;
       
-      try {
-        const carritosActivos = await Carrito.find({ estado: 'activo' }).session(session);
+      for (const carrito of carritosActivos) {
+        const items = await CarritoItem.find({ id_carrito: carrito._id }).session(session);
         
-        for (const carrito of carritosActivos) {
-          await carrito.vaciar();
+        // Liberar todas las reservas
+        for (const item of items) {
+          await this._liberarReservaCompleta(carrito._id, item.id_libro, null, session);
+          totalReservasLiberadas++;
         }
         
-        await session.commitTransaction();
-        session.endSession();
-        
-        console.log(`${carritosActivos.length} carritos vaciados`);
-        
-        return {
-          exito: true,
-          mensaje: `${carritosActivos.length} carritos vaciados exitosamente`,
-          carritos_afectados: carritosActivos.length
-        };
-      } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        throw error;
+        await carrito.vaciar();
       }
+      
+      await session.commitTransaction();
+      
+      console.log(`${carritosActivos.length} carritos vaciados y ${totalReservasLiberadas} reservas liberadas`);
+      
+      return {
+        exito: true,
+        mensaje: `${carritosActivos.length} carritos vaciados exitosamente y ${totalReservasLiberadas} reservas liberadas`,
+        carritos_afectados: carritosActivos.length,
+        reservas_liberadas: totalReservasLiberadas
+      };
     } catch (error) {
-      console.error('Error vaciando todos los carritos:', error);
+      await session.abortTransaction();
       throw error;
+    } finally {
+      session.endSession();
     }
   },
 
-  /**
-   * Obtener el producto más popular en carritos
-   */
   async obtenerProductoMasPopular() {
     try {
       console.log('Obteniendo producto más popular en carritos');
