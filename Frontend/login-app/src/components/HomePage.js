@@ -83,7 +83,7 @@ const BookCard = React.memo(({ book, booksInCart, handleAddToCart }) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (isInCart || !book.stock || book.stock <= 0) {
+    if (isInCart || !book.stock_disponible || book.stock_disponible <= 0) {
       return;
     }
     
@@ -123,7 +123,9 @@ const BookCard = React.memo(({ book, booksInCart, handleAddToCart }) => {
     : 0;
   
   // Format stock
-  const stockDisponible = book.stock || 0;
+  const stockDisponible = book.stock_disponible || 0;
+
+  console.log("Book:", book);
 
   return (
     <div 
@@ -553,7 +555,7 @@ const HomePage = () => {
     }
     
     // Check if there's available stock
-    if (!book.stock || book.stock <= 0) {
+    if (!book.stock_disponible || book.stock_disponible <= 0) {
       showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
       return;
     }
