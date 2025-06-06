@@ -807,6 +807,25 @@ class VentaService {
       resumen: totales[0] || { total_compras: 0, monto_total: 0 }
     };
   }
+
+  async obtenerVentasAdmin(filtros = {}, opciones = {}) {
+    const ventas = await Venta.obtenerVentasAdmin(filtros, opciones);
+
+    const totales = await Venta.aggregate([
+      { $match: filtros },
+      {
+        $group: {
+          _id: null,
+          total_compras: { $sum: 1 },
+          monto_total: { $sum: '$totales.total_final' }
+        }
+      }
+    ]);
+    return {
+      ventas,
+      resumen: totales[0] || { total_compras: 0, monto_total: 0 }
+    };
+  }
   
   async obtenerDetalleVenta(numeroVenta, idUsuario = null) {
     const query = { numero_venta: numeroVenta };
