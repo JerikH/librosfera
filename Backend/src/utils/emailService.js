@@ -29,7 +29,7 @@ class EmailService {
     try {
       // Configuración del correo
       const mailOptions = {
-        from: `"Sistema de Recuperación de Contraseña" <${process.env.EMAIL_USER || 'tu-email@gmail.com'}>`,
+        from: `"Librosfera - Sistema de Recuperación de Contraseña" <${process.env.EMAIL_USER || 'tu-email@gmail.com'}>`,
         to,
         subject: 'Recuperación de Contraseña',
         html: `
@@ -73,7 +73,7 @@ class EmailService {
     try {
       // Configuración del correo
       const mailOptions = {
-        from: `"Sistema de Seguridad" <${process.env.EMAIL_USER || 'tu-email@gmail.com'}>`,
+        from: `"Librosfera - Sistema de Seguridad" <${process.env.EMAIL_USER || 'tu-email@gmail.com'}>`,
         to,
         subject: 'Contraseña Actualizada con Éxito',
         html: `
@@ -124,7 +124,7 @@ class EmailService {
       `).join('');
 
       const mailOptions = {
-        from: `"Tu Librería" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Confirmación de Compra #${venta.numero_venta}`,
         html: `
@@ -235,7 +235,7 @@ class EmailService {
   async sendOrderCancellation(to, venta) {
     try {
       const mailOptions = {
-        from: `"Tu Librería" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Orden Cancelada #${venta.numero_venta}`,
         html: `
@@ -292,7 +292,7 @@ class EmailService {
   async sendShippingNotification(to, venta) {
     try {
       const mailOptions = {
-        from: `"Tu Librería" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Tu pedido #${venta.numero_venta} ha sido enviado`,
         html: `
@@ -352,7 +352,7 @@ class EmailService {
   async sendDeliveryConfirmation(to, venta) {
     try {
       const mailOptions = {
-        from: `"Tu Librería" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Tu pedido #${venta.numero_venta} ha sido entregado`,
         html: `
@@ -425,7 +425,7 @@ class EmailService {
       `).join('');
 
       const mailOptions = {
-        from: `"Tu Librería - Devoluciones" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera - Devoluciones" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Solicitud de Devolución #${devolucion.codigo_devolucion}`,
         attachments: [{
@@ -525,7 +525,7 @@ class EmailService {
   async sendReturnApproval(to, devolucion) {
     try {
       const mailOptions = {
-        from: `"Tu Librería - Devoluciones" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera - Devoluciones" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Devolución Aprobada #${devolucion.codigo_devolucion}`,
         html: `
@@ -577,7 +577,7 @@ class EmailService {
   async sendReturnRejection(to, devolucion, motivo) {
     try {
       const mailOptions = {
-        from: `"Tu Librería - Devoluciones" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera - Devoluciones" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Devolución Rechazada #${devolucion.codigo_devolucion}`,
         html: `
@@ -651,7 +651,7 @@ class EmailService {
       }).join('');
 
       const mailOptions = {
-        from: `"Tu Librería - Devoluciones" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera - Devoluciones" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Resultado de Inspección - Devolución #${devolucion.codigo_devolucion}`,
         html: `
@@ -721,7 +721,7 @@ class EmailService {
   async sendRefundConfirmation(to, devolucion) {
     try {
       const mailOptions = {
-        from: `"Tu Librería - Devoluciones" <${process.env.EMAIL_USER}>`,
+        from: `"Librosfera - Devoluciones" <${process.env.EMAIL_USER}>`,
         to,
         subject: `Reembolso Completado - Devolución #${devolucion.codigo_devolucion}`,
         html: `
