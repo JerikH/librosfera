@@ -1,1 +1,10 @@
+# Handle client-side routing
 /*    /index.html   200
+
+# Specific routes for better compatibility
+/AdminProfile    /index.html   200
+/RootProfile     /index.html   200
+/Profile         /index.html   200
+/Home            /index.html   200
+/Login           /index.html   200
+/Register        /index.html   200
