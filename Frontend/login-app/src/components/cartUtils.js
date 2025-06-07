@@ -128,7 +128,7 @@ export const UpdateQuantityBook = async (BookId, Quantity) => {
     console.log(`Updating quantity for book ${BookId} to ${Quantity}`);
 
     const response = await axios.put(
-      `http://localhost:5000/api/v1/carrito/item/${BookId}`, 
+      `https://librosfera.onrender.com//api/v1/carrito/item/${BookId}`, 
       updateData, 
       {
         headers: {
@@ -195,7 +195,7 @@ const performCartFetch = async () => {
   //localStorage.removeItem('shoppingCart');
   
   try {
-    const API_BASE_URL = 'http://localhost:5000/api/v1';
+    const API_BASE_URL = 'https://librosfera.onrender.com//api/v1';
     const response = await axios.get(`${API_BASE_URL}/carrito`, {
       headers: {
         'Authorization': `Bearer ${getAuthToken()}`
@@ -298,7 +298,7 @@ export const syncCartIfNeeded = async () => {
 export const removeCartItem = async (itemId) => {
   try {
     const response = await axios.delete(
-      `http://localhost:5000/api/v1/carrito/item/${itemId}`,
+      `https://librosfera.onrender.com//api/v1/carrito/item/${itemId}`,
       {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,
@@ -336,7 +336,7 @@ export const removeCartItem = async (itemId) => {
 export const clearCartAPI = async () => {
   try {
     const response = await axios.delete(
-      `http://localhost:5000/api/v1/carrito`,
+      `https://librosfera.onrender.com//api/v1/carrito`,
       {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,
@@ -375,7 +375,7 @@ export const clearCartAPI = async () => {
 export const getCartTotals = async () => {
   try {
     const response = await axios.get(
-      `http://localhost:5000/api/v1/carrito/total`,
+      `https://librosfera.onrender.com//api/v1/carrito/total`,
       {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,

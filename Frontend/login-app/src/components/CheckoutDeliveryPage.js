@@ -39,7 +39,7 @@ const CheckoutDeliveryPage = () => {
   const fetchUserAddresses = async () => {
     setLoadingAddresses(true);
     try {
-      const response = await axios.get('http://localhost:5000/api/v1/direcciones', {
+      const response = await axios.get('https://librosfera.onrender.com//api/v1/direcciones', {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`
         }

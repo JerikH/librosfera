@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, navigate } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import CachedImage from '../CachedImage';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = ({ userData, setActiveTab }) => {
+  const navigate = useNavigate();
   // Estados para las tarjetas y navegación
   const [defaultCard, setDefaultCard] = useState(null);
   const [accountBalance, setAccountBalance] = useState(0);
@@ -15,7 +17,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
   const userName = userData ? `${userData.nombres || ''} ${userData.apellidos || ''}` : 'Usuario';
   
   // Base URL para la API
-  const API_BASE_URL = 'http://localhost:5000/api/v1';
+  const API_BASE_URL = 'https://librosfera.onrender.com//api/v1';
 
   // Función para obtener cookie
   const getCookie = (name) => {
@@ -334,7 +336,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
                     src={purchase.items?.[0]?.snapshot?.imagen_portada} 
                     alt={purchase.items?.[0]?.snapshot?.titulo || "Libro"} 
                     className="w-full h-full object-contain"
-                    fallbackSrc="http://localhost:5000/uploads/libros/Default.png"
+                    fallbackSrc="https://librosfera.onrender.com//uploads/libros/Default.png"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gray-200">

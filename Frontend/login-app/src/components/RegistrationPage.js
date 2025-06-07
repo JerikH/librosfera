@@ -463,7 +463,7 @@ const RegistrationPage = () => {
         }
       };
       // Make POST request to register API
-      const response = await axios.post('http://localhost:5000/api/v1/users/register', userData, config);
+      const response = await axios.post('https://librosfera.onrender.com//api/v1/users/register', userData, config);
       console.log("response");
       console.log(response);
       

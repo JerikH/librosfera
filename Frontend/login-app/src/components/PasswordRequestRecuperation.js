@@ -23,7 +23,7 @@ export default function PasswordResetRequest({ onBackToLogin }) {
       };
       
       // Make POST request to backend API
-      const response = await axios.post("http://localhost:5000/api/v1/users/forgot-password", {
+      const response = await axios.post("https://librosfera.onrender.com//api/v1/users/forgot-password", {
         email: email,
       }, config);
       
