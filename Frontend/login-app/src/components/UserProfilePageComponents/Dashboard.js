@@ -130,14 +130,14 @@ const Dashboard = ({ userData, setActiveTab }) => {
         setDefaultCard(defaultCard);
         
         // Si no hay tarjeta predeterminada, usar saldo de cuenta por defecto
-        if (!defaultCard) {
-          setAccountBalance(8000); // Saldo por defecto
-        }
+        // if (!defaultCard) {
+        //   setAccountBalance(8000); // Saldo por defecto
+        // }
       }
     } catch (err) {
       console.error('Error fetching default card:', err);
       setError('Error al cargar la tarjeta principal.');
-      setAccountBalance(8000); // Fallback al saldo por defecto
+      //setAccountBalance(8000); // Fallback al saldo por defecto
     } finally {
       setLoading(false);
     }
@@ -282,7 +282,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
               }}
               className="bg-white text-blue-600 font-medium py-2 px-4 rounded-md hover:bg-blue-50 transition-colors text-sm"
             >
-              Agregar tarjeta
+              Agrega una tarjeta en Metodo de Pagos
             </button>
           </div>
         </div>
