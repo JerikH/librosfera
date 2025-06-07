@@ -62,8 +62,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
           <path d="M8 16H3v5" />
         </svg>
       ),
-      hideForRoot: true, // hidden for root
-      isNew: true // marcador para badge "Nuevo"
+      hideForRoot: true // hidden for root
     },
     { 
       id: 'gestionar-usuarios', 
@@ -222,13 +221,6 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
                   {item.icon}
                 </span>
                 <span className="flex-1">{item.name}</span>
-                
-                {/* Badge "Nuevo" para devoluciones */}
-                {item.isNew && (
-                  <span className="ml-2 bg-green-500 text-white rounded-full min-w-[18px] h-4 flex items-center justify-center text-xs px-1 font-medium">
-                    Nuevo
-                  </span>
-                )}
                 
                 {/* Indicador activo para administrar-libro */}
                 {activeTab === item.id && item.id === 'administrar-libro' && (
