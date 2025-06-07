@@ -4,6 +4,8 @@ import axios from 'axios';
 import UserLayout from './UserLayout';
 import CachedImage from './CachedImage';
 import { useCallback } from 'react';
+import { getCartCount } from './cartUtils';
+import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 // URL base para las llamadas a la API
 const API_BASE_URL = 'http://localhost:5000/api/v1';
@@ -14,6 +16,9 @@ const BookListPage = ({ category }) => {
     const [books, setBooks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [title, setTitle] = useState('');
+    const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+    const [cartCount, setCartCount] = useState(0);
+    const [booksInCart, setBooksInCart] = useState(new Set());
     // Store actual filters and form state separately to prevent auto-requests
     const [formFilters, setFormFilters] = useState({
         titulo: '',
@@ -47,6 +52,10 @@ const BookListPage = ({ category }) => {
     });
     
     const [showFilters, setShowFilters] = useState(false);
+
+    const updateCartCount = useCallback((count) => {
+        setCartCount(count);
+      }, []);
     
     const [pagination, setPagination] = useState({
       total: 0,
@@ -247,6 +256,117 @@ const BookListPage = ({ category }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const showToast = useCallback((message, type = 'success') => {
+      setToast({ visible: true, message, type });
+      
+      // Hide after 2 seconds
+      setTimeout(() => {
+        setToast({ visible: false, message: '', type: 'success' });
+      }, 2000);
+    }, []);
+
+  const handleAddToCart = useCallback(async (e, book) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Check if already in cart
+      if (booksInCart.has(book._id)) {
+        return;
+      }
+      
+      // Check if there's available stock
+      if (!book.stock_disponible || book.stock_disponible <= 0) {
+        showToast('Lo sentimos, este libro no está disponible en inventario.', 'error');
+        return;
+      }
+  
+      try {
+        const token = getAuthToken();
+        if (!token) {
+          showToast('Debes iniciar sesión para agregar productos al carrito', 'error');
+          return;
+        }
+  
+        const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
+          id_libro: book._id,
+          cantidad: 1
+        }, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+  
+        if (response.data.status === 'success') {
+          const currentCart = localStorage.getItem('shoppingCart') 
+            ? JSON.parse(localStorage.getItem('shoppingCart')) 
+            : [];
+          
+          currentCart.push({
+            bookId: book,
+            quantity: 1
+          });
+          
+          localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
+  
+          const newCount = response.data.data.carrito.n_item;
+          updateCartCount(newCount);
+  
+          setBooksInCart(prevBooksInCart => {
+            const newBooksInCart = new Set(prevBooksInCart);
+            newBooksInCart.add(book._id);
+            return newBooksInCart;
+          });
+          
+          // Update last modified timestamp
+          localStorage.setItem('cartLastUpdated', new Date().getTime().toString());
+          
+          // Dispatch a single event for cart updates
+          window.dispatchEvent(new CustomEvent('cartUpdated', {
+            bubbles: true,
+            detail: {
+              bookId: book._id,
+              action: 'add',
+              timestamp: Date.now(),
+              serverResponse: response.data
+            }
+          }));
+          
+          showToast(response.data.message || `${book.titulo} agregado al carrito`);
+        }
+      } catch (error) {
+        console.error('Error al agregar al carrito:', error);
+        
+        if (error.response) {
+          const { status, data } = error.response;
+          switch (status) {
+            case 400:
+              showToast(data.message || 'Datos inválidos o límites excedidos', 'error');
+              break;
+            case 401:
+              showToast('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.', 'error');
+              break;
+            case 403:
+              showToast('No tienes permisos para realizar esta acción', 'error');
+              break;
+            case 409:
+              showToast(data.message || 'Stock insuficiente o límites de carrito alcanzados', 'error');
+              break;
+            case 500:
+              showToast('Error interno del servidor. Intenta más tarde.', 'error');
+              break;
+            default:
+              showToast(data.message || 'Ocurrió un error inesperado al agregar el libro al carrito', 'error');
+          }
+        } else if (error.request) {
+          showToast('Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
+        } else {
+          showToast('Ocurrió un error inesperado', 'error');
+        }
+      }
+    }, [booksInCart, showToast, updateCartCount]);
+
   const toggleShowFilters = useCallback(() => {
     setShowFilters(prev => !prev);
     // No data fetching here, just toggle the filters visibility
@@ -270,223 +390,261 @@ const BookListPage = ({ category }) => {
   };
 
   // Componente para mostrar un libro (reutilizado de HomePage)
-  const BookCard = React.memo(({ book }) => {
-    const navigate = useNavigate();
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const [validImageUrls, setValidImageUrls] = useState([]);
-    const [imagesVerified, setImagesVerified] = useState(false);
-    
-    useEffect(() => {
-      // Only run image verification once
-      if (!imagesVerified && book.imagenes && book.imagenes.length > 0) {
-        const verifyImages = async () => {
-          const validImages = [];
-          
-          for (const image of book.imagenes) {
-            try {
-              // Check if image exists by making a HEAD request with axios
-              const response = await axios.head(image.url);
-              if (response.status === 200) {
-                validImages.push(image);
-              }
-            } catch (error) {
-              console.log(`Failed to verify image: ${image.url}`);
-            }
-          }
-          
-          setValidImageUrls(validImages.length > 0 ? validImages : [{ 
-            url: "http://localhost:5000/uploads/libros/Default.png",
-            alt_text: "Default book image"
-          }]);
-          
-          // Mark images as verified to prevent re-verification
-          setImagesVerified(true);
-        };
-        
-        verifyImages();
-      } else if (!imagesVerified) {
-        // No images or empty array - set default and mark as verified
-        setValidImageUrls([{ 
-          url: "http://localhost:5000/uploads/libros/Default.png",
-          alt_text: "Default book image"
-        }]);
+  const BookCard = React.memo(({ book, booksInCart, handleAddToCart }) => {
+  const navigate = useNavigate();
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [validImageUrls, setValidImageUrls] = useState([]);
+  const [imagesVerified, setImagesVerified] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
+  
+  // Check if this book is in the cart
+  const isInCart = booksInCart.has(book._id);
+  
+  useEffect(() => {
+    // Only run image verification once
+    if (!imagesVerified && book.imagenes && book.imagenes.length > 0) {
+      const verifyImages = async () => {
+        // Simplified image verification - just use the images without verification
+        setValidImageUrls(book.imagenes);
         setImagesVerified(true);
-      }
-    }, [book.imagenes, imagesVerified]);
-  
-    const navigateToDetail = () => {
-      navigate(`/libro/${book._id}`);
-    };
-  
-    // Calcular precio con y sin descuento
-    const precioBase = book.precio_info?.precio_base || book.precio;
-    const tieneDescuento = book.precio_info?.descuentos?.some(d => d.activo);
-    const porcentajeDescuento = tieneDescuento 
-      ? book.precio_info.descuentos.find(d => d.activo && d.tipo === 'porcentaje')?.valor || 0 
-      : 0;
+      };
+      
+      verifyImages();
+    } else if (!imagesVerified) {
+      // No images or empty array - set default and mark as verified
+      setValidImageUrls([{ 
+        url: "http://localhost:5000/uploads/libros/Default.png",
+        alt_text: "Default book image"
+      }]);
+      setImagesVerified(true);
+    }
+  }, [book.imagenes, imagesVerified]);
+
+  const navigateToDetail = () => {
+    navigate(`/libro/${book._id}`);
+  };
+
+  // Handler for adding to cart
+  const onAddToCart = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     
-    // Formatear el stock
-    const stockDisponible = book.stock || 0;
+    if (isInCart || !book.stock_disponible || book.stock_disponible <= 0) {
+      return;
+    }
+    
+    setAddingToCart(true);
+    
+    try {
+      await handleAddToCart(e, book);
+    } finally {
+      setTimeout(() => {
+        setAddingToCart(false);
+      }, 500);
+    }
+  };
+
+  // Function to navigate between images
+  const navigateImages = (e, direction) => {
+    e.stopPropagation();
+    
+    if (!validImageUrls || validImageUrls.length <= 1) return;
+    
+    if (direction === 'next') {
+      setCurrentImageIndex((prev) => 
+        prev === validImageUrls.length - 1 ? 0 : prev + 1
+      );
+    } else {
+      setCurrentImageIndex((prev) => 
+        prev === 0 ? validImageUrls.length - 1 : prev - 1
+      );
+    }
+  };
+
+  // Calculate price with and without discount
+  const precioBase = book.precio_info?.precio_base || book.precio;
+  const tieneDescuento = book.precio_info?.descuentos?.some(d => d.activo);
+  const porcentajeDescuento = tieneDescuento 
+    ? book.precio_info.descuentos.find(d => d.activo && d.tipo === 'porcentaje')?.valor || 0 
+    : 0;
   
-    // Función para navegar entre imágenes
-    const navigateImages = (e, direction) => {
-      // Detener la propagación para evitar navegación a detalles
-      e.stopPropagation();
-      
-      if (!validImageUrls || validImageUrls.length <= 1) return;
-      
-      if (direction === 'next') {
-        setCurrentImageIndex((prev) => 
-          prev === validImageUrls.length - 1 ? 0 : prev + 1
-        );
-      } else {
-        setCurrentImageIndex((prev) => 
-          prev === 0 ? validImageUrls.length - 1 : prev - 1
-        );
-      }
-    };
-  
-    return (
-      <div 
-        className="book-card flex flex-col h-full border bg-white rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-        onClick={navigateToDetail}
-      >
-        {/* Imagen del libro con flechas de navegación */}
-        <div className="relative h-48 overflow-hidden bg-gray-100">
-          <div 
-            className="flex transition-transform duration-300 ease-in-out w-full h-full"
-            style={{ transform: `translateX(-${currentImageIndex * 100}%)` }}
-          >
-            {validImageUrls.length > 0 ? (
-              validImageUrls.map((image, index) => (
-                <div key={index} className="min-w-full h-full flex-shrink-0">
-                  <CachedImage 
-                    src={image.url} 
-                    alt={image.alt_text || "Imagen de libro"} 
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              ))
-            ) : (
-              <div className="min-w-full h-full flex items-center justify-center bg-gray-200 text-gray-500">
-                <span className="material-icons-outlined text-6xl">book</span>
+  // Format stock
+  const stockDisponible = book.stock_disponible || 0;
+
+  console.log("Book:", book);
+
+  return (
+    <div 
+      className="book-card flex flex-col h-full border bg-white rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+      onClick={navigateToDetail}
+    >
+      {/* Book image with navigation arrows */}
+      <div className="relative h-48 overflow-hidden bg-gray-100">
+        <div 
+          className="flex transition-transform duration-300 ease-in-out w-full h-full"
+          style={{ transform: `translateX(-${currentImageIndex * 100}%)` }}
+        >
+          {validImageUrls.length > 0 ? (
+            validImageUrls.map((image, index) => (
+              <div key={index} className="min-w-full h-full flex-shrink-0">
+                <CachedImage 
+                  src={image.url} 
+                  alt={image.alt_text || "Imagen de libro"} 
+                  className="w-full h-full object-contain"
+                />
               </div>
-            )}
-          </div>
-          
-          {/* Etiqueta de descuento si aplica */}
-          {porcentajeDescuento > 0 && (
-            <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
-              {porcentajeDescuento}% DCTO
+            ))
+          ) : (
+            <div className="min-w-full h-full flex items-center justify-center bg-gray-200 text-gray-500">
+              <span className="material-icons-outlined text-6xl">book</span>
             </div>
-          )}
-          
-          {/* Flechas de navegación de imágenes - solo si hay más de una imagen */}
-          {validImageUrls && validImageUrls.length > 1 && (
-            <>
-              <button 
-                className="absolute left-1 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full p-1 hover:bg-opacity-100 z-10"
-                onClick={(e) => navigateImages(e, 'prev')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              </button>
-              <button 
-                className="absolute right-1 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full p-1 hover:bg-opacity-100 z-10"
-                onClick={(e) => navigateImages(e, 'next')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-              </button>
-            </>
           )}
         </div>
         
-        {/* Información del libro */}
-        <div className="p-4 flex-grow flex flex-col">
-          {/* Título aún marcado como clickable para mantener el estilo hover */}
-          <h3 className="font-bold text-sm line-clamp-2 mb-1 hover:text-blue-600">
-            {book.titulo}
-          </h3>
-          <p className="text-gray-600 text-sm mb-2">{book.autor_nombre_completo}</p>
-          
-          {/* Estrellas de calificación si están disponibles */}
-          {book.calificaciones && (
-            <div className="flex mb-1">
-              {renderStars(book.calificaciones.promedio)}
-              {book.calificaciones.cantidad > 0 && (
-                <span className="text-xs text-gray-500 ml-1">({book.calificaciones.cantidad})</span>
-              )}
-            </div>
-          )}
-          
-          {/* Editorial e información de edición */}
-          {book.editorial && (
-            <p className="text-xs text-gray-500 mb-3">
-              {book.editorial}, {book.estado === 'nuevo' ? 'Nuevo' : 'Usado'}
-              {book.anio_publicacion ? `, ${book.anio_publicacion}` : ''}
-            </p>
-          )}
-          
-          {/* Disponibilidad */}
-          <p className={`text-xs ${stockDisponible > 0 ? 'text-green-600' : 'text-red-600'} mb-2`}>
-            {stockDisponible > 0 
-              ? `Quedan ${stockDisponible} ${stockDisponible === 1 ? 'unidad' : 'unidades'}`
-              : 'Agotado'}
-          </p>
-          
-          {/* Precio */}
-          <div className="mt-auto">
-            {tieneDescuento ? (
-              <div>
-                <span className="text-xs line-through text-gray-500">
-                  ${precioBase.toLocaleString('es-CO')}
-                </span>
-                <div className="text-lg font-bold text-red-600">
-                    ${(book.precio).toLocaleString('es-CO')}
-                </div>
-              </div>
-            ) : (
-              <div className="text-lg font-bold">
-                ${book.precio.toLocaleString('es-CO')}
-              </div>
+        {/* Discount tag if applicable */}
+        {porcentajeDescuento > 0 && (
+          <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
+            {porcentajeDescuento}% DCTO
+          </div>
+        )}
+        
+        {/* Image navigation arrows - only if there's more than one image */}
+        {validImageUrls && validImageUrls.length > 1 && (
+          <>
+            <button 
+              className="absolute left-1 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full p-1 hover:bg-opacity-100 z-10"
+              onClick={(e) => navigateImages(e, 'prev')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <button 
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 rounded-full p-1 hover:bg-opacity-100 z-10"
+              onClick={(e) => navigateImages(e, 'next')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </>
+        )}
+      </div>
+      
+      {/* Book information */}
+      <div className="p-4 flex-grow flex flex-col">
+        <h3 className="font-bold text-sm line-clamp-2 mb-1 hover:text-blue-600">
+          {book.titulo}
+        </h3>
+        <p className="text-gray-600 text-sm mb-2">{book.autor_nombre_completo}</p>
+        
+        {/* Rating stars if available */}
+        {book.calificaciones && (
+          <div className="flex mb-1">
+            {[...Array(5)].map((_, i) => (
+              <span 
+                key={i} 
+                className={`text-lg ${i < (book.calificaciones.promedio || 0) ? 'text-yellow-400' : 'text-gray-300'}`}
+              >
+                ★
+              </span>
+            ))}
+            {book.calificaciones.cantidad > 0 && (
+              <span className="text-xs text-gray-500 ml-1">({book.calificaciones.cantidad})</span>
             )}
           </div>
-          
-          {/* Botón Agregar al carrito */}
-          <div className="mt-2 flex">
-            <button 
-              className="flex items-center justify-center bg-red-600 text-white px-3 py-1 rounded-full text-sm hover:bg-red-700 transition-colors w-full opacity-50 cursor-not-allowed"
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-              disabled
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              Agregar al carrito
-            </button>
-          </div>
-  
-          {/* Botón Ver detalles */}
-          <div className="mt-2">
-            <button 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-1 rounded text-sm transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigateToDetail();
-              }}
-            >
-              Ver detalles
-            </button>
-          </div>
+        )}
+        
+        {/* Publisher and edition information */}
+        {book.editorial && (
+          <p className="text-xs text-gray-500 mb-3">
+            {book.editorial}, {book.estado === 'nuevo' ? 'Nuevo' : 'Usado'}
+            {book.anio_publicacion ? `, ${book.anio_publicacion}` : ''}
+          </p>
+        )}
+        
+        {/* Availability */}
+        <p className={`text-xs ${stockDisponible > 0 ? 'text-green-600' : 'text-red-600'} mb-2`}>
+          {stockDisponible > 0 
+            ? `Quedan ${stockDisponible} ${stockDisponible === 1 ? 'unidad' : 'unidades'}`
+            : 'Agotado'}
+        </p>
+        
+        {/* Price */}
+        <div className="mt-auto">
+          {tieneDescuento ? (
+            <div>
+              <span className="text-xs line-through text-gray-500">
+                ${precioBase.toLocaleString('es-CO')}
+              </span>
+              <div className="text-lg font-bold text-red-600">
+                ${(book.precio).toLocaleString('es-CO')}
+              </div>
+            </div>
+          ) : (
+            <div className="text-lg font-bold">
+              ${book.precio.toLocaleString('es-CO')}
+            </div>
+          )}
+        </div>
+        
+        {/* Add to cart button */}
+        <div className="mt-2 flex">
+          <button 
+            className={`flex items-center justify-center px-3 py-1 rounded-full text-sm w-full transition-colors
+              ${stockDisponible <= 0 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : isInCart
+                  ? 'bg-green-600 text-white cursor-default'
+                  : addingToCart 
+                    ? 'bg-gray-400 text-white cursor-wait' 
+                    : 'bg-red-600 text-white hover:bg-red-700 cursor-pointer'}`}
+            onClick={onAddToCart}
+            disabled={stockDisponible <= 0 || addingToCart || isInCart}
+          >
+            {addingToCart ? (
+              <span className="flex items-center">
+                <svg className="w-4 h-4 mr-2 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Agregando...
+              </span>
+            ) : isInCart ? (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Agregado
+              </>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                Agregar al carrito
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* View details button */}
+        <div className="mt-2">
+          <button 
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-1 rounded text-sm transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateToDetail();
+            }}
+          >
+            Ver detalles
+          </button>
         </div>
       </div>
-    );
-  });
+    </div>
+  );
+});
+
 
   // Lista de filtros de categoría (según corresponda)
   const Filters = () => {
@@ -736,7 +894,12 @@ const BookListPage = ({ category }) => {
           {/* Grid de libros - Remove console.log that causes unnecessary re-renders */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
             {books.map(book => (
-              <BookCard key={book._id} book={book} />
+              <BookCard 
+                key={book._id} 
+                book={book} 
+                booksInCart={booksInCart}
+                handleAddToCart={handleAddToCart}
+              />
             ))}
           </div>
         

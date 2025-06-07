@@ -1636,7 +1636,7 @@ const libroService = {
       
       if (recomendacionesPorCalificacion.length > 0) {
         console.log(`Encontradas ${recomendacionesPorCalificacion.length} recomendaciones por calificación`);
-        return recomendacionesPorCalificacion;
+        return await this._agregarStockConsolidadoALibros(recomendacionesPorCalificacion);
       }
       
       // ESTRATEGIA 2: Recomendaciones basadas en términos de búsqueda
@@ -1675,7 +1675,7 @@ const libroService = {
         
         if (recomendaciones.length > 0) {
           console.log(`Encontradas ${recomendaciones.length} recomendaciones por términos`);
-          return recomendaciones;
+          return await this._agregarStockConsolidadoALibros(recomendaciones);
         }
       }
       
@@ -1686,7 +1686,7 @@ const libroService = {
       
       if (librosConDescuento.length > 0) {
         console.log(`Encontradas ${librosConDescuento.length} recomendaciones con descuento`);
-        return librosConDescuento;
+        return await this._agregarStockConsolidadoALibros(librosConDescuento);
       }
       
       // ESTRATEGIA 4: Como último recurso, mostrar libros recientes
@@ -1702,17 +1702,49 @@ const libroService = {
       console.error('Error obteniendo recomendaciones:', error);
       // Si hay error, devolver libros recientes como fallback
       try {
-        return await Libro.find({ 
+        let librosF = await Libro.find({ 
           activo: true, 
           stock: { $gt: 0 } 
         })
         .sort({ fecha_registro: -1 })
         .limit(limite);
+        return await this._agregarStockConsolidadoALibros(librosF);
       } catch (err) {
         console.error('Error en fallback de recomendaciones:', err);
         return []; // Devolver array vacío en caso de error completo
       }
     }
+  },
+
+  /**
+ * Método auxiliar para agregar stock consolidado a cualquier array de libros
+ */
+  async _agregarStockConsolidadoALibros(libros) {
+    if (!Array.isArray(libros) || libros.length === 0) {
+      return libros;
+    }
+    
+    return await Promise.all(
+      libros.map(async (libro) => {
+        try {
+          const stockConsolidado = await this._obtenerStockConsolidado(libro._id);
+          const libroObj = typeof libro.toObject === 'function' ? libro.toObject() : libro;
+          
+          // Sobrescribir con valores REALES del inventario
+          libroObj.stock = stockConsolidado.stock_total;
+          libroObj.stock_disponible = stockConsolidado.stock_disponible;
+          libroObj.stock_reservado = stockConsolidado.stock_reservado;
+          libroObj.tiendas_con_stock = stockConsolidado.tiendas_con_stock;
+          libroObj.stock_consolidado = stockConsolidado;
+          
+          return libroObj;
+        } catch (error) {
+          console.error(`Error obteniendo stock para libro ${libro._id}:`, error);
+          // Devolver libro sin modificar si hay error
+          return typeof libro.toObject === 'function' ? libro.toObject() : libro;
+        }
+      })
+    );
   },
 
   /**
@@ -1727,8 +1759,25 @@ const libroService = {
       const libros = await Libro.obtenerLibrosConDescuento()
         .limit(limite);
       
-      console.log(`Libros con descuento encontrados: ${libros.length}`);
-      return libros.map(l => l.toObject());
+      // CORREGIDO: Agregar stock consolidado a cada libro
+      const librosConStockReal = await Promise.all(
+        libros.map(async (libro) => {
+          const stockConsolidado = await this._obtenerStockConsolidado(libro._id);
+          const libroObj = libro.toObject();
+          
+          // Sobrescribir con valores REALES del inventario
+          libroObj.stock = stockConsolidado.stock_total;
+          libroObj.stock_disponible = stockConsolidado.stock_disponible;
+          libroObj.stock_reservado = stockConsolidado.stock_reservado;
+          libroObj.tiendas_con_stock = stockConsolidado.tiendas_con_stock;
+          libroObj.stock_consolidado = stockConsolidado;
+          
+          return libroObj;
+        })
+      );
+      
+      console.log(`Libros con descuento encontrados: ${librosConStockReal.length}`);
+      return librosConStockReal;
     } catch (error) {
       console.error('Error obteniendo libros con descuento:', error);
       throw error;
@@ -1746,8 +1795,25 @@ const libroService = {
       
       const libros = await Libro.obtenerLibrosDestacados(limite);
       
-      console.log(`Libros destacados encontrados: ${libros.length}`);
-      return libros.map(l => l.toObject());
+      // CORREGIDO: Agregar stock consolidado a cada libro
+      const librosConStockReal = await Promise.all(
+        libros.map(async (libro) => {
+          const stockConsolidado = await this._obtenerStockConsolidado(libro._id);
+          const libroObj = libro.toObject();
+          
+          // Sobrescribir con valores REALES del inventario
+          libroObj.stock = stockConsolidado.stock_total;
+          libroObj.stock_disponible = stockConsolidado.stock_disponible;
+          libroObj.stock_reservado = stockConsolidado.stock_reservado;
+          libroObj.tiendas_con_stock = stockConsolidado.tiendas_con_stock;
+          libroObj.stock_consolidado = stockConsolidado;
+          
+          return libroObj;
+        })
+      );
+      
+      console.log(`Libros destacados encontrados: ${librosConStockReal.length}`);
+      return librosConStockReal;
     } catch (error) {
       console.error('Error obteniendo libros destacados:', error);
       throw error;

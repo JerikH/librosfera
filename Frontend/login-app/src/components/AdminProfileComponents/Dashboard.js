@@ -92,6 +92,12 @@ const Dashboard = ({ userData, setActiveTab }) => {
           }
         });
 
+        const MessagesResponse = await axios.get('http://localhost:5000/api/v1/mensajeria/contadores', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/json'
+          }
+        });
         
         // Fetch recent activities
         const activitiesResponse = await axios.get(`${API_BASE_URL}/api/v1/activities/recent?limite=5`, {
@@ -104,7 +110,8 @@ const Dashboard = ({ userData, setActiveTab }) => {
         // Check if requests were successful
         if (booksResponse.data.status === 'success' && 
             usersResponse.data.status === 'success' &&
-            salesResponse.data.status === 'success') {
+            salesResponse.data.status === 'success' &&
+            MessagesResponse.data.status === 'success') {
           
           // Process activities data if it exists
           let activitiesData = [];
@@ -129,7 +136,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
             totalUsers: usersResponse.data.paginacion.total,
             // Keep the dummy data for other stats that are not provided by API yet
             totalSales: salesResponse.data.data.resumen.cantidad_ordenes,
-            pendingMessages: 0,
+            pendingMessages: MessagesResponse.data.data.mensajes_no_leidos,
             recentActivity: activitiesData.length > 0 ? activitiesData : [
               { id: 1, type: 'user', action: 'Nuevo usuario registrado', timestamp: '2023-11-10 14:25', user: 'maria_lopez' },
               { id: 2, type: 'book', action: 'Nuevo libro añadido', timestamp: '2023-11-10 13:15', book: 'Historia de la Literatura' },
@@ -319,6 +326,14 @@ const Dashboard = ({ userData, setActiveTab }) => {
               color="bg-purple-500" 
               tabId="administrar-ventas"
             />
+
+            <StatCard 
+              title="Mensajes Pendientes" 
+              value={stats.pendingMessages} 
+              icon={icons.mail} 
+              color="bg-amber-500" 
+              tabId="gestionar-mensajes"
+            />
             {/* Ventas card - without tabId to make it not clickable
             <div className="bg-white p-4 rounded-lg shadow">
               <div className="flex items-center">
@@ -331,8 +346,10 @@ const Dashboard = ({ userData, setActiveTab }) => {
                 </div>
               </div>
             </div> */}
+
+            {console.log(stats)}
             {/* Mensajes card - without tabId to make it not clickable */}
-            <div className="bg-white p-4 rounded-lg shadow">
+            {/* <div className="bg-white p-4 rounded-lg shadow">
               <div className="flex items-center">
                 <div className="w-12 h-12 rounded-full bg-amber-500 flex items-center justify-center">
                   {icons.mail}
@@ -342,7 +359,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
                   <p className="text-2xl font-bold">{stats.pendingMessages}</p>
                 </div>
               </div>
-            </div>
+            </div> */}
           </div>
 
           {/* Recent Activity */}
@@ -371,7 +388,6 @@ const Dashboard = ({ userData, setActiveTab }) => {
                       <div className="flex justify-between">
                         <p className="text-xs text-gray-500">
                           {getActivityDetail(activity)}
-                          {console.log(activity)}
                         </p>
                         <p className="text-xs text-gray-500">{activity.timestamp}</p>
                       </div>
