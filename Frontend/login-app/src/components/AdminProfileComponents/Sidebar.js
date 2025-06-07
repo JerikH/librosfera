@@ -4,7 +4,6 @@ import CachedImage from '../CachedImage';
 
 
 const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }) => {
-  const [refreshing, setRefreshing] = useState(false);
   // Función para manejar el logout
   const handleLogout = async () => {
     localStorage.removeItem('shoppingCart');
@@ -157,7 +156,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
       {/* User info section at the top */}
       <div className="flex flex-col items-center justify-center py-8 border-b border-gray-600">
         <div className="w-24 h-24 bg-white rounded-full overflow-hidden mb-4">
-          {isLoading || refreshing ? (
+          {isLoading ? (
             <div className="w-full h-full flex items-center justify-center bg-gray-200">
               <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
@@ -178,10 +177,10 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
           )}
         </div>
         <h2 className="text-white text-xl font-semibold mb-1">
-          {isLoading || refreshing ? 'Cargando...' : (userData?.usuario || 'Usuario')}
+          {isLoading ? 'Cargando...' : (userData?.usuario || 'Usuario')}
         </h2>
         <p className="text-gray-300 text-sm mb-3">
-          {isLoading || refreshing ? '' : (userData?.email || '')}
+          {isLoading ? '' : (userData?.email || '')}
         </p>
         {/* Display user type badge */}
         {userData?.tipo_usuario && (
@@ -198,7 +197,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
         <button 
           onClick={handleEditProfile}
           className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm"
-          disabled={isLoading || refreshing}
+          disabled={isLoading}
         >
           Editar Perfil
         </button>
