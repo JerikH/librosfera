@@ -46,7 +46,7 @@ const AddCardPage = ({ onSave, onCancel, card, mode = 'add' }) => {
       console.log("card", card);
       try {
         console.log("card", card);
-        const response = await axios.get(`https://librosfera.onrender.com//api/v1/tarjetas/${card}`, {
+        const response = await axios.get(`https://librosfera.onrender.com/api/v1/tarjetas/${card}`, {
           headers: {
             Authorization: `Bearer ${getAuthToken()}` // Replace with actual token or dynamic auth
           }
@@ -216,7 +216,7 @@ const AddCardPage = ({ onSave, onCancel, card, mode = 'add' }) => {
         }
 
         // Realizar petición PUT para actualizar
-        response = await axios.put(`https://librosfera.onrender.com//api/v1/tarjetas/${card}`, updateData, {
+        response = await axios.put(`https://librosfera.onrender.com/api/v1/tarjetas/${card}`, updateData, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -237,7 +237,7 @@ const AddCardPage = ({ onSave, onCancel, card, mode = 'add' }) => {
         };
 
         // Realizar petición POST para crear
-        response = await axios.post('https://librosfera.onrender.com//api/v1/tarjetas', apiData, {
+        response = await axios.post('https://librosfera.onrender.com/api/v1/tarjetas', apiData, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',

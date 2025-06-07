@@ -97,7 +97,7 @@ const ManageStores = () => {
   const L = useRef(null);
 
   // API Configuration
-  const API_BASE_URL = 'https://librosfera.onrender.com//api/v1';
+  const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
 
 
   // Axios-like implementation (In real app, use: import axios from 'axios')
