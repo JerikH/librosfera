@@ -156,7 +156,7 @@ class DevolucionService {
    */
   async generarCodigoQRDevolucion(codigoDevolucion) {
     try{
-      const baseUrl = process.env.FRONT_URL || 'https://librosfera-awmi.onrender.com';
+      const baseUrl = process.env.FRONT_URL || 'https://librosferafront.onrender.com';
       let qr_code = {url_rastreo: '', codigo: '', imagen_base64: ''};
       qr_code.url_rastreo = `${baseUrl}/devolucion/rastreo/${codigoDevolucion}`;
       qr_code.codigo = `QR-${codigoDevolucion}`;
