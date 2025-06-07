@@ -24,7 +24,7 @@ const PurchaseDetailsPage = () => {
       setIsLoading(true);
       setError(null);
       console.log("Details id:", purchaseId);
-      const response = await axios.get(`http://localhost:5000/api/v1/ventas/${purchaseId}`, {
+      const response = await axios.get(`https://librosfera.onrender.com/api/v1/ventas/${purchaseId}`, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json'
@@ -103,7 +103,7 @@ const PurchaseDetailsPage = () => {
             autor: 'Gabriel García Márquez',
             editorial: 'Editorial Sudamericana',
             isbn: '9780307474728',
-            imagen_portada: 'http://localhost:5000/uploads/libros/cien-anios-soledad.jpg'
+            imagen_portada: 'https://librosfera.onrender.com/uploads/libros/cien-anios-soledad.jpg'
           },
           cantidad: 1,
           precio_unitario: 35000
@@ -114,7 +114,7 @@ const PurchaseDetailsPage = () => {
             autor: 'Gabriel García Márquez',
             editorial: 'Editorial Oveja Negra',
             isbn: '9780307387264',
-            imagen_portada: 'http://localhost:5000/uploads/libros/amor-tiempos-colera.jpg'
+            imagen_portada: 'https://librosfera.onrender.com/uploads/libros/amor-tiempos-colera.jpg'
           },
           cantidad: 1,
           precio_unitario: 32000
@@ -458,7 +458,7 @@ const PurchaseDetailsPage = () => {
                         src={item.snapshot.imagen_portada} 
                         alt={item.snapshot.titulo || "Libro"} 
                         className="w-full h-full object-contain"
-                        fallbackSrc="http://localhost:5000/uploads/libros/Default.png"
+                        fallbackSrc="https://librosfera.onrender.com/uploads/libros/Default.png"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gray-200">

@@ -126,7 +126,7 @@ const BookDetails = () => {
     const fetchBookDetails = async () => { 
       try {
         // Realizar la llamada a la API con axios
-        const response = await axios.get(`http://localhost:5000/api/v1/libros/${bookId}`);
+        const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros/${bookId}`);
         
         // Con axios, los datos ya vienen en formato JSON
         const result = response.data;
@@ -292,7 +292,7 @@ const BookDetails = () => {
           }
         }
         
-        setValidImageUrls(validImages.length > 0 ? validImages : ["http://localhost:5000/uploads/libros/Default.png"]);
+        setValidImageUrls(validImages.length > 0 ? validImages : ["https://librosfera.onrender.com/uploads/libros/Default.png"]);
         setImagesVerified(true);
       };
       
@@ -305,11 +305,11 @@ const BookDetails = () => {
           if (response.status === 200) {
             setValidImageUrls([book.image]);
           } else {
-            setValidImageUrls(["http://localhost:5000/uploads/libros/Default.png"]);
+            setValidImageUrls(["https://librosfera.onrender.com/uploads/libros/Default.png"]);
           }
         } catch (error) {
           console.log(`Failed to verify image: ${book.image}`);
-          setValidImageUrls(["http://localhost:5000/uploads/libros/Default.png"]);
+          setValidImageUrls(["https://librosfera.onrender.com/uploads/libros/Default.png"]);
         }
         setImagesVerified(true);
       };
@@ -317,7 +317,7 @@ const BookDetails = () => {
       verifySingleImage();
     } else if (book && !imagesVerified) {
       // No images at all - set default image
-      setValidImageUrls(["http://localhost:5000/uploads/libros/Default.png"]);
+      setValidImageUrls(["https://librosfera.onrender.com/uploads/libros/Default.png"]);
       setImagesVerified(true);
     }
   }, [book, imagesVerified]);
@@ -463,7 +463,7 @@ const handleAddToCart = async () => {
       return;
     }
 
-    const response = await axios.post('http://localhost:5000/api/v1/carrito/agregar', {
+    const response = await axios.post('https://librosfera.onrender.com/api/v1/carrito/agregar', {
       id_libro: book._id,
       cantidad: Math.min(quantity, 3) // Ensure we don't exceed the limit
     }, {
@@ -698,7 +698,7 @@ const handleAddToCart = async () => {
                 />
               </svg>
               {book.categories && book.categories.length > 0 && (
-                <a href={`http://localhost:3000/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
+                <a href={`https://librosfera-awmi.onrender.com/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
                   {book.categories[0]}
                 </a>
               )}

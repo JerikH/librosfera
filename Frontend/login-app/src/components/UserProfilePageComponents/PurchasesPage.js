@@ -687,7 +687,7 @@ const PurchasesPage = () => {
       setLoading(true);
       setError(null);
       
-      const response = await axios.get('http://localhost:5000/api/v1/ventas/mis-ventas', {
+      const response = await axios.get('https://librosfera.onrender.com/api/v1/ventas/mis-ventas', {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json'
@@ -709,7 +709,7 @@ const PurchasesPage = () => {
   const fetchPurchaseDetails = async (purchaseId) => {
     setLoadingDetails(true);
     try {
-      const response = await axios.get(`http://localhost:5000/api/v1/ventas/${purchaseId}`, {
+      const response = await axios.get(`https://librosfera.onrender.com/api/v1/ventas/${purchaseId}`, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json'
@@ -737,7 +737,7 @@ const PurchasesPage = () => {
     setRefundLoading(true);
     try {
       const response = await axios.post(
-        `http://localhost:5000/api/v1/ventas/${selectedPurchase.numero_venta}/devolucion`,
+        `https://librosfera.onrender.com/api/v1/ventas/${selectedPurchase.numero_venta}/devolucion`,
         { items: refundData },
         {
           headers: {
@@ -1058,7 +1058,7 @@ const PurchasesPage = () => {
                           src={item.snapshot.imagen_portada} 
                           alt={item.snapshot.titulo || "Libro"} 
                           className="w-full h-full object-contain"
-                          fallbackSrc="http://localhost:5000/uploads/libros/Default.png"
+                          fallbackSrc="https://librosfera.onrender.com/uploads/libros/Default.png"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gray-200">
@@ -1264,7 +1264,7 @@ const PurchasesPage = () => {
                                   src={item.snapshot.imagen_portada} 
                                   alt={item.snapshot.titulo || "Libro"} 
                                   className="w-full h-full object-contain"
-                                  fallbackSrc="http://localhost:5000/uploads/libros/Default.png"
+                                  fallbackSrc="https://librosfera.onrender.com/uploads/libros/Default.png"
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-gray-200">

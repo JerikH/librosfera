@@ -14,7 +14,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
   const [error, setError] = useState(null);
 
   // API base URL
-  const API_BASE_URL = 'http://localhost:5000';
+  const API_BASE_URL = 'https://librosfera.onrender.com';
 
   // API token from localStorage
   const getCookie = (name) => {
@@ -85,14 +85,14 @@ const Dashboard = ({ userData, setActiveTab }) => {
           }
         });
 
-        const salesResponse = await axios.get('http://localhost:5000/api/v1/ventas/estadisticas', {
+        const salesResponse = await axios.get('https://librosfera.onrender.com/api/v1/ventas/estadisticas', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'
           }
         });
 
-        const MessagesResponse = await axios.get('http://localhost:5000/api/v1/mensajeria/contadores', {
+        const MessagesResponse = await axios.get('https://librosfera.onrender.com/api/v1/mensajeria/contadores', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'

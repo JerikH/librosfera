@@ -83,7 +83,7 @@ const uploadProfileImage = (req, res, next) => {
           req.file.filename = nombreArchivo;
           
           // Crear URL para acceder a la imagen
-          const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+          const baseUrl = process.env.BASE_URL || 'https://librosfera.onrender.com';
           req.file.url = `${baseUrl}/uploads/profiles/${nombreArchivo}`;
           
           next();
