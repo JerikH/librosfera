@@ -438,11 +438,11 @@ const RegistrationPage = () => {
       lugar_nacimiento: formData.lugar_nacimiento,
       genero: formData.genero,
       direcciones: [{
-        calle: formData.direccion_completa, // Changed field name to match backend expectation
+        direccion_completa: formData.direccion_completa, // Changed field name to match backend expectation
         ciudad: formData.ciudad,
         codigo_postal: formData.codigo_postal,
         pais: formData.pais,
-        estado_provincia: formData.estado_provincia || '',
+        departamento: formData.estado_provincia || '',
         referencias: formData.referencias || ''
       }],
       preferencias: {
