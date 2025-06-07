@@ -482,7 +482,7 @@ const ProfilePage = ({ userData }) => {
               )}
             </div>
             
-            <div className="mt-4 pt-4 border-t border-gray-100">
+            {/* <div className="mt-4 pt-4 border-t border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Recibir Noticias</p>
@@ -494,7 +494,7 @@ const ProfilePage = ({ userData }) => {
                   </div>
                 </div>
               </div>
-            </div>
+            </div> */}
             
             <div className="mt-6 pt-4 border-t border-gray-100">
               <div className="flex items-center justify-between">

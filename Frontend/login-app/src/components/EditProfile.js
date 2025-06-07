@@ -46,7 +46,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
     pais: '',
     estado_provincia: '',
     referencias: '',
-    tipo_direccion: 'Casa',
+    tipo_direccion: 'casa',
     // Password fields (keep existing ones)
     password: '',
     confirmPassword: '',
@@ -157,7 +157,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
         pais: userData.direcciones && userData.direcciones[0]?.pais || '',
         estado_provincia: userData.direcciones && userData.direcciones[0]?.estado_provincia || '',
         referencias: userData.direcciones && userData.direcciones[0]?.referencias || '',
-        tipo_direccion: userData.direcciones && userData.direcciones[0]?.tipo || 'Casa',
+        tipo_direccion: userData.direcciones && userData.direcciones[0]?.tipo || 'casa',
         // Password fields (empty by default)
         password: '',
         confirmPassword: '',
@@ -324,9 +324,11 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
       const primaryAddress = {
         calle: formData.calle,
         ciudad: formData.ciudad,
+        departamento: formData.estado_provincia,
+        direccion_completa: `${formData.calle}, ${formData.ciudad}, ${formData.estado_provincia || ''}, ${formData.codigo_postal || ''}, ${formData.pais || ''}`.trim(),
         codigo_postal: formData.codigo_postal,
         pais: formData.pais,
-        tipo: formData.tipo_direccion || 'Casa'
+        tipo: formData.tipo_direccion || 'casa'
       };
       
       // If there's a secondary address in the existing user data, include it
@@ -746,9 +748,9 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
                 >
-                  <option value="Casa">Casa</option>
-                  <option value="Trabajo">Trabajo</option>
-                  <option value="Otro">Otro</option>
+                  <option value="casa">Casa</option>
+                  <option value="trabajo">Trabajo</option>
+                  <option value="otro">Otro</option>
                 </select>
               </div>
               
