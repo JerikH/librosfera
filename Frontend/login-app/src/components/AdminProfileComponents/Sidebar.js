@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { logoutUser } from '../UserProfilePageComponents/authUtils';
 import CachedImage from '../CachedImage';
+import { useNavigate } from 'react-router-dom';
 
 
 const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }) => {
+  const navigate = useNavigate();
   // Función para manejar el logout
   const handleLogout = async () => {
     localStorage.removeItem('shoppingCart');
     await logoutUser();
-    window.location.replace('/Login');
+    navigate('/Login');
   };
 
   // Check if the user is a root user

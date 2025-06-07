@@ -45,7 +45,7 @@ const UserProfile = () => {
       
       if (!dataCookie) {
         console.log("No data cookie found, redirecting to login");
-        window.location.replace('/Login');
+        navigate('/Login');
         return;
       }
       
@@ -64,15 +64,15 @@ const UserProfile = () => {
           
           if (userType === 'administrador') {
             console.log("Admin user detected, redirecting to AdminProfile");
-            window.location.replace('/AdminProfile');
+            navigate('/AdminProfile');
             return;
           } else if (userType === 'root') {
             console.log("Root user detected, redirecting to RootProfile");
-            window.location.replace('/RootProfile');
+            navigate('/RootProfile');
             return;
           } else if (userType !== 'usuario' && userType !== 'cliente') {
             console.log("Unknown user type, redirecting to login");
-            window.location.replace('/Login');
+            navigate('/Login');
             return;
           }
         }
@@ -82,7 +82,7 @@ const UserProfile = () => {
         setIsLoading(false);
       } catch (error) {
         console.error("Error checking user type:", error);
-        window.location.replace('/Login');
+        navigate('/Login');
       }
     };
     
@@ -102,7 +102,7 @@ const UserProfile = () => {
     if (result.success) {
       setUserData(result.data);
     } else {
-      window.location.replace('/Login');
+      navigate('/Login');
     }
   }, []);
 
