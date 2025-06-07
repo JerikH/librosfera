@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, navigate } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import CachedImage from '../CachedImage';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = ({ userData, setActiveTab }) => {
+  const navigate = useNavigate();
   // Estados para las tarjetas y navegación
   const [defaultCard, setDefaultCard] = useState(null);
   const [accountBalance, setAccountBalance] = useState(0);
