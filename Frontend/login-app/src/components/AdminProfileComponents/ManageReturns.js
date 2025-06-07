@@ -943,7 +943,7 @@ const ManageReturns = () => {
                             </div>
                             <div className="text-right">
                               <p className="font-medium text-gray-900">
-                                {formatCurrency(item.monto_reembolso || 0)}
+                                {formatCurrency(item.info_libro.precio_pagado || 0)}
                               </p>
                               <StatusBadge estado={item.estado_item} />
                               {!item.inspeccion && selectedReturn.devolucion.estado === 'en_inspeccion' && (

@@ -626,8 +626,8 @@ return (
       {/* Scrollable content area */}
       <div className="flex-1 overflow-y-auto px-6">
         {/* Filtros */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-4 w-full">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        {/* <div className="bg-white rounded-lg shadow-sm p-4 mb-4 w-full"> */}
+          {/* <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Buscar
@@ -703,8 +703,8 @@ return (
                 Limpiar filtros
               </button>
             </div>
-          </div>
-        </div>
+          </div> */}
+        {/* </div> */}
 
         {/* Estadísticas rápidas */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
@@ -862,9 +862,9 @@ return (
                                  returnInfo.estado_devolucion === 'devolucion_parcial' ? 'Parcial' :
                                  returnInfo.estado_devolucion}
                               </span>
-                              <div className="text-gray-500 mt-1 truncate">
+                              {/* <div className="text-gray-500 mt-1 truncate">
                                 {formatCurrency(returnInfo.monto_total_devuelto || 0)} devuelto
-                              </div>
+                              </div> */}
                             </div>
                           ) : (
                             <span className="text-gray-400 text-xs">Sin devoluciones</span>
