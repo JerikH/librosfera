@@ -622,7 +622,7 @@ class DevolucionService {
       await fs.rename(archivo.path, rutaArchivo);
       
       // Guardar referencia en la devolución (sin guardar)
-      const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+      const baseUrl = process.env.BASE_URL || 'https://librosfera.onrender.com/';
       const urlArchivo = `${baseUrl}/uploads/devoluciones/${devolucion.codigo_devolucion}/${nombreArchivo}`;
       
       devolucion.agregarDocumento({

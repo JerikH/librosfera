@@ -4,7 +4,7 @@
 # ======================================================
 
 # Configuración
-API_URL="http://localhost:5000/api/v1"
+API_URL="https://librosfera.onrender.com/api/v1"
 REPORT_FILE="api_test_report.md"
 TEMP_DIR="./temp_test_data"
 

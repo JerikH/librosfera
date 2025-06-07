@@ -123,7 +123,7 @@ const checkUploadDirs = (req, res, next) => {
 // Middleware para procesar archivos subidos
 const procesarArchivos = (req, res, next) => {
   if (req.files && req.files.length > 0) {
-    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+    const baseUrl = process.env.BASE_URL || 'https://librosfera.onrender.com/';
     
     req.archivosData = req.files.map(file => ({
       nombre_original: file.originalname,

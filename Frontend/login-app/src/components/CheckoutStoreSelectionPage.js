@@ -38,7 +38,7 @@ const CheckoutStoreSelectionPage = () => {
       let response;
       try {
         // First try a public endpoint
-        response = await axios.get('http://localhost:5000/api/v1/tiendas/publicas', {
+        response = await axios.get('https://librosfera.onrender.com//api/v1/tiendas/publicas', {
           params: {
             estado: 'activa',
             recogida_productos: true
@@ -47,7 +47,7 @@ const CheckoutStoreSelectionPage = () => {
       } catch (error) {
         // If public endpoint doesn't exist, try the general tiendas endpoint
         if (error.response?.status === 404) {
-          response = await axios.get('http://localhost:5000/api/v1/tiendas', {
+          response = await axios.get('https://librosfera.onrender.com//api/v1/tiendas', {
             params: {
               estado: 'activa',
               recogida_productos: true
