@@ -6,7 +6,8 @@ import ManageBooks from './AdminProfileComponents/ManageBooks';
 import ManageMessages from './AdminProfileComponents/ManageMessages';
 import ManageUsers from './AdminProfileComponents/ManageUsers';
 import ManageStores from './AdminProfileComponents/ManageStores';
-import ManageSales from './AdminProfileComponents/ManageSales'; // Nuevo componente
+import ManageSales from './AdminProfileComponents/ManageSales';
+import ManageReturns from './AdminProfileComponents/ManageReturns'; // Nuevo componente
 import ProfilePage from './AdminProfileComponents/ProfilePage';
 import EditProfile from './EditProfile';
 
@@ -228,6 +229,7 @@ const AdminProfile = () => {
               {activeTab === 'inicio' && <Dashboard userData={userData} setActiveTab={setActiveTab} />}
               {activeTab === 'administrar-libro' && <ManageBooks />}
               {activeTab === 'administrar-ventas' && <ManageSales />}
+              {activeTab === 'gestionar-devoluciones' && <ManageReturns />}
               {activeTab === 'gestionar-usuarios' && <ManageUsers />}
               {activeTab === 'gestionar-mensajes' && <ManageMessages />}
               {activeTab === 'administrar-tiendas' && <ManageStores />}

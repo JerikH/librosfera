@@ -48,6 +48,19 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
       )
     },
     { 
+      id: 'devoluciones', 
+      name: 'Mis Devoluciones', 
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+          <path d="M8 16H3v5" />
+        </svg>
+      ),
+      isNew: true // Marcador para mostrar badge "Nuevo"
+    },
+    { 
       id: 'carrito', 
       name: 'Carrito', 
       icon: (
@@ -146,7 +159,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
               <li key={item.id}>
                 <button
                   onClick={() => handleTabClick(item.id)}
-                  className={`w-full flex items-center py-3 px-4 ${
+                  className={`w-full flex items-center py-3 px-4 relative ${
                     activeTab === item.id
                       ? 'bg-gray-300 text-blue-600 border-l-4 border-blue-500'
                       : 'text-gray-700 hover:bg-gray-300'
@@ -156,12 +169,19 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
                   <span className={`mr-3 ${activeTab === item.id ? 'text-blue-600' : 'text-gray-500'}`}>
                     {item.icon}
                   </span>
-                  <span className="text-sm">{item.name}</span>
+                  <span className="text-sm flex-1 text-left">{item.name}</span>
                   
                   {/* Badge for cart count */}
                   {item.badge && (
-                    <span className="ml-auto bg-red-600 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-xs px-1">
+                    <span className="ml-2 bg-red-600 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-xs px-1">
                       {item.badge}
+                    </span>
+                  )}
+                  
+                  {/* Badge "Nuevo" para devoluciones */}
+                  {item.isNew && (
+                    <span className="ml-2 bg-green-500 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-xs px-2 font-medium">
+                      Nuevo
                     </span>
                   )}
                 </button>
