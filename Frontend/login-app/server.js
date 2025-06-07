@@ -5,67 +5,63 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-console.log(`Starting NO-BUILD server on port ${PORT}`);
+console.log(`Starting React server on port ${PORT}`);
 
 // Servir archivos estáticos desde public
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Servir archivos JS compilados en tiempo real
-app.get('/static/js/:file', (req, res) => {
-  const filename = req.params.file;
-  const srcPath = path.join(__dirname, 'src', filename.replace('.js', '.jsx') || filename.replace('.js', '.js'));
-  
-  if (fs.existsSync(srcPath)) {
-    const code = fs.readFileSync(srcPath, 'utf8');
-    res.set('Content-Type', 'text/javascript');
-    res.send(code);
-  } else {
-    res.status(404).send('File not found');
-  }
-});
-
-// Ruta principal que sirve index.html modificado
+// IMPORTANTE: Todas las rutas deben servir index.html para que React Router funcione
 app.get('*', (req, res) => {
-  const publicIndex = path.join(__dirname, 'public', 'index.html');
+  const indexPath = path.join(__dirname, 'public', 'index.html');
   
-  if (fs.existsSync(publicIndex)) {
-    let html = fs.readFileSync(publicIndex, 'utf8');
+  if (fs.existsSync(indexPath)) {
+    let html = fs.readFileSync(indexPath, 'utf8');
     
-    // Inyectar Babel para compilar JSX en el navegador
+    // Reemplazar las variables de CRA
+    html = html.replace(/%PUBLIC_URL%/g, '');
+    
+    // Inyectar React, ReactDOM y tu código
     html = html.replace(
-      '</head>',
+      '</body>',
       `
+      <!-- React y ReactDOM desde CDN -->
+      <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+      <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+      <script crossorigin src="https://unpkg.com/react-router-dom@6/dist/umd/react-router-dom.production.min.js"></script>
+      
+      <!-- Babel para compilar JSX -->
       <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-      <script>
-        // Configurar Babel
-        Babel.registerPreset('react', {
-          presets: [
-            [Babel.availablePresets['react']],
-            [Babel.availablePresets['env']]
-          ]
-        });
+      
+      <!-- Tu aplicación -->
+      <script type="text/babel">
+        const { BrowserRouter: Router, Route, Routes, Navigate } = ReactRouterDOM;
+        
+        // Componente temporal para probar
+        const LoginPage = () => React.createElement('div', null, 'Login Page - Funciona!');
+        const HomePage = () => React.createElement('div', null, 'Home Page - Funciona!');
+        
+        const App = () => {
+          return React.createElement(Router, null,
+            React.createElement(Routes, null,
+              React.createElement(Route, { path: "/", element: React.createElement(Navigate, { to: "/Login", replace: true }) }),
+              React.createElement(Route, { path: "/Login", element: React.createElement(LoginPage) }),
+              React.createElement(Route, { path: "/Home", element: React.createElement(HomePage) })
+            )
+          );
+        };
+        
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(React.StrictMode, null, React.createElement(App)));
       </script>
-      </head>`
-    );
-    
-    // Cargar el archivo principal de React
-    html = html.replace(
-      '<div id="root"></div>',
-      `
-      <div id="root"></div>
-      <script type="text/babel" data-presets="react,env">
-        ${fs.readFileSync(path.join(__dirname, 'src', 'index.js'), 'utf8')}
-      </script>
-      `
+      </body>`
     );
     
     res.send(html);
   } else {
-    res.send('<h1>App funcionando en Render</h1><p>Sin build, directo desde src/</p>');
+    res.status(404).send('index.html not found');
   }
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`NO-BUILD server running on 0.0.0.0:${PORT}`);
-  console.log('Serving React files directly from src/ folder');
+  console.log(`✅ React Router server running on 0.0.0.0:${PORT}`);
 });
