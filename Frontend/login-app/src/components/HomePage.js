@@ -7,7 +7,7 @@ import { getCartCount } from './cartUtils';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
 // URL base for API calls
-const API_BASE_URL = 'https://librosfera.onrender.com//api/v1';
+const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
 
 // Create a caching mechanism for API responses
 const apiCache = {
@@ -67,7 +67,7 @@ const BookCard = React.memo(({ book, booksInCart, handleAddToCart }) => {
     } else if (!imagesVerified) {
       // No images or empty array - set default and mark as verified
       setValidImageUrls([{ 
-        url: "https://librosfera.onrender.com//uploads/libros/Default.png",
+        url: "https://librosfera.onrender.com/uploads/libros/Default.png",
         alt_text: "Default book image"
       }]);
       setImagesVerified(true);
@@ -567,7 +567,7 @@ const HomePage = () => {
         return;
       }
 
-      const response = await axios.post('https://librosfera.onrender.com//api/v1/carrito/agregar', {
+      const response = await axios.post('https://librosfera.onrender.com/api/v1/carrito/agregar', {
         id_libro: book._id,
         cantidad: 1
       }, {

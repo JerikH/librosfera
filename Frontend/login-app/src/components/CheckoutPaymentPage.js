@@ -4,7 +4,7 @@ import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 
-const API_BASE_URL = 'https://librosfera.onrender.com//api/v1';
+const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
 
 function CheckoutPaymentPage() {
   const navigate = useNavigate();

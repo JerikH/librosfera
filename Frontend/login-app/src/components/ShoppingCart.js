@@ -7,7 +7,7 @@ import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import {UpdateQuantityBook} from './cartUtils';
 
 // URL base para las llamadas a la API
-const API_BASE_URL = 'https://librosfera.onrender.com//api/v1';
+const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
 
 const ShoppingCart = ({ isOpen, onClose, updateCartCount }) => {
   const [cartItems, setCartItems] = useState([]);
@@ -338,7 +338,7 @@ const updateQuantity = useCallback(async (itemId, newQuantity, item) => {
                         src={item.bookDetails.imagenes[0].url} 
                         alt={item.bookDetails.titulo || "Libro"} 
                         className="w-full h-full object-contain"
-                        fallbackSrc="https://librosfera.onrender.com//uploads/libros/Default.png"
+                        fallbackSrc="https://librosfera.onrender.com/uploads/libros/Default.png"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gray-200">

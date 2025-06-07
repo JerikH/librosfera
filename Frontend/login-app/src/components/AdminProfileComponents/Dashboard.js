@@ -85,14 +85,14 @@ const Dashboard = ({ userData, setActiveTab }) => {
           }
         });
 
-        const salesResponse = await axios.get('https://librosfera.onrender.com//api/v1/ventas/estadisticas', {
+        const salesResponse = await axios.get('https://librosfera.onrender.com/api/v1/ventas/estadisticas', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'
           }
         });
 
-        const MessagesResponse = await axios.get('https://librosfera.onrender.com//api/v1/mensajeria/contadores', {
+        const MessagesResponse = await axios.get('https://librosfera.onrender.com/api/v1/mensajeria/contadores', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'
