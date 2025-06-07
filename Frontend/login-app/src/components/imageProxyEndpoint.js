@@ -16,7 +16,7 @@ router.get('/api/image-proxy', async (req, res) => {
     }
     
     // Opcional: verificar que la URL pertenece a dominios permitidos por seguridad
-    const allowedDomains = ['localhost:5000', 'api.your-domain.com'];
+    const allowedDomains = ['localhost:5000', 'api.your-domain.com', 'librosfera.onrender.com'];
     let urlIsAllowed = false;
     
     try {
