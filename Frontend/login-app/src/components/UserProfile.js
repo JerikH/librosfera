@@ -6,7 +6,8 @@ import ProfilePage from './UserProfilePageComponents/ProfilePage';
 import PurchasesPage from './UserProfilePageComponents/PurchasesPage';
 import CartPage from './UserProfilePageComponents/CartPage';
 import CardPage from './UserProfilePageComponents/CardPage';
-import MessagesPage from './UserProfilePageComponents/MessagesPage'; // Import the new MessagesPage
+import MessagesPage from './UserProfilePageComponents/MessagesPage';
+import ReturnsPage from './UserProfilePageComponents/ReturnsPage'; // Nuevo componente de devoluciones
 import EditProfile from './EditProfile';
 import { fetchUserData, logoutUser } from './UserProfilePageComponents/authUtils';
 import { getCartCount } from './cartUtils';
@@ -216,6 +217,7 @@ const UserProfile = () => {
               {activeTab === 'profile' && <ProfilePage userData={userData} onEditProfile={handleEditProfile} />}
               {activeTab === 'mensajes' && <MessagesPage />}
               {activeTab === 'compras' && <PurchasesPage />}
+              {activeTab === 'devoluciones' && <ReturnsPage />}
               {activeTab === 'carrito' && <CartPage updateCartCount={updateCartCount} />}
               {activeTab === 'tarjeta' && <CardPage />}
             </div>

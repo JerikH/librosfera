@@ -52,6 +52,20 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
       hideForRoot: true // hidden for root
     },
     { 
+      id: 'gestionar-devoluciones', 
+      name: 'Gestionar Devoluciones', 
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+          <path d="M8 16H3v5" />
+        </svg>
+      ),
+      hideForRoot: true, // hidden for root
+      isNew: true // marcador para badge "Nuevo"
+    },
+    { 
       id: 'gestionar-usuarios', 
       name: 'Gestionar Usuarios', 
       icon: (
@@ -134,7 +148,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
   // If current activeTab is now hidden for root users, reset to 'inicio'
   React.useEffect(() => {
     // Only reset the tab if the user is root and is on a tab that's hidden for root users
-    if (isRootUser && ['administrar-libro', 'administrar-ventas', 'gestionar-mensajes', 'administrar-tiendas'].includes(activeTab)) {
+    if (isRootUser && ['administrar-libro', 'administrar-ventas', 'gestionar-devoluciones', 'gestionar-mensajes', 'administrar-tiendas'].includes(activeTab)) {
       setActiveTab('inicio');
     }
   }, [isRootUser, activeTab, setActiveTab]);
@@ -198,7 +212,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
             <li key={item.id}>
               <button
                 onClick={() => handleTabClick(item.id)}
-                className={`w-full flex items-center py-3 px-6 text-left ${
+                className={`w-full flex items-center py-3 px-6 text-left relative ${
                   activeTab === item.id
                     ? 'bg-gray-800 text-white border-l-4 border-blue-500'
                     : 'text-gray-300 hover:bg-gray-800 hover:text-white'
@@ -207,7 +221,16 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
                 <span className={`mr-3 ${activeTab === item.id ? 'text-white' : 'text-gray-400'}`}>
                   {item.icon}
                 </span>
-                <span>{item.name}</span>
+                <span className="flex-1">{item.name}</span>
+                
+                {/* Badge "Nuevo" para devoluciones */}
+                {item.isNew && (
+                  <span className="ml-2 bg-green-500 text-white rounded-full min-w-[18px] h-4 flex items-center justify-center text-xs px-1 font-medium">
+                    Nuevo
+                  </span>
+                )}
+                
+                {/* Indicador activo para administrar-libro */}
                 {activeTab === item.id && item.id === 'administrar-libro' && (
                   <span className="ml-auto mr-2 w-2 h-2 bg-blue-500 rounded-full"></span>
                 )}
