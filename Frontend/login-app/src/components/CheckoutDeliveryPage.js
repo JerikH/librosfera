@@ -232,7 +232,7 @@ const CheckoutDeliveryPage = () => {
       // Save shipping preferences with user address data
       const shippingPreferences = {
         method: deliveryMethod,
-        storeId: null,
+        storeId: '',
         shippingCost,
         locationCity: userLocation.City || userLocation.ciudad,
         locationState: userLocation.State,
