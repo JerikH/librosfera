@@ -228,7 +228,18 @@ const renderStatusButton = (sale) => {
   // Load initial data and statistics
   useEffect(() => {
     fetchStatistics();
-  }, []);
+  }, []); 
+
+  useEffect(() => {
+  if (!updatingStatus) {
+    // Fetch updated statistics after status update completes
+    const timer = setTimeout(() => {
+      fetchStatistics();
+    }, 1000); // Delay to ensure backend is updated
+    
+    return () => clearTimeout(timer);
+  }
+}, [updatingStatus]);
 
   // Fetch sales when filters change (using debounced search term)
   useEffect(() => {
@@ -882,36 +893,207 @@ return (
 
       {/* Modal para ver detalles y cambiar estado */}
       {showModal && selectedSale && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-4 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white my-8">
-            <div className="mt-3 max-h-[calc(100vh-8rem)] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2 border-b">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Detalle de Venta {selectedSale.numero_venta}
-                </h3>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-              
-              {/* Resto del contenido del modal permanece igual */}
-              {/* ... */}
-              
-              <div className="flex justify-end sticky bottom-0 bg-white pt-4 border-t mt-6">
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded transition-colors"
-                >
-                  Cerrar
-                </button>
-              </div>
+  <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div className="relative top-4 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white my-8">
+      <div className="mt-3 max-h-[calc(100vh-8rem)] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2 border-b">
+          <h3 className="text-lg font-medium text-gray-900">
+            Detalle de Venta {selectedSale.numero_venta}
+          </h3>
+          <button
+            onClick={() => setShowModal(false)}
+            className="text-gray-400 hover:text-gray-600 text-2xl transition-colors"
+          >
+            ×
+          </button>
+        </div>
+        
+        {/* Customer Information */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-900 mb-3">Información del Cliente</h4>
+            <div className="space-y-2">
+              <p><span className="font-medium">Nombre:</span> {selectedSale.id_cliente?.nombres} {selectedSale.id_cliente?.apellidos}</p>
+              <p><span className="font-medium">Email:</span> {selectedSale.id_cliente?.email}</p>
+              <p><span className="font-medium">Teléfono:</span> {selectedSale.id_cliente?.telefono}</p>
+            </div>
+          </div>
+          
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-900 mb-3">Información de Envío</h4>
+            <div className="space-y-2">
+              <p><span className="font-medium">Tipo:</span> {selectedSale.envio?.tipo}</p>
+              <p><span className="font-medium">Dirección:</span> {selectedSale.envio?.direccion?.direccion_completa}</p>
+              <p><span className="font-medium">Ciudad:</span> {selectedSale.envio?.direccion?.ciudad}, {selectedSale.envio?.direccion?.departamento}</p>
+              {selectedSale.envio?.fecha_envio && (
+                <p><span className="font-medium">Fecha envío:</span> {formatDate(selectedSale.envio.fecha_envio)}</p>
+              )}
+              {selectedSale.envio?.fecha_entrega_real && (
+                <p><span className="font-medium">Fecha entrega:</span> {formatDate(selectedSale.envio.fecha_entrega_real)}</p>
+              )}
             </div>
           </div>
         </div>
-      )}
+
+        {/* Order Items */}
+        <div className="mb-6">
+          <h4 className="font-semibold text-gray-900 mb-3">Productos</h4>
+          <div className="bg-white border rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Precio Unit.</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subtotal</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {selectedSale.items?.map((item, index) => (
+                  <tr key={index}>
+                    <td className="px-6 py-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {item.id_libro?.titulo || item.snapshot?.titulo}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {item.id_libro?.autor_nombre_completo || item.snapshot?.autor}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          ISBN: {item.id_libro?.ISBN || item.snapshot?.isbn}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {item.cantidad}
+                      {item.devolucion_info?.cantidad_devuelta > 0 && (
+                        <div className="text-xs text-red-600">
+                          ({item.devolucion_info.cantidad_devuelta} devuelto)
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {formatCurrency(item.precios?.precio_unitario_final || 0)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {formatCurrency(item.precios?.subtotal || 0)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        item.estado_item === 'devolucion_parcial' ? 'bg-yellow-100 text-yellow-800' :
+                        item.estado_item === 'devuelto' ? 'bg-red-100 text-red-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {item.estado_item === 'devolucion_parcial' ? 'Dev. Parcial' :
+                         item.estado_item === 'devuelto' ? 'Devuelto' : 'Normal'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Order Totals */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-900 mb-3">Totales de la Orden</h4>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span>Subtotal:</span>
+                <span>{formatCurrency(selectedSale.totales?.subtotal_sin_descuentos || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Descuentos:</span>
+                <span className="text-red-600">-{formatCurrency(selectedSale.totales?.total_descuentos || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Impuestos:</span>
+                <span>{formatCurrency(selectedSale.totales?.total_impuestos || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Envío:</span>
+                <span>{formatCurrency(selectedSale.totales?.costo_envio || 0)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-lg border-t pt-2">
+                <span>Total:</span>
+                <span>{formatCurrency(selectedSale.totales?.total_final || 0)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-900 mb-3">Información de Devoluciones</h4>
+            {selectedSale.sistema_devolucion?.tiene_devoluciones ? (
+              <div className="space-y-2">
+                <p><span className="font-medium">Estado:</span> 
+                  <span className={`ml-2 px-2 py-1 text-xs rounded-full ${
+                    selectedSale.sistema_devolucion.estado_devolucion === 'devolucion_completada' ? 'bg-green-100 text-green-800' :
+                    selectedSale.sistema_devolucion.estado_devolucion === 'devolucion_en_proceso' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {selectedSale.sistema_devolucion.estado_devolucion}
+                  </span>
+                </p>
+                <p><span className="font-medium">Cantidad de devoluciones:</span> {selectedSale.sistema_devolucion.cantidad_devoluciones}</p>
+                <p><span className="font-medium">Monto devuelto:</span> {formatCurrency(selectedSale.sistema_devolucion.monto_total_devuelto || 0)}</p>
+                {selectedSale.sistema_devolucion.ultima_solicitud_devolucion && (
+                  <p><span className="font-medium">Última solicitud:</span> {formatDate(selectedSale.sistema_devolucion.ultima_solicitud_devolucion)}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-gray-500">No hay devoluciones para esta venta</p>
+            )}
+          </div>
+        </div>
+
+        {/* Change Status Section */}
+        <div className="bg-white border-2 border-gray-200 rounded-lg p-4 mb-4">
+          <h4 className="font-semibold text-gray-900 mb-3">Cambiar Estado de Envío</h4>
+          <div className="flex flex-wrap gap-2">
+            {shippingStates.map((state) => (
+              <button
+                key={state.value}
+                onClick={() => updateShippingStatus(selectedSale.numero_venta, state.value)}
+                disabled={updatingStatus}
+                className={`px-4 py-2 rounded-lg border transition-colors ${
+                  selectedSale.estado === state.value
+                    ? `${state.color} border-current`
+                    : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'
+                } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {updatingStatus && updatingVenta === selectedSale.numero_venta ? (
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Actualizando...
+                  </div>
+                ) : (
+                  state.label
+                )}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm text-gray-500 mt-2">
+            Estado actual: <span className={`px-2 py-1 rounded-full text-xs ${getStatusInfo(selectedSale.estado).color}`}>
+              {getStatusInfo(selectedSale.estado).label}
+            </span>
+          </p>
+        </div>
+        
+        <div className="flex justify-end sticky bottom-0 bg-white pt-4 border-t mt-6">
+          <button
+            onClick={() => setShowModal(false)}
+            className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
     <InfoModal />
     <InputModal />
