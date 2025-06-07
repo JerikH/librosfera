@@ -327,7 +327,7 @@ devolucionSchema.index({ estado: 1, fecha_solicitud: -1 });
 //     try {
 //       console.log("Generando código QR para la devolución:", this.codigo_devolucion);
 //       // Generar URL de rastreo
-//       const baseUrl = process.env.FRONT_URL || 'http://localhost:3000';
+//       const baseUrl = process.env.FRONT_URL || 'https://librosfera-awmi.onrender.com';
 //       this.qr_code.url_rastreo = `${baseUrl}/devolucion/rastreo/${this.codigo_devolucion}`;
       
 //       // Generar código QR único

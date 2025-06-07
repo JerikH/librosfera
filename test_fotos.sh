@@ -8,7 +8,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuración
-BASE_URL="http://localhost:5000"
+BASE_URL="https://librosfera.onrender.com"
 IMAGE_PATH="./user.jpg"
 USER_ID_CLIENTE="" # Se llenará automáticamente después del login
 

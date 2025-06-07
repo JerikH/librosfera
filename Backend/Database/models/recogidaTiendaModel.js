@@ -305,7 +305,7 @@ recogidaTiendaSchema.pre('save', function(next) {
 recogidaTiendaSchema.pre('save', async function(next) {
   if (this.isNew && this.codigo_recogida && !this.qr_code.imagen_base64) {
     try {
-      const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+      const baseUrl = process.env.BASE_URL || 'https://librosfera.onrender.com';
       this.qr_code.url_verificacion = `${baseUrl}/api/v1/recogidas/verificar/${this.codigo_recogida}`;
       
       const qrOptions = {

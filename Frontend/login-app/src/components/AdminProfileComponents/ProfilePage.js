@@ -22,7 +22,7 @@ const ProfilePage = ({ userData }) => {
 
   // Define profile image base URL - same as in EditProfile
   const PROFILE_PIC_BASE_URL = '';
-  const DEFAULT_PROFILE_PIC = 'http://localhost:5000/uploads/profiles/default.jpg';
+  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com/uploads/profiles/default.jpg';
 
   // Get profile image URL
   const profileImage = userData?.foto_perfil 

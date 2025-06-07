@@ -9,7 +9,7 @@ const getCookie = (name) => {
 
 const verifyToken = async (token) => {
     try {
-      const response = await axios.get('http://localhost:5000/api/v1/auth/verify-token', {
+      const response = await axios.get('https://librosfera.onrender.com/api/v1/auth/verify-token', {
         headers: {
           'Authorization': `Bearer ${String(token)}`,
         },
