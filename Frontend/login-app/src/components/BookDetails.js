@@ -698,7 +698,7 @@ const handleAddToCart = async () => {
                 />
               </svg>
               {book.categories && book.categories.length > 0 && (
-                <a href={`http://localhost:3000/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
+                <a href={`https://librosfera-awmi.onrender.com/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
                   {book.categories[0]}
                 </a>
               )}
