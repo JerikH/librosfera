@@ -1,21 +1,29 @@
 const { spawn } = require('child_process');
 
-const port = process.env.PORT || 3000;
-const host = '0.0.0.0';
+const reactPort = 3001;
+const proxyPort = process.env.PORT || 3000;
 
-console.log(`Starting dev server on ${host}:${port}`);
+console.log(`Starting React dev server on port ${reactPort}`);
+console.log(`Starting proxy on 0.0.0.0:${proxyPort}`);
 
-const child = spawn('npx', ['react-scripts', 'start'], {
+// Iniciar React en puerto 3001
+const reactServer = spawn('npx', ['react-scripts', 'start'], {
   env: {
     ...process.env,
-    HOST: host,
-    PORT: port,
-    DANGEROUSLY_DISABLE_HOST_CHECK: 'true',
+    HOST: '127.0.0.1',
+    PORT: reactPort,
     BROWSER: 'none'
   },
   stdio: 'inherit'
 });
 
-child.on('close', (code) => {
-  process.exit(code);
-});
+// Esperar un poco y luego iniciar el proxy
+setTimeout(() => {
+  const proxyServer = spawn('node', ['server.js'], {
+    env: {
+      ...process.env,
+      PORT: proxyPort
+    },
+    stdio: 'inherit'
+  });
+}, 5000);
