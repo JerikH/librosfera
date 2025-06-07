@@ -27,7 +27,7 @@ const CardPage = () => {
   const accountBalance = 0;
 
   // Base URL para la API
-  const API_BASE_URL = 'http://localhost:5000/api/v1';
+  const API_BASE_URL = 'https://librosfera.onrender.com//api/v1';
 
   // Configuración base para axios
   const token = getCookie("data");

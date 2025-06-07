@@ -2290,7 +2290,7 @@ const libroService = {
       }
 
       // URL para acceder a la imagen
-      const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+      const baseUrl = process.env.BASE_URL || 'https://librosfera.onrender.com/';
       const urlImagen = archivo.url || `${baseUrl}/uploads/libros/${archivo.filename}`;
       
       console.log('URL de la imagen:', urlImagen);
