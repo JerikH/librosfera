@@ -146,13 +146,13 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
     setUserData(null);
     
     // Redireccionar a la página de login
-    navigate('/login');
+    navigate('/Login');
   };
 
   // Función para ir al perfil de usuario según su tipo
   const goToProfile = () => {
     if (!userData) {
-      navigate('/login');
+      navigate('/Login');
       return;
     }
     
@@ -218,7 +218,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
               ) : (
                 // Opciones para usuarios no logueados
                 <>
-                  <Link to="/login" className="text-sm hover:underline">
+                  <Link to="/Login" className="text-sm hover:underline">
                     Iniciar Sesión
                   </Link>
                   <Link to="/register" className="text-sm hover:underline">
