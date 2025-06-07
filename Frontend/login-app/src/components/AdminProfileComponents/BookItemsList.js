@@ -31,7 +31,7 @@ const BookItemsList = () => {
         const token = parsedData.authToken;
         
         // Obtener información del libro
-        const bookResponse = await axios.get(`https://librosfera.onrender.com//api/v1/libros/${id}`, {
+        const bookResponse = await axios.get(`https://librosfera.onrender.com/api/v1/libros/${id}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -138,7 +138,7 @@ const BookItemsList = () => {
         // COMENTADO: Llamadas reales a la API que fallan con 404
         /*
         // Obtener ejemplares del libro
-        const ejemplaresResponse = await axios.get(`https://librosfera.onrender.com//api/v1/ejemplares?idLibro=${id}`, {
+        const ejemplaresResponse = await axios.get(`https://librosfera.onrender.com/api/v1/ejemplares?idLibro=${id}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -150,7 +150,7 @@ const BookItemsList = () => {
           
           // Obtener información de tiendas en paralelo
           const tiendasPromises = tiendaIds.map(tiendaId => 
-            axios.get(`https://librosfera.onrender.com//api/v1/tiendas/${tiendaId}`, {
+            axios.get(`https://librosfera.onrender.com/api/v1/tiendas/${tiendaId}`, {
               headers: { 'Authorization': `Bearer ${token}` }
             })
           );

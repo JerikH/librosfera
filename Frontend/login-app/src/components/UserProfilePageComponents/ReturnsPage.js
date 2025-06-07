@@ -64,7 +64,7 @@ const ReturnsPage = () => {
       });
 
       const response = await fetch(
-        `https://librosfera.onrender.com//api/v1/devoluciones/mis-devoluciones?${queryParams}`,
+        `https://librosfera.onrender.com/api/v1/devoluciones/mis-devoluciones?${queryParams}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

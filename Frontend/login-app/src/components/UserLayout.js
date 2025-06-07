@@ -88,7 +88,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
       } 
       
       try {
-        const response = await axios.get(`https://librosfera.onrender.com//api/v1/libros/autocompletar`, {
+        const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros/autocompletar`, {
           params: {
             q: searchTerm.trim(),
             limit: 5

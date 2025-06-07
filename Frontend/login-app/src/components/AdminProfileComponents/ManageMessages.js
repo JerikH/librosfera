@@ -67,7 +67,7 @@ const AdminMessagesPage = () => {
     if (!token) return;
 
     try {
-      const response = await fetch(`https://librosfera.onrender.com//api/v1/users?tipo_usuario=administrador&activo=true`, {
+      const response = await fetch(`https://librosfera.onrender.com/api/v1/users?tipo_usuario=administrador&activo=true`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -108,7 +108,7 @@ const AdminMessagesPage = () => {
         }
       });
 
-      const response = await fetch(`https://librosfera.onrender.com//api/v1/mensajeria/conversaciones?${params}`, {
+      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -166,7 +166,7 @@ const AdminMessagesPage = () => {
     if (!token) return;
 
     try {
-      const response = await fetch(`https://librosfera.onrender.com//api/v1/mensajeria/conversaciones/${conversationId}`, {
+      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${conversationId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -200,7 +200,7 @@ const AdminMessagesPage = () => {
         
         // Mark as read (only on initial load, not during polling)
         if (!silent) {
-          await fetch(`https://librosfera.onrender.com//api/v1/mensajeria/conversaciones/${conversationId}/leer`, {
+          await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${conversationId}/leer`, {
             method: 'PATCH',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -249,7 +249,7 @@ const AdminMessagesPage = () => {
     try {
       // If we have a timestamp, we can ask the server for messages after that timestamp
       // This is more efficient than fetching all messages every time
-      let url = `https://librosfera.onrender.com//api/v1/mensajeria/conversaciones/${conversationId}`;
+      let url = `https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${conversationId}`;
       
       // If your API supports filtering by timestamp, uncomment this:
       // if (lastMessageTimestampRef.current) {
@@ -319,7 +319,7 @@ const AdminMessagesPage = () => {
       formData.append('contenido', newMessage);
       formData.append('tipo', 'mensaje');
 
-      const response = await fetch(`https://librosfera.onrender.com//api/v1/mensajeria/conversaciones/${selectedConversation._id}/mensajes`, {
+      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${selectedConversation._id}/mensajes`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -351,7 +351,7 @@ const AdminMessagesPage = () => {
     if (!token) return;
 
     try {
-      const response = await fetch(`https://librosfera.onrender.com//api/v1/mensajeria/conversaciones/${selectedConversation._id}/estado`, {
+      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${selectedConversation._id}/estado`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -380,7 +380,7 @@ const AdminMessagesPage = () => {
     if (!token) return;
 
     try {
-      const response = await fetch(`https://librosfera.onrender.com//api/v1/mensajeria/conversaciones/${selectedConversation._id}/asignar`, {
+      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${selectedConversation._id}/asignar`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
