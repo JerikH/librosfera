@@ -156,7 +156,7 @@ class DevolucionService {
    */
   async generarCodigoQRDevolucion(codigoDevolucion) {
     try{
-      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+      const baseUrl = process.env.FRONT_URL || 'http://localhost:3000';
       let qr_code = {url_rastreo: '', codigo: '', imagen_base64: ''};
       qr_code.url_rastreo = `${baseUrl}/devolucion/rastreo/${codigoDevolucion}`;
       qr_code.codigo = `QR-${codigoDevolucion}`;
