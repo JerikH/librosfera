@@ -1,1202 +1,835 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import CachedImage from '../CachedImage';
+import UserModal from './UserModal';
+import CreateAdminModal from './CreateAdminModal';
 
-const ManageReturns = () => {
-  const [returns, setReturns] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedReturn, setSelectedReturn] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
-  const [statistics, setStatistics] = useState(null);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
-  const [filters, setFilters] = useState({
-    estado: '',
-    cliente: '',
-    codigo: '',
-    fecha_desde: '',
-    fecha_hasta: ''
+const ManageUsers = () => {
+  // State declarations
+  const [users, setUsers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('view'); // 'view', 'edit', 'delete'
+  const [filterType, setFilterType] = useState('all'); // 'all', 'cliente', 'administrador', 'root'
+  const [pagination, setPagination] = useState({
+    total: 0,
+    pagina: 1,
+    limite: 10,
+    totalPaginas: 0
   });
-  const [showFilters, setShowFilters] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [showActionModal, setShowActionModal] = useState(false);
-  const [actionType, setActionType] = useState('');
-  const [actionData, setActionData] = useState({});
-  const [showCommunicationModal, setShowCommunicationModal] = useState(false);
-  const [communicationData, setCommunicationData] = useState({
-    tipo: 'email',
-    asunto: '',
-    mensaje: ''
-  });
+  const [editFormData, setEditFormData] = useState({});
+  const [formErrors, setFormErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
+  const [isUploadingProfilePic, setIsUploadingProfilePic] = useState(false);
+  const [currentUserType, setCurrentUserType] = useState(null);
+  const [isCreateAdminModalOpen, setIsCreateAdminModalOpen] = useState(false);
+  const [isMessageVisible, setIsMessageVisible] = useState(true);
 
-  // Estados de devolución con sus traducciones y colores
-  const estadosDevolucion = {
-    'solicitada': { label: 'Solicitada', color: 'bg-yellow-100 text-yellow-800', actions: ['aprobar', 'rechazar'] },
-    'aprobada': { label: 'Aprobada', color: 'bg-green-100 text-green-800', actions: ['recibir'] },
-    'rechazada': { label: 'Rechazada', color: 'bg-red-100 text-red-800', actions: [] },
-    'esperando_envio': { label: 'Esperando Envío', color: 'bg-blue-100 text-blue-800', actions: ['recibir'] },
-    'en_transito': { label: 'En Tránsito', color: 'bg-purple-100 text-purple-800', actions: ['recibir'] },
-    'recibida': { label: 'Recibida', color: 'bg-indigo-100 text-indigo-800', actions: ['inspeccionar'] },
-    'en_inspeccion': { label: 'En Inspección', color: 'bg-orange-100 text-orange-800', actions: ['inspeccionar'] },
-    'reembolso_aprobado': { label: 'Reembolso Aprobado', color: 'bg-emerald-100 text-emerald-800', actions: ['reembolsar'] },
-    'reembolso_procesando': { label: 'Procesando Reembolso', color: 'bg-cyan-100 text-cyan-800', actions: [] },
-    'reembolso_completado': { label: 'Reembolso Completado', color: 'bg-green-100 text-green-800', actions: [] },
-    'cerrada': { label: 'Cerrada', color: 'bg-gray-100 text-gray-800', actions: [] },
-    'cancelada': { label: 'Cancelada', color: 'bg-red-100 text-red-800', actions: [] }
-  };
+  // Constants
+  const API_BASE_URL = 'http://localhost:5000';
+  const DEFAULT_PROFILE_PIC = `${API_BASE_URL}/uploads/profiles/default.jpg`;
 
-  // Función para obtener cookie
+  useEffect(() => {
+    if (actionMessage.text && !isModalOpen) {
+      const timer = setTimeout(() => {
+        setIsMessageVisible(false);  // Hide the message after 5 seconds
+      }, 5000);
+
+      return () => clearTimeout(timer);  // Clean up the timeout if the component unmounts or the actionMessage changes
+    }
+  }, [actionMessage.text, isModalOpen]);
+  // Utility - Get cookie
   const getCookie = (name) => {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : null;
   };
 
-  // Función para obtener token de autorización
-  const getAuthToken = () => {
-    const dataCookie = getCookie('data');
-    if (!dataCookie) return null;
+  // Utility - Get auth token from cookie
+  const getAuthToken = useCallback(() => {
+    const dataCookie = getCookie("data");
+    if (!dataCookie) return '';
+    
     try {
       const parsedData = JSON.parse(dataCookie);
-      return parsedData.authToken;
-    } catch (error) {
-      console.error('Error parsing cookie:', error);
-      return null;
+      return parsedData.authToken || '';
+    } catch (e) {
+      console.error('Error parsing auth token:', e);
+      return '';
     }
-  };
-
-  // Función para cargar devoluciones
-  const loadReturns = async (page = 1, currentFilters = {}) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No se encontró token de autenticación');
-      }
-
-      const queryParams = new URLSearchParams({
-        page: page.toString(),
-        limit: pagination.limit.toString(),
-        incluir_venta: 'true',
-        ordenar: '-fecha_solicitud',
-        ...currentFilters
-      });
-
-      const response = await fetch(
-        `http://localhost:5000/api/v1/devoluciones/admin/todas?${queryParams}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.status === 'success') {
-        setReturns(data.data || []);
-        setPagination(prev => ({
-          ...prev,
-          page,
-          total: data.paginacion?.total || 0,
-          totalPages: data.paginacion?.totalPaginas || 0
-        }));
-      } else {
-        throw new Error(data.message || 'Error al cargar devoluciones');
-      }
-    } catch (error) {
-      console.error('Error loading returns:', error);
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Función para cargar estadísticas
-  const loadStatistics = async () => {
-    try {
-      const token = getAuthToken();
-      if (!token) return;
-
-      const response = await fetch(
-        'http://localhost:5000/api/v1/devoluciones/estadisticas',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'success') {
-          setStatistics(data.data);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading statistics:', error);
-    }
-  };
-
-  // Función para obtener detalles de una devolución
-  const loadReturnDetails = async (codigo) => {
-    try {
-      const token = getAuthToken();
-      if (!token) return;
-
-      const response = await fetch(
-        `http://localhost:5000/api/v1/devoluciones/${codigo}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'success') {
-          setSelectedReturn(data.data);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading return details:', error);
-    }
-  };
-
-  // Función para ejecutar acciones administrativas
-  const executeAction = async (action, codigo, data = {}) => {
-    setActionLoading(true);
-    try {
-      const token = getAuthToken();
-      if (!token) return false;
-
-      let url = '';
-      let method = 'PATCH';
-      let body = JSON.stringify(data);
-
-      switch (action) {
-        case 'aprobar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/aprobar`;
-          break;
-        case 'rechazar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/rechazar`;
-          break;
-        case 'recibir':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/recibir`;
-          break;
-        case 'reembolsar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/reembolsar`;
-          break;
-        case 'cancelar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}`;
-          method = 'DELETE';
-          break;
-        case 'inspeccionar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/items/${data.idItem}/inspeccionar`;
-          break;
-        default:
-          throw new Error('Acción no válida');
-      }
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: body
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.status === 'success') {
-          await loadReturns(pagination.page, filters);
-          if (selectedReturn) {
-            await loadReturnDetails(selectedReturn.devolucion?.codigo_devolucion);
-          }
-          return true;
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error(`Error executing ${action}:`, error);
-      return false;
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Función para agregar comunicación
-  const addCommunication = async (codigo, commData) => {
-    try {
-      const token = getAuthToken();
-      if (!token) return false;
-
-      const response = await fetch(
-        `http://localhost:5000/api/v1/devoluciones/${codigo}/comunicaciones`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(commData)
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.status === 'success';
-      }
-      return false;
-    } catch (error) {
-      console.error('Error adding communication:', error);
-      return false;
-    }
-  };
-
-  // Cargar datos al inicio
-  useEffect(() => {
-    loadReturns(1, filters);
-    loadStatistics();
   }, []);
 
-  // Función para manejar cambio de filtros
-  const handleFilterChange = (newFilters) => {
-    setFilters(newFilters);
-    loadReturns(1, newFilters);
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
-  // Función para manejar cambio de página
-  const handlePageChange = (newPage) => {
-    loadReturns(newPage, filters);
-  };
-
-  // Función para formatear fecha
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  // Función para formatear moneda
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Función para formatear tiempo de procesamiento
-  const formatProcessingTime = (milliseconds) => {
-    if (!milliseconds) return '-';
-    const days = Math.floor(milliseconds / (1000 * 60 * 60 * 24));
-    return `${days} días`;
-  };
-
-  // Componente de estado
-  const StatusBadge = ({ estado }) => {
-    const estadoInfo = estadosDevolucion[estado] || { label: estado, color: 'bg-gray-100 text-gray-800' };
-    
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${estadoInfo.color}`}>
-        {estadoInfo.label}
-      </span>
-    );
-  };
-
-  // Modal de acciones
-  const ActionModal = () => {
-    const [inputData, setInputData] = useState(actionData);
-
-    const handleSubmit = async () => {
-      let success = false;
+  // Get current user type
+  const getCurrentUserType = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/v1/auth/verify-token`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Accept': 'application/json'
+        }
+      });
       
-      switch (actionType) {
-        case 'aprobar':
-          success = await executeAction('aprobar', selectedReturn.devolucion.codigo_devolucion, {
-            notas: inputData.notas || ''
-          });
-          break;
-        case 'rechazar':
-          success = await executeAction('rechazar', selectedReturn.devolucion.codigo_devolucion, {
-            motivo: inputData.motivo || ''
-          });
-          break;
-        case 'recibir':
-          success = await executeAction('recibir', selectedReturn.devolucion.codigo_devolucion, {
-            notas: inputData.notas || ''
-          });
-          break;
-        case 'reembolsar':
-          success = await executeAction('reembolsar', selectedReturn.devolucion.codigo_devolucion);
-          break;
-        case 'cancelar':
-          success = await executeAction('cancelar', selectedReturn.devolucion.codigo_devolucion, {
-            motivo: inputData.motivo || ''
-          });
-          break;
-        case 'inspeccionar':
-          success = await executeAction('inspeccionar', selectedReturn.devolucion.codigo_devolucion, {
-            idItem: inputData.idItem,
-            resultado: inputData.resultado,
-            notas: inputData.notas || '',
-            porcentajeReembolso: inputData.porcentajeReembolso
-          });
-          break;
+      if (response.status === 200 && response.data.user) {
+        setCurrentUserType(response.data.user.tipo_usuario);
       }
+    } catch (error) {
+      console.error('Error fetching current user type:', error);
+    }
+  }, [API_BASE_URL, getAuthToken]);
 
-      if (success) {
-        alert('Acción ejecutada exitosamente');
-        setShowActionModal(false);
+  // Initial data loading
+  useEffect(() => {
+    getCurrentUserType();
+    fetchUsers();
+  }, [pagination.pagina, filterType, searchTerm]);
+
+  // Fetch users from API
+  const fetchUsers = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Base URL with pagination and filter
+      let url = `${API_BASE_URL}/api/v1/users?page=1&limit=100`; // Get more records for client-side filtering
+      
+      // Add filter type if not 'all'
+      if (filterType !== 'all') {
+        url += `&tipo=${filterType}`;
+      }
+      
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (response.data.status === 'success') {
+        let filteredUsers = response.data.data;
+        
+        // Apply client-side search if search term exists
+        if (searchTerm.trim()) {
+          const term = searchTerm.trim().toLowerCase();
+          filteredUsers = filteredUsers.filter(user => 
+            (user.usuario && user.usuario.toLowerCase().includes(term)) || 
+            (user.email && user.email.toLowerCase().includes(term)) ||
+            (user.nombres && user.nombres.toLowerCase().includes(term)) ||
+            (user.apellidos && user.apellidos.toLowerCase().includes(term))
+          );
+        }
+        
+        // Update total count for pagination
+        const totalCount = filteredUsers.length;
+        const pageSize = pagination.limite;
+        const currentPage = pagination.pagina;
+        
+        // Calculate slice of data for current page
+        const startIndex = (currentPage - 1) * pageSize;
+        const paginatedUsers = filteredUsers.slice(startIndex, startIndex + pageSize);
+        
+        // Set users and update pagination
+        setUsers(paginatedUsers);
+        setPagination({
+          ...pagination,
+          total: totalCount,
+          totalPaginas: Math.ceil(totalCount / pageSize)
+        });
       } else {
-        alert('Error al ejecutar la acción');
+        throw new Error('Error al obtener usuarios');
       }
-    };
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setActionMessage({
+        type: 'error',
+        text: 'Error al cargar usuarios. Por favor, inténtelo de nuevo.'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [API_BASE_URL, filterType, getAuthToken, pagination.limite, pagination.pagina, searchTerm]);
 
-    return (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-          <div className="mt-3">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 capitalize">
-              {actionType} Devolución
-            </h3>
-            
-            {(actionType === 'rechazar' || actionType === 'cancelar') && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Motivo *
-                </label>
-                <textarea
-                  value={inputData.motivo || ''}
-                  onChange={(e) => setInputData({...inputData, motivo: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  required
-                />
-              </div>
-            )}
+  // Fetch user details
+  const fetchUserDetails = useCallback(async (userId) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/v1/users/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (response.data.status === 'success') {
+        return response.data.data;
+      } else {
+        throw new Error('Error al obtener detalles del usuario');
+      }
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+      setActionMessage({
+        type: 'error',
+        text: 'Error al cargar detalles del usuario.'
+      });
+      return null;
+    }
+  }, [API_BASE_URL, getAuthToken]);
 
-            {(actionType === 'aprobar' || actionType === 'recibir') && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notas
-                </label>
-                <textarea
-                  value={inputData.notas || ''}
-                  onChange={(e) => setInputData({...inputData, notas: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                />
-              </div>
-            )}
-
-            {actionType === 'inspeccionar' && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Resultado *
-                  </label>
-                  <select
-                    value={inputData.resultado || ''}
-                    onChange={(e) => setInputData({...inputData, resultado: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Seleccionar resultado</option>
-                    <option value="aprobado">Aprobado</option>
-                    <option value="rechazado">Rechazado</option>
-                    <option value="aprobado_parcial">Aprobado Parcial</option>
-                  </select>
-                </div>
-
-                {inputData.resultado === 'aprobado_parcial' && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Porcentaje de Reembolso (0-100) *
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={inputData.porcentajeReembolso || ''}
-                      onChange={(e) => setInputData({...inputData, porcentajeReembolso: parseInt(e.target.value)})}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                )}
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notas de Inspección
-                  </label>
-                  <textarea
-                    value={inputData.notas || ''}
-                    onChange={(e) => setInputData({...inputData, notas: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows={3}
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowActionModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-                disabled={actionLoading}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-              >
-                {actionLoading ? 'Procesando...' : 'Confirmar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  // Handle search action
+  const handleSearch = (e) => {
+    e.preventDefault();
+    fetchUsers();
   };
 
-  if (loading && returns.length === 0) {
-    return (
-      <div className="p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Cargando devoluciones...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Handle pagination
+  const handlePageChange = (newPage) => {
+    if (newPage > 0 && newPage <= pagination.totalPaginas) {
+      setPagination(prev => ({ ...prev, pagina: newPage }));
+    }
+  };
+
+  // Determine profile image source
+  const getProfileImageSrc = useCallback((user) => {
+    if (!user) return DEFAULT_PROFILE_PIC;
+    
+    if (user.foto_perfil) {
+      // Check if the URL is already absolute
+      return user.foto_perfil.startsWith('http') 
+        ? user.foto_perfil 
+        : `${API_BASE_URL}${user.foto_perfil.startsWith('/') ? '' : '/'}${user.foto_perfil}`;
+    }
+    
+    return DEFAULT_PROFILE_PIC;
+  }, [API_BASE_URL, DEFAULT_PROFILE_PIC]);
+
+  // Prepare user for editing
+  const prepareUserForEdit = useCallback((user) => {
+    if (!user) return;
+    
+    setEditFormData({
+      nombres: user.nombres || '',
+      apellidos: user.apellidos || '',
+      DNI: user.DNI || '',
+      telefono: user.telefono || '',
+      email: user.email || '',
+      activo: user.activo || false,
+      cargo: user.cargo || '',
+    });
+  }, []);
+
+  // Handle profile picture upload
+  const uploadProfilePic = useCallback(async (file) => {
+    if (!file || !selectedUser) return;
+    
+    setIsUploadingProfilePic(true);
+    setActionMessage({ type: '', text: '' });
+    
+    try {
+      const formData = new FormData();
+      formData.append('foto_perfil', file);
+      
+      const response = await axios.post(
+        `${API_BASE_URL}/api/v1/users/${selectedUser._id}/foto`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Accept': 'application/json'
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        setActionMessage({
+          type: 'success',
+          text: 'Foto de perfil actualizada correctamente'
+        });
+        
+        const newProfilePic = response.data.data.foto_perfil;
+        
+        // Update the user in the list
+        setUsers(prev => prev.map(user => 
+          user._id === selectedUser._id 
+            ? { ...user, foto_perfil: newProfilePic } 
+            : user
+        ));
+        
+        // Update selected user
+        setSelectedUser(prev => ({
+          ...prev,
+          foto_perfil: newProfilePic
+        }));
+      } else {
+        throw new Error('Error al actualizar la foto de perfil');
+      }
+    } catch (error) {
+      console.error('Error uploading profile pic:', error);
+      setActionMessage({
+        type: 'error',
+        text: 'Error al subir la foto de perfil: ' + 
+          (error.response?.data?.message || error.message || 'Error desconocido')
+      });
+    } finally {
+      setIsUploadingProfilePic(false);
+    }
+  }, [API_BASE_URL, getAuthToken, selectedUser]);
+
+  // Handle profile picture input change
+  const handleProfilePicChange = useCallback((e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedUser) return;
+    
+    uploadProfilePic(file);
+  }, [selectedUser, uploadProfilePic]);
+
+  // Handle profile picture deletion
+  const handleDeleteProfilePic = useCallback(async () => {
+    if (!selectedUser) return;
+    
+    if (!window.confirm('¿Está seguro que desea eliminar la foto de perfil?')) {
+      return;
+    }
+    
+    setIsUploadingProfilePic(true);
+    setActionMessage({ type: '', text: '' });
+    
+    try {
+      const response = await axios.delete(
+        `${API_BASE_URL}/api/v1/users/${selectedUser._id}/foto`,
+        {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Accept': 'application/json'
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        setActionMessage({
+          type: 'success',
+          text: 'Foto de perfil eliminada correctamente'
+        });
+        
+        const defaultPic = response.data.data.foto_perfil || 'default.jpg';
+        
+        // Update the user in the list and selected user
+        setUsers(prev => prev.map(user => 
+          user._id === selectedUser._id 
+            ? { ...user, foto_perfil: defaultPic } 
+            : user
+        ));
+        
+        setSelectedUser(prev => ({
+          ...prev,
+          foto_perfil: defaultPic
+        }));
+      } else {
+        throw new Error('Error al eliminar la foto de perfil');
+      }
+    } catch (error) {
+      console.error('Error deleting profile pic:', error);
+      setActionMessage({
+        type: 'error',
+        text: 'Error al eliminar la foto de perfil: ' + 
+          (error.response?.data?.message || error.message || 'Error desconocido')
+      });
+    } finally {
+      setIsUploadingProfilePic(false);
+    }
+  }, [API_BASE_URL, getAuthToken, selectedUser]);
+
+  // Format date
+  const formatDate = useCallback((dateString) => {
+    if (!dateString) return 'N/A';
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return dateString;
+    }
+  }, []);
+
+  // Get user type label
+  const getUserTypeLabel = useCallback((type) => {
+    switch(type) {
+      case 'cliente':
+        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Cliente</span>;
+      case 'administrador':
+        return <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">Administrador</span>;
+      case 'root':
+        return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Root</span>;
+      default:
+        return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">{type}</span>;
+    }
+  }, []);
+
+  // Check if user can be modified
+  const canModifyUser = useCallback((user) => {
+    // Root users can modify both clients and administrators, but not other root users
+    if (currentUserType === 'root') {
+      return user && (user.tipo_usuario === 'cliente' || user.tipo_usuario === 'administrador');
+    }
+    
+    // Administrators can only modify clients
+    return user && user.tipo_usuario === 'cliente';
+  }, [currentUserType]);
+
+  // Open user modal
+  const openModal = useCallback(async (mode, user = null) => {
+    if (user) {
+      if (mode === 'view' || mode === 'edit' || mode === 'delete') {
+        setIsLoading(true);
+        const userDetails = await fetchUserDetails(user._id);
+        setSelectedUser(userDetails);
+        
+        if (mode === 'edit') {
+          prepareUserForEdit(userDetails);
+        }
+        
+        setIsLoading(false);
+      } else {
+        setSelectedUser(user);
+      }
+    }
+    
+    setModalMode(mode);
+    setIsModalOpen(true);
+  }, [fetchUserDetails, prepareUserForEdit]);
+
+  // Handle form input change
+  const handleInputChange = useCallback((e) => {
+    const { name, value, type, checked } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  }, []);
+
+  // Handle form submission
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setFormErrors({});
+    
+    try {
+      const response = await axios.put(
+        `${API_BASE_URL}/api/v1/users/${selectedUser._id}`,
+        editFormData,
+        {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        setActionMessage({
+          type: 'success',
+          text: 'Usuario actualizado correctamente'
+        });
+        
+        // Update the user in the list
+        setUsers(prev => prev.map(user => 
+          user._id === selectedUser._id ? { ...user, ...editFormData } : user
+        ));
+        
+        // Close modal after a short delay
+        setTimeout(() => {
+          setIsModalOpen(false);
+          fetchUsers(); // Refresh the list
+        }, 1500);
+      } else {
+        throw new Error('Error al actualizar usuario');
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      setFormErrors({ general: 'Error al actualizar el usuario. Por favor, inténtelo de nuevo.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [API_BASE_URL, editFormData, fetchUsers, getAuthToken, selectedUser]);
+
+  // Handle user activation/deactivation
+  const handleToggleUserStatus = useCallback(async () => {
+    setIsSubmitting(true);
+    
+    try {
+      if (selectedUser.activo) {
+        // Deactivate user
+        const response = await axios.delete(
+          `${API_BASE_URL}/api/v1/users/${selectedUser._id}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${getAuthToken()}`,
+              'Accept': 'application/json'
+            }
+          }
+        );
+        
+        if (response.data.status === 'success') {
+          setActionMessage({
+            type: 'success',
+            text: 'Usuario desactivado correctamente'
+          });
+          
+          // Update user status in the list
+          setUsers(prev => prev.map(user => 
+            user._id === selectedUser._id ? { ...user, activo: false } : user
+          ));
+        } else {
+          throw new Error('Error al desactivar usuario');
+        }
+      } else {
+        // Activate user
+        const response = await axios.put(
+          `${API_BASE_URL}/api/v1/users/${selectedUser._id}`,
+          { activo: true },
+          {
+            headers: {
+              'Authorization': `Bearer ${getAuthToken()}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        if (response.data.status === 'success') {
+          setActionMessage({
+            type: 'success',
+            text: 'Usuario activado correctamente'
+          });
+          
+          // Update user status in the list
+          setUsers(prev => prev.map(user => 
+            user._id === selectedUser._id ? { ...user, activo: true } : user
+          ));
+        } else {
+          throw new Error('Error al activar usuario');
+        }
+      }
+      
+      // Close modal after a short delay
+      setTimeout(() => {
+        setIsModalOpen(false);
+        fetchUsers(); // Refresh the list
+      }, 1500);
+    } catch (error) {
+      console.error('Error toggling user status:', error);
+      setActionMessage({
+        type: 'error',
+        text: `Error al ${selectedUser.activo ? 'desactivar' : 'activar'} al usuario.`
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [API_BASE_URL, fetchUsers, getAuthToken, selectedUser]);
+
+  // Handle Create Admin Modal
+  const handleCreateAdminModal = (shouldRefresh = false) => {
+    setIsCreateAdminModalOpen(false);
+    if (shouldRefresh) {
+      fetchUsers();
+    }
+  };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Gestión de Devoluciones</h1>
-        <p className="text-gray-600">Administra y procesa las devoluciones del sistema</p>
-      </div>
-
-      {/* Estadísticas */}
-      {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Total por Estado</p>
-                <div className="text-xs text-gray-400 mt-1">
-                  {statistics.por_estado?.map((estado, index) => (
-                    <div key={index}>
-                      {estadosDevolucion[estado._id]?.label || estado._id}: {estado.cantidad}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Motivos Frecuentes</p>
-                <div className="text-xs text-gray-400 mt-1">
-                  {statistics.motivos_frecuentes?.slice(0, 2).map((motivo, index) => (
-                    <div key={index}>
-                      {motivo._id}: {motivo.cantidad}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="flex items-center">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Tiempo Promedio</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {statistics.tiempos_procesamiento?.tiempo_promedio || 0} días
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Rango de Tiempo</p>
-                <p className="text-xs text-gray-600">
-                  Min: {statistics.tiempos_procesamiento?.tiempo_minimo || 0} días
-                </p>
-                <p className="text-xs text-gray-600">
-                  Max: {statistics.tiempos_procesamiento?.tiempo_maximo || 0} días
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Filtros */}
-      <div className="bg-white rounded-lg shadow mb-6">
-        <div className="p-4 border-b border-gray-200">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center space-x-2 text-gray-700 hover:text-gray-900"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
-            </svg>
-            <span>Filtros</span>
-            <svg className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+    <div className="flex-1 p-6 overflow-y-auto bg-gray-100">
+      {/* Header with Create Admin button */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-gray-800">Gestionar Usuarios</h1>
+          {/* Show Create Admin button only for root users */}
+          {currentUserType === 'root' && (
+            <button
+              onClick={() => setIsCreateAdminModalOpen(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Crear Administrador
+            </button>
+          )}
         </div>
         
-        {showFilters && (
-          <div className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                <select
-                  value={filters.estado}
-                  onChange={(e) => handleFilterChange({ ...filters, estado: e.target.value })}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Todos los estados</option>
-                  {Object.entries(estadosDevolucion).map(([key, info]) => (
-                    <option key={key} value={key}>{info.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Código</label>
-                <input
-                  type="text"
-                  value={filters.codigo}
-                  onChange={(e) => handleFilterChange({ ...filters, codigo: e.target.value })}
-                  placeholder="Código de devolución..."
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-                <input
-                  type="text"
-                  value={filters.cliente}
-                  onChange={(e) => handleFilterChange({ ...filters, cliente: e.target.value })}
-                  placeholder="ID del cliente..."
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
-                <input
-                  type="date"
-                  value={filters.fecha_desde}
-                  onChange={(e) => handleFilterChange({ ...filters, fecha_desde: e.target.value })}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
-                <input
-                  type="date"
-                  value={filters.fecha_hasta}
-                  onChange={(e) => handleFilterChange({ ...filters, fecha_hasta: e.target.value })}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
+        <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
+          {/* Filtros de tipo de usuario */}
+          <div className="flex rounded-md overflow-hidden border border-gray-300">
+            <button
+              onClick={() => setFilterType('all')}
+              className={`px-3 py-1 text-sm ${filterType === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setFilterType('cliente')}
+              className={`px-3 py-1 text-sm ${filterType === 'cliente' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            >
+              Clientes
+            </button>
+            <button
+              onClick={() => setFilterType('administrador')}
+              className={`px-3 py-1 text-sm ${filterType === 'administrador' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            >
+              Administradores
+            </button>
+            <button
+              onClick={() => setFilterType('root')}
+              className={`px-3 py-1 text-sm ${filterType === 'root' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            >
+              Root
+            </button>
           </div>
-        )}
+          
+          {/* Búsqueda */}
+          <form onSubmit={handleSearch} className="relative flex-1 sm:w-64">
+            <input
+              type="text"
+              placeholder="Buscar por usuario o email"
+              className="pl-9 pr-4 py-2 border border-gray-300 rounded-md w-full"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <span className="absolute left-3 top-2.5 text-gray-400">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <button 
+              type="submit" 
+              className="absolute right-2 top-2 text-blue-600 hover:text-blue-800"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </form>
+        </div>
       </div>
 
-      {/* Lista de devoluciones */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center">
-            <svg className="w-5 h-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-            <span className="text-red-700">{error}</span>
-          </div>
+      {/* Status Messages */}
+      {isMessageVisible && actionMessage.text && !isModalOpen && (
+        <div className={`p-4 mb-6 rounded ${
+          actionMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+        }`}>
+          {actionMessage.text}
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {returns.length === 0 ? (
-          <div className="p-8 text-center">
-            <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-            </svg>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No hay devoluciones</h3>
-            <p className="text-gray-500">No se encontraron devoluciones con los filtros aplicados.</p>
+      {/* Users Table */}
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 text-center">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-700">Cargando usuarios...</p>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="p-6 text-center">
+            <p className="text-gray-600">No se encontraron usuarios que coincidan con la búsqueda.</p>
           </div>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Código / Cliente
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Items / Monto
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Venta Original
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
-                    </th>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Usuario
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Tipo
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fecha de registro
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {users.map((user) => (
+                  <tr key={user._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center text-gray-600 font-medium">
+                          <CachedImage 
+                            src={getProfileImageSrc(user)}
+                            alt={user.usuario || 'Usuario'} 
+                            className="w-full h-full object-cover"
+                            fallbackSrc={DEFAULT_PROFILE_PIC}
+                            fallbackComponent={
+                              <div className="w-full h-full flex items-center justify-center bg-yellow-200">
+                                <span className="text-lg font-bold text-yellow-500">
+                                  {user.nombres ? user.nombres.charAt(0) : user.usuario?.charAt(0).toUpperCase() || 'U'}
+                                </span>
+                              </div>
+                            }
+                          />
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{user.usuario}</div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getUserTypeLabel(user.tipo_usuario)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(user.fecha_registro)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {user.activo ? (
+                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                          Activo
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                          Inactivo
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => openModal('view', user)}
+                        className="text-blue-600 hover:text-blue-900 mr-3"
+                      >
+                        Ver
+                      </button>
+                      {canModifyUser(user) && (
+                        <>
+                          <button
+                            onClick={() => openModal('edit', user)}
+                            className="text-indigo-600 hover:text-indigo-900 mr-3"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => openModal('delete', user)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            {user.activo ? 'Desactivar' : 'Activar'}
+                          </button>
+                        </>
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {returns.map((devolucion) => (
-                    <tr key={devolucion._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {devolucion.codigo_devolucion}
-                        </div>
-                        {devolucion.id_cliente && (
-                          <div className="text-sm text-gray-500">
-                            {devolucion.id_cliente.nombres} {devolucion.id_cliente.apellidos}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge estado={devolucion.estado} />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {devolucion.items?.length || 0} item(s)
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {formatCurrency(devolucion.totales?.monto_items_devolucion || 0)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {devolucion.id_venta ? (
-                          <div className="text-sm">
-                            <div className="text-gray-900">{devolucion.id_venta.numero_venta}</div>
-                            <div className="text-gray-500">{formatCurrency(devolucion.id_venta.totales?.total_final || 0)}</div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(devolucion.fecha_solicitud)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => {
-                            setSelectedReturn({ devolucion });
-                            setShowDetails(true);
-                            loadReturnDetails(devolucion.codigo_devolucion);
-                          }}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          Ver detalles
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Paginación */}
-            {pagination.totalPages > 1 && (
-              <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 flex justify-between sm:hidden">
-                    <button
-                      onClick={() => handlePageChange(pagination.page - 1)}
-                      disabled={pagination.page === 1}
-                      className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Anterior
-                    </button>
-                    <button
-                      onClick={() => handlePageChange(pagination.page + 1)}
-                      disabled={pagination.page === pagination.totalPages}
-                      className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Siguiente
-                    </button>
-                  </div>
-                  <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm text-gray-700">
-                        Mostrando <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> a{' '}
-                        <span className="font-medium">
-                          {Math.min(pagination.page * pagination.limit, pagination.total)}
-                        </span> de{' '}
-                        <span className="font-medium">{pagination.total}</span> resultados
-                      </p>
-                    </div>
-                    <div>
-                      <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                        <button
-                          onClick={() => handlePageChange(pagination.page - 1)}
-                          disabled={pagination.page === 1}
-                          className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                        >
-                          Anterior
-                        </button>
-                        {[...Array(Math.min(pagination.totalPages, 10))].map((_, i) => {
-                          const pageNum = i + 1;
-                          return (
-                            <button
-                              key={pageNum}
-                              onClick={() => handlePageChange(pageNum)}
-                              className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                                pagination.page === pageNum
-                                  ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                                  : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                              }`}
-                            >
-                              {pageNum}
-                            </button>
-                          );
-                        })}
-                        <button
-                          onClick={() => handlePageChange(pagination.page + 1)}
-                          disabled={pagination.page === pagination.totalPages}
-                          className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                        >
-                          Siguiente
-                        </button>
-                      </nav>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
+      
+      {/* Pagination */}
+      {!isLoading && pagination.totalPaginas > 1 && (
+        <div className="flex justify-between items-center mt-6">
+          <div className="text-sm text-gray-600">
+            Mostrando {(pagination.pagina - 1) * pagination.limite + 1} - {Math.min(pagination.pagina * pagination.limite, pagination.total)} de {pagination.total} resultados
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => handlePageChange(pagination.pagina - 1)}
+              disabled={pagination.pagina === 1}
+              className={`px-3 py-1 rounded ${
+                pagination.pagina === 1 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                : 'bg-white text-blue-600 hover:bg-blue-50 border border-gray-300'
+              }`}
+            >
+              Anterior
+            </button>
+            
+            {Array.from({ length: Math.min(5, pagination.totalPaginas) }, (_, i) => {
+              // Logic for showing 5 pages around the current page
+              const totalPages = pagination.totalPaginas;
+              const currentPage = pagination.pagina;
+              
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
 
-      {/* Modal de detalles */}
-      {showDetails && selectedReturn && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-10 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-900">
-                Gestión de Devolución - {selectedReturn.devolucion?.codigo_devolucion}
-              </h3>
-              <button
-                onClick={() => setShowDetails(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="max-h-96 overflow-y-auto">
-              {selectedReturn.devolucion ? (
-                <div className="space-y-6">
-                  {/* Estado y acciones disponibles */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Estado Actual</h4>
-                      <StatusBadge estado={selectedReturn.devolucion.estado} />
-                      
-                      {/* Acciones disponibles */}
-                      <div className="mt-4">
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">Acciones Disponibles:</h5>
-                        <div className="flex flex-wrap gap-2">
-                          {estadosDevolucion[selectedReturn.devolucion.estado]?.actions?.map((action) => (
-                            <button
-                              key={action}
-                              onClick={() => {
-                                if (action === 'inspeccionar') {
-                                  if (selectedReturn.devolucion.items?.[0]) {
-                                    setActionType(action);
-                                    setActionData({ idItem: selectedReturn.devolucion.items[0]._id });
-                                    setShowActionModal(true);
-                                  }
-                                } else {
-                                  setActionType(action);
-                                  setActionData({});
-                                  setShowActionModal(true);
-                                }
-                              }}
-                              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 capitalize"
-                            >
-                              {action}
-                            </button>
-                          ))}
-                          <button
-                            onClick={() => {
-                              setActionType('cancelar');
-                              setActionData({});
-                              setShowActionModal(true);
-                            }}
-                            className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCommunicationData({ tipo: 'email', asunto: '', mensaje: '' });
-                              setShowCommunicationModal(true);
-                            }}
-                            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                          >
-                            Agregar Comunicación
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Información de la Venta Original</h4>
-                      {selectedReturn.venta_info ? (
-                        <div className="bg-blue-50 p-3 rounded-lg">
-                          <div className="text-sm space-y-1">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Número de Venta:</span>
-                              <span className="font-medium text-gray-900">{selectedReturn.venta_info.numero_venta}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Fecha:</span>
-                              <span className="font-medium text-gray-900">{formatDate(selectedReturn.venta_info.fecha_creacion)}</span>
-                            </div>
-                            <div className="flex justify-between border-t pt-2 mt-2">
-                              <span className="text-gray-600">Total de la Compra:</span>
-                              <span className="font-bold text-lg text-blue-600">{formatCurrency(selectedReturn.venta_info.totales?.total_final || 0)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">
-                          <p>Información de venta no disponible</p>
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Resumen de Devolución</h4>
-                      <div className="bg-gray-50 p-3 rounded-lg">
-                        <div className="text-sm space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Monto a Devolver:</span>
-                            <span className="font-medium text-gray-900">{formatCurrency(selectedReturn.devolucion.totales?.monto_items_devolucion || 0)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Monto Aprobado:</span>
-                            <span className="font-medium text-green-600">{formatCurrency(selectedReturn.devolucion.totales?.monto_aprobado_reembolso || 0)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Monto Reembolsado:</span>
-                            <span className="font-medium text-blue-600">{formatCurrency(selectedReturn.devolucion.totales?.monto_reembolsado || 0)}</span>
-                          </div>
-                          {selectedReturn.venta_info?.totales?.total_final && selectedReturn.devolucion.totales?.monto_items_devolucion && (
-                            <div className="flex justify-between border-t pt-2 mt-2">
-                              <span className="text-gray-600">% del Total:</span>
-                              <span className="font-bold text-orange-600">
-                                {((selectedReturn.devolucion.totales.monto_items_devolucion / selectedReturn.venta_info.totales.total_final) * 100).toFixed(1)}%
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Items */}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Items de la Devolución</h4>
-                    <div className="space-y-3">
-                      {selectedReturn.devolucion.items?.map((item, index) => (
-                        <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <h5 className="font-medium text-gray-900 text-lg mb-2">{item.info_libro?.titulo}</h5>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <p className="text-sm text-gray-600 mb-1">
-                                    <span className="font-medium">Autor:</span> {item.info_libro?.autor}
-                                  </p>
-                                  {item.info_libro?.isbn && (
-                                    <p className="text-sm text-gray-600 mb-1">
-                                      <span className="font-medium">ISBN:</span> {item.info_libro?.isbn}
-                                    </p>
-                                  )}
-                                  <p className="text-sm text-gray-600 mb-1">
-                                    <span className="font-medium">Cantidad Comprada:</span> {item.cantidad_comprada}
-                                  </p>
-                                  <p className="text-sm text-blue-600 mb-1">
-                                    <span className="font-medium">Cantidad a Devolver:</span> {item.cantidad_a_devolver}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-gray-600 mb-1">
-                                    <span className="font-medium">Motivo:</span> {item.motivo}
-                                  </p>
-                                  {item.descripcion_problema && (
-                                    <p className="text-sm text-gray-600 mb-1">
-                                      <span className="font-medium">Descripción:</span> {item.descripcion_problema}
-                                    </p>
-                                  )}
-                                  <p className="text-sm text-green-600">
-                                    <span className="font-medium">Reembolso Final:</span> {formatCurrency(item.monto_items_devolucion|| 0)}
-                                  </p>
-                                </div>
-                              </div>
-
-                              {/* Información de inspección */}
-                              {item.inspeccion && (
-                                <div className="mt-3 p-3 bg-orange-50 rounded border border-orange-200">
-                                  <h6 className="font-medium text-orange-800 mb-2">Resultado de Inspección</h6>
-                                  <div className="text-sm space-y-1">
-                                    <p><span className="text-orange-700 font-medium">Resultado:</span> {item.inspeccion.resultado}</p>
-                                    {item.inspeccion.notas && (
-                                      <p><span className="text-orange-700 font-medium">Notas:</span> {item.inspeccion.notas}</p>
-                                    )}
-                                    <p><span className="text-orange-700 font-medium">Fecha:</span> {formatDate(item.inspeccion.fecha)}</p>
-                                    {item.inspeccion.porcentaje_reembolso && (
-                                      <p><span className="text-orange-700 font-medium">% Reembolso:</span> {item.inspeccion.porcentaje_reembolso}%</p>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="ml-4 flex flex-col items-end space-y-2">
-                              {/* Estado del item */}
-                              <StatusBadge estado={item.estado_item} />
-                              
-                              {/* Botón de inspección si aplica */}
-                              {!item.inspeccion && selectedReturn.devolucion.estado === 'en_inspeccion' && (
-                                <button
-                                  onClick={() => {
-                                    setActionType('inspeccionar');
-                                    setActionData({ idItem: item._id });
-                                    setShowActionModal(true);
-                                  }}
-                                  className="px-3 py-2 bg-orange-600 text-white text-sm rounded hover:bg-orange-700"
-                                >
-                                  Inspeccionar
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Historial */}
-                  {selectedReturn.devolucion.historial && selectedReturn.devolucion.historial.length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Historial</h4>
-                      <div className="space-y-2">
-                        {selectedReturn.devolucion.historial.map((evento, index) => (
-                          <div key={index} className="flex items-start space-x-3 text-sm">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                            <div className="flex-1">
-                              <p className="text-gray-900">{evento.descripcion}</p>
-                              <p className="text-gray-500">{formatDate(evento.fecha)}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Documentos */}
-                  {selectedReturn.devolucion.documentos && selectedReturn.devolucion.documentos.length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Documentos</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {selectedReturn.devolucion.documentos.map((doc, index) => (
-                          <div key={index} className="border border-gray-200 rounded-lg p-3">
-                            <div className="flex items-center mb-2">
-                              <svg className="w-4 h-4 text-gray-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              <span className="text-xs text-gray-600">{doc.tipo}</span>
-                            </div>
-                            <a 
-                              href={doc.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-sm"
-                            >
-                              Ver documento
-                            </a>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {formatDate(doc.fecha_subida)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-gray-600">Cargando detalles...</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end mt-6">
-              <button
-                onClick={() => setShowDetails(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-              >
-                Cerrar
-              </button>
-            </div>
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => handlePageChange(pageNum)}
+                  className={`px-3 py-1 rounded ${
+                    pageNum === currentPage
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-blue-600 hover:bg-blue-50 border border-gray-300'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            
+            <button
+              onClick={() => handlePageChange(pagination.pagina + 1)}
+              disabled={pagination.pagina === pagination.totalPaginas}
+              className={`px-3 py-1 rounded ${
+                pagination.pagina === pagination.totalPaginas
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-white text-blue-600 hover:bg-blue-50 border border-gray-300'
+              }`}
+            >
+              Siguiente
+            </button>
           </div>
         </div>
       )}
-
-      {/* Modal de acciones */}
-      {showActionModal && <ActionModal />}
-
-      {/* Modal de comunicación */}
-      {showCommunicationModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">
-                Agregar Comunicación
-              </h3>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo *
-                </label>
-                <select
-                  value={communicationData.tipo}
-                  onChange={(e) => setCommunicationData({...communicationData, tipo: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="email">Email</option>
-                  <option value="sms">SMS</option>
-                  <option value="llamada">Llamada</option>
-                  <option value="nota_interna">Nota Interna</option>
-                </select>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Asunto *
-                </label>
-                <input
-                  type="text"
-                  value={communicationData.asunto}
-                  onChange={(e) => setCommunicationData({...communicationData, asunto: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mensaje *
-                </label>
-                <textarea
-                  value={communicationData.mensaje}
-                  onChange={(e) => setCommunicationData({...communicationData, mensaje: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={4}
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => setShowCommunicationModal(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={async () => {
-                    if (communicationData.asunto && communicationData.mensaje) {
-                      const success = await addCommunication(
-                        selectedReturn.devolucion.codigo_devolucion,
-                        communicationData
-                      );
-                      if (success) {
-                        alert('Comunicación agregada exitosamente');
-                        setShowCommunicationModal(false);
-                        loadReturnDetails(selectedReturn.devolucion.codigo_devolucion);
-                      } else {
-                        alert('Error al agregar comunicación');
-                      }
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Agregar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      
+      {/* User Modal */}
+      {isModalOpen && (
+        <UserModal
+          modalMode={modalMode}
+          selectedUser={selectedUser}
+          editFormData={editFormData}
+          handleInputChange={handleInputChange}
+          handleSubmit={handleSubmit}
+          setIsModalOpen={setIsModalOpen}
+          isSubmitting={isSubmitting}
+          formErrors={formErrors}
+          actionMessage={actionMessage}
+          handleToggleUserStatus={handleToggleUserStatus}
+          getProfileImageSrc={getProfileImageSrc}
+          formatDate={formatDate}
+          getUserTypeLabel={getUserTypeLabel}
+          DEFAULT_PROFILE_PIC={DEFAULT_PROFILE_PIC}
+          handleProfilePicChange={handleProfilePicChange}
+          handleDeleteProfilePic={handleDeleteProfilePic}
+          isUploadingProfilePic={isUploadingProfilePic}
+          setModalMode={setModalMode}
+          prepareUserForEdit={prepareUserForEdit}
+        />
+      )}
+      
+      {/* Create Admin Modal */}
+      {isCreateAdminModalOpen && (
+        <CreateAdminModal
+          isOpen={isCreateAdminModalOpen}
+          onClose={handleCreateAdminModal}
+          getAuthToken={getAuthToken}
+          API_BASE_URL={API_BASE_URL}
+        />
       )}
     </div>
   );
 };
 
-export default ManageReturns;
+export default ManageUsers;
