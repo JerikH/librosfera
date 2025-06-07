@@ -232,7 +232,7 @@ const CheckoutDeliveryPage = () => {
       // Save shipping preferences with user address data
       const shippingPreferences = {
         method: deliveryMethod,
-        storeId: null,
+        storeId: '',
         shippingCost,
         locationCity: userLocation.City || userLocation.ciudad,
         locationState: userLocation.State,
@@ -327,7 +327,7 @@ const CheckoutDeliveryPage = () => {
                           </select>
                           {selectedAddress && (
                             <div className="mt-2 p-3 bg-gray-50 rounded-md text-sm">
-                              <div><strong>Dirección:</strong> {selectedAddress.calle}</div>
+                              <div><strong>Dirección:</strong> {selectedAddress.direccion_completa}</div>
                               <div><strong>Ciudad:</strong> {selectedAddress.ciudad}, {selectedAddress.departamento}</div>
                               {selectedAddress.codigo_postal && (
                                 <div><strong>Código Postal:</strong> {selectedAddress.codigo_postal}</div>

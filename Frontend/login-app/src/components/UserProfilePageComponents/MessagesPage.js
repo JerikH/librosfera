@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, Plus, Send, ArrowLeft, Clock, CheckCircle2, Circle } from 'lucide-react';
+
+// Mock auth function for demo
 import { getAuthToken } from './authUtils';
 
 const MessagesPage = () => {
@@ -15,7 +17,10 @@ const MessagesPage = () => {
     categoria: 'consulta_general',
     prioridad: 'media'
   });
+  
   const messagesEndRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
+  const lastMessageTimestampRef = useRef(null);
 
   // Fetch conversations
   const fetchConversations = async () => {
@@ -42,7 +47,7 @@ const MessagesPage = () => {
   };
 
   // Fetch messages for a conversation
-  const fetchMessages = async (conversationId) => {
+  const fetchMessages = async (conversationId, silent = false) => {
     const token = getAuthToken();
     if (!token) return;
 
@@ -56,19 +61,108 @@ const MessagesPage = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setMessages(data.data.mensajes || []);
+        const newMessages = data.data.mensajes || [];
         
-        // Mark conversation as read
-        await fetch(`http://localhost:5000/api/v1/mensajeria/conversaciones/${conversationId}/leer`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
+        // If this is a background check, only update if there are actually new messages
+        if (silent && messages.length > 0) {
+          const lastCurrentMessageTime = messages[messages.length - 1]?.fecha_envio;
+          const hasNewMessages = newMessages.some(msg => 
+            new Date(msg.fecha_envio) > new Date(lastCurrentMessageTime)
+          );
+          
+          if (hasNewMessages) {
+            setMessages(newMessages);
+            // Update last message timestamp for polling
+            if (newMessages.length > 0) {
+              lastMessageTimestampRef.current = newMessages[newMessages.length - 1].fecha_envio;
+            }
           }
-        });
+        } else {
+          setMessages(newMessages);
+          if (newMessages.length > 0) {
+            lastMessageTimestampRef.current = newMessages[newMessages.length - 1].fecha_envio;
+          }
+        }
+        
+        // Mark conversation as read (only on initial load, not during polling)
+        if (!silent) {
+          await fetch(`http://localhost:5000/api/v1/mensajeria/conversaciones/${conversationId}/leer`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
+    }
+  };
+
+  // Optimized polling function that only fetches new messages
+  const checkForNewMessages = useCallback(async (conversationId) => {
+    const token = getAuthToken();
+    if (!token || !conversationId) return;
+
+    try {
+      // If we have a timestamp, we can ask the server for messages after that timestamp
+      // This is more efficient than fetching all messages every time
+      let url = `http://localhost:5000/api/v1/mensajeria/conversaciones/${conversationId}`;
+      
+      // If your API supports filtering by timestamp, uncomment this:
+      // if (lastMessageTimestampRef.current) {
+      //   url += `?after=${encodeURIComponent(lastMessageTimestampRef.current)}`;
+      // }
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const serverMessages = data.data.mensajes || [];
+        
+        // Compare with current messages to see if there are new ones
+        if (serverMessages.length > messages.length) {
+          const newMessagesOnly = serverMessages.slice(messages.length);
+          setMessages(prev => [...prev, ...newMessagesOnly]);
+          
+          // Update timestamp
+          if (newMessagesOnly.length > 0) {
+            lastMessageTimestampRef.current = newMessagesOnly[newMessagesOnly.length - 1].fecha_envio;
+          }
+          
+          // Optionally update conversations list to show new unread status
+          fetchConversations();
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for new messages:', error);
+    }
+  }, [messages.length]);
+
+  // Start polling for new messages
+  const startPolling = useCallback((conversationId) => {
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    
+    // Set up new polling interval (check every 3 seconds)
+    pollingIntervalRef.current = setInterval(() => {
+      checkForNewMessages(conversationId);
+    }, 3000);
+  }, [checkForNewMessages]);
+
+  // Stop polling
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
     }
   };
 
@@ -97,6 +191,10 @@ const MessagesPage = () => {
         const data = await response.json();
         setMessages(prev => [...prev, data.data]);
         setNewMessage('');
+        
+        // Update timestamp for polling
+        lastMessageTimestampRef.current = data.data.fecha_envio;
+        
         fetchConversations(); // Refresh conversation list
       }
     } catch (error) {
@@ -146,14 +244,41 @@ const MessagesPage = () => {
     }
   };
 
+  // Handle conversation selection
+  const selectConversation = (conversation) => {
+    setSelectedConversation(conversation);
+    fetchMessages(conversation._id);
+    // Start polling for this conversation
+    startPolling(conversation._id);
+  };
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Set up polling when conversation changes
+  useEffect(() => {
+    if (selectedConversation) {
+      startPolling(selectedConversation._id);
+    } else {
+      stopPolling();
+    }
+
+    // Cleanup on unmount or conversation change
+    return () => {
+      stopPolling();
+    };
+  }, [selectedConversation, startPolling]);
+
   // Initial load
   useEffect(() => {
     fetchConversations();
+    
+    // Cleanup on component unmount
+    return () => {
+      stopPolling();
+    };
   }, []);
 
   // Format date
@@ -205,7 +330,7 @@ const MessagesPage = () => {
   }
 
   return (
-    <div className="h-full flex bg-white">
+    <div className="h-screen flex bg-white">
       {/* Conversations List */}
       <div className={`${selectedConversation ? 'hidden lg:block' : 'block'} w-full lg:w-1/3 border-r border-gray-200 flex flex-col`}>
         {/* Header */}
@@ -214,6 +339,9 @@ const MessagesPage = () => {
             <h2 className="text-xl font-semibold text-gray-800 flex items-center">
               <MessageCircle className="w-6 h-6 mr-2" />
               Mis Conversaciones
+              {pollingIntervalRef.current && (
+                <div className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Actualizando en tiempo real" />
+              )}
             </h2>
             <button
               onClick={() => setShowNewConversation(true)}
@@ -237,10 +365,7 @@ const MessagesPage = () => {
             conversations.map((conversation) => (
               <div
                 key={conversation._id}
-                onClick={() => {
-                  setSelectedConversation(conversation);
-                  fetchMessages(conversation._id);
-                }}
+                onClick={() => selectConversation(conversation)}
                 className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
                   selectedConversation?._id === conversation._id ? 'bg-blue-50 border-blue-200' : ''
                 }`}
@@ -283,7 +408,10 @@ const MessagesPage = () => {
           <div className="p-4 border-b border-gray-200 bg-gray-50">
             <div className="flex items-center">
               <button
-                onClick={() => setSelectedConversation(null)}
+                onClick={() => {
+                  setSelectedConversation(null);
+                  stopPolling();
+                }}
                 className="lg:hidden mr-3 p-1 hover:bg-gray-200 rounded"
               >
                 <ArrowLeft className="w-5 h-5" />
@@ -300,52 +428,58 @@ const MessagesPage = () => {
                   <span className="text-xs text-gray-500">
                     ID: {selectedConversation.id_conversacion}
                   </span>
+                  {pollingIntervalRef.current && (
+                    <span className="text-xs text-green-600 flex items-center">
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse" />
+                      En vivo
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.map((message) => {
-                const isClientMessage = message.remitente_info?.tipo === 'cliente';
-                const senderName = message.remitente_info?.nombre || 'Usuario';
-                
-                return (
+              const isClientMessage = message.remitente_info?.tipo === 'cliente';
+              const senderName = message.remitente_info?.nombre || 'Usuario';
+              
+              return (
                 <div
-                    key={message._id}
-                    className={`flex ${isClientMessage ? 'justify-end' : 'justify-start'}`}
+                  key={message._id}
+                  className={`flex ${isClientMessage ? 'justify-end' : 'justify-start'}`}
                 >
-                    <div className={`max-w-xs lg:max-w-md ${isClientMessage ? 'text-right' : 'text-left'}`}>
+                  <div className={`max-w-xs lg:max-w-md ${isClientMessage ? 'text-right' : 'text-left'}`}>
                     {/* Sender name */}
                     <p className={`text-xs text-gray-500 mb-1 px-1 ${isClientMessage ? 'text-right' : 'text-left'}`}>
-                        {senderName}
+                      {senderName}
                     </p>
                     
                     {/* Message bubble */}
                     <div className={`px-4 py-2 rounded-lg ${
-                        isClientMessage
+                      isClientMessage
                         ? 'bg-blue-600 text-white rounded-br-none'
                         : 'bg-gray-200 text-gray-900 rounded-bl-none'
                     }`}>
-                        <p className="text-sm">{message.contenido}</p>
-                        <div className={`flex items-center justify-end mt-1 space-x-1 text-xs ${
+                      <p className="text-sm">{message.contenido}</p>
+                      <div className={`flex items-center justify-end mt-1 space-x-1 text-xs ${
                         isClientMessage ? 'text-blue-100' : 'text-gray-500'
-                        }`}>
+                      }`}>
                         <span>{formatDate(message.fecha_envio)}</span>
                         {isClientMessage && (
-                            message.estado === 'leido' ? 
+                          message.estado === 'leido' ? 
                             <CheckCircle2 className="w-3 h-3" /> : 
                             <Circle className="w-3 h-3" />
                         )}
-                        </div>
+                      </div>
                     </div>
-                    </div>
+                  </div>
                 </div>
-                );
+              );
             })}
             <div ref={messagesEndRef} />
-            </div>
+          </div>
 
           {/* Message Input */}
           <div className="p-4 border-t border-gray-200 bg-gray-50">

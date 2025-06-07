@@ -106,7 +106,7 @@ const ManageUsers = () => {
       
       if (response.data.status === 'success') {
         let filteredUsers = response.data.data;
-        console.log(response);
+        
         // Apply client-side search if search term exists
         if (searchTerm.trim()) {
           const term = searchTerm.trim().toLowerCase();
@@ -128,8 +128,6 @@ const ManageUsers = () => {
         const paginatedUsers = filteredUsers.slice(startIndex, startIndex + pageSize);
         
         // Set users and update pagination
-
-        
         setUsers(paginatedUsers);
         setPagination({
           ...pagination,

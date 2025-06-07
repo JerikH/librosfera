@@ -60,7 +60,7 @@ const CartPage = ({ updateCartCount }) => {
               }))
             },
             imagenes: item.metadatos.imagen_portada ? [{ url: item.metadatos.imagen_portada }] : [],
-            stock: item.metadatos.disponible ? 10 : 0,
+            stock: item.id_libro.stock_disponible_consolidado ? item.id_libro.stock_disponible_consolidado : 0,
             editorial: '',
             estado: 'nuevo',
             anio_publicacion: ''
@@ -491,7 +491,7 @@ useEffect(() => {
                               </p>
                             )}
                             
-                            {/* {item.bookDetails?.stock > 0 ? (
+                            {item.bookDetails?.stock > 0 ? (
                               <p className="text-xs text-green-600 mb-2">
                                 Disponible: {item.bookDetails.stock} unidades
                               </p>
@@ -499,7 +499,7 @@ useEffect(() => {
                               <p className="text-xs text-red-600 mb-2">
                                 Agotado
                               </p>
-                            )} */}
+                            )}
                           </div>
                           
                           <button 

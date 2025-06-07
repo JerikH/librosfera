@@ -60,10 +60,34 @@ const carritoService = {
         
         // Volver a obtener los items después de la limpieza
         const itemsFinales = await CarritoItem.obtenerItemsCarrito(carrito._id);
+
+        const itemsConStockConsolidado = await Promise.all(
+          itemsFinales.map(async (item) => {
+            const itemObj = item.toObject();
+            
+            if (itemObj.id_libro && itemObj.id_libro._id) {
+              try {
+                const libroService = require('./libroService');
+                const stockConsolidado = await libroService._obtenerStockConsolidado(itemObj.id_libro._id);
+                
+                // Agregar información de stock consolidado al libro
+                itemObj.id_libro.stock_consolidado = stockConsolidado;
+                itemObj.id_libro.stock_total_disponible = stockConsolidado.stock_total;
+                itemObj.id_libro.stock_disponible_consolidado = stockConsolidado.stock_disponible;
+                itemObj.id_libro.tiendas_con_stock = stockConsolidado.tiendas_con_stock;
+                
+              } catch (stockError) {
+                console.warn(`Error obteniendo stock consolidado para libro ${itemObj.id_libro._id}:`, stockError.message);
+              }
+            }
+            
+            return itemObj;
+          })
+        );
         
         return {
           carrito: carrito.toObject(),
-          items: itemsFinales.map(item => item.toObject())
+          items: itemsConStockConsolidado
         };
       } catch (error) {
         console.error('Error obteniendo carrito:', error);
@@ -762,12 +786,11 @@ const carritoService = {
         console.log(`Cantidad anterior: ${cantidadAnterior}, Nueva cantidad: ${nuevaCantidad}`);
         
         if (nuevaCantidad === 0) {
-          // Eliminar item del carrito - LIBERAR TODA LA RESERVA
+          // Eliminar item - LIBERAR TODA LA RESERVA
           await this._liberarReservaCompleta(carritoObjectId, idLibro, idUsuario, null);
-          
-          // Eliminar item
           await CarritoItem.findByIdAndDelete(item._id);
           console.log('Item eliminado del carrito y reserva liberada');
+          
         } else {
           // Actualizar cantidad - AJUSTAR RESERVA
           const diferencia = nuevaCantidad - cantidadAnterior;
@@ -787,20 +810,51 @@ const carritoService = {
             );
             
             console.log(`Stock adicional reservado: ${diferencia} unidades`);
-          } else if (diferencia < 0) {
-            // Disminuir cantidad - liberar parte de la reserva
-            const cantidadALiberar = Math.abs(diferencia);
-            const inventario = await this._obtenerInventarioDeReserva(carritoObjectId, idLibro, null);
             
-            if (inventario) {
-              await inventario.liberarReserva(
-                cantidadALiberar,
-                idUsuario,
-                carritoObjectId,
-                `Carrito - disminuir de ${cantidadAnterior} a ${nuevaCantidad}`
-              );
+          } else if (diferencia < 0) {
+            // CORREGIDO: Disminuir cantidad - liberar parte de la reserva
+            const cantidadALiberar = Math.abs(diferencia);
+            
+            // Obtener TODOS los inventarios que tienen reservas de este carrito para este libro
+            const inventariosConReservas = await Inventario.find({
+              id_libro: idLibro,
+              stock_reservado: { $gt: 0 },
+              'movimientos': {
+                $elemMatch: {
+                  tipo: 'reserva',
+                  id_reserva: carritoObjectId
+                }
+              }
+            }).populate('id_tienda', 'nombre estado');
+            
+            let cantidadLiberada = 0;
+            
+            // Liberar reservas de cada inventario hasta completar la cantidad
+            for (const inventario of inventariosConReservas) {
+              if (cantidadLiberada >= cantidadALiberar) break;
               
-              console.log(`Stock liberado: ${cantidadALiberar} unidades`);
+              // Calcular cuánto está reservado en este inventario para este carrito
+              const cantidadReservadaAqui = inventario.obtenerCantidadReservada(carritoObjectId);
+              
+              if (cantidadReservadaAqui > 0) {
+                const aLiberarAqui = Math.min(cantidadReservadaAqui, cantidadALiberar - cantidadLiberada);
+                
+                await inventario.liberarReserva(
+                  aLiberarAqui,
+                  idUsuario,
+                  carritoObjectId,
+                  `Carrito - disminuir de ${cantidadAnterior} a ${nuevaCantidad}`
+                );
+                
+                cantidadLiberada += aLiberarAqui;
+                console.log(`Stock liberado: ${aLiberarAqui} unidades de inventario en tienda ${inventario.id_tienda?.nombre || 'desconocida'}`);
+              }
+            }
+            
+            if (cantidadLiberada < cantidadALiberar) {
+              console.warn(`Solo se liberaron ${cantidadLiberada} de ${cantidadALiberar} unidades solicitadas`);
+            } else {
+              console.log(`Total liberado correctamente: ${cantidadLiberada} unidades`);
             }
           }
           
@@ -823,7 +877,7 @@ const carritoService = {
           console.log(`Cantidad actualizada a ${nuevaCantidad} y reserva ajustada`);
         }
         
-        // CORREGIDO: Actualizar totales del carrito con manejo de errores
+        // Actualizar totales del carrito
         try {
           await carrito.actualizarTotales();
           console.log('Totales del carrito actualizados');
@@ -840,9 +894,8 @@ const carritoService = {
         console.error('Error actualizando cantidad:', error);
         throw error;
       }
-    }, 3, 150); // 3 reintentos con delay base de 150ms
+    }, 3, 150);
   },
-
   /**
    * Quitar un libro del carrito CON LIBERACIÓN DE RESERVA
    * @param {String} idUsuario - ID del usuario
@@ -1125,13 +1178,6 @@ const carritoService = {
     try {
       console.log(`Liberando reserva completa: Carrito ${idCarrito}, Libro ${idLibro}`);
       
-      const reservaInfo = await this._obtenerReservaExistente(idCarrito, idLibro, session);
-      
-      if (!reservaInfo || reservaInfo.cantidad <= 0) {
-        console.log(`No hay reserva que liberar para carrito ${idCarrito} del libro ${idLibro}`);
-        return;
-      }
-      
       // Asegurar que idCarrito sea un ObjectId válido
       let carritoObjectId;
       if (mongoose.Types.ObjectId.isValid(idCarrito)) {
@@ -1141,14 +1187,41 @@ const carritoService = {
         return;
       }
       
-      await reservaInfo.inventario.liberarReserva(
-        reservaInfo.cantidad,
-        idUsuario,
-        carritoObjectId,
-        'Carrito - liberación completa de reserva'
-      );
+      // Obtener TODOS los inventarios que tienen reservas de este carrito para este libro
+      const inventariosConReservas = await Inventario.find({
+        id_libro: idLibro,
+        stock_reservado: { $gt: 0 },
+        'movimientos': {
+          $elemMatch: {
+            tipo: 'reserva',
+            id_reserva: carritoObjectId
+          }
+        }
+      }).populate('id_tienda', 'nombre').session(session);
       
-      console.log(`Reserva de ${reservaInfo.cantidad} unidades liberada exitosamente en tienda ${reservaInfo.inventario.id_tienda?.nombre || 'desconocida'}`);
+      console.log(`Encontrados ${inventariosConReservas.length} inventarios con reservas para este carrito`);
+      
+      let totalLiberado = 0;
+      
+      // Liberar reservas de cada inventario
+      for (const inventario of inventariosConReservas) {
+        const cantidadReservada = inventario.obtenerCantidadReservada(carritoObjectId);
+        
+        if (cantidadReservada > 0) {
+          await inventario.liberarReserva(
+            cantidadReservada,
+            idUsuario,
+            carritoObjectId,
+            'Carrito - liberación completa de reserva'
+          );
+          
+          totalLiberado += cantidadReservada;
+          console.log(`Liberadas ${cantidadReservada} unidades del inventario en tienda ${inventario.id_tienda?.nombre || 'desconocida'}`);
+        }
+      }
+      
+      console.log(`Total liberado: ${totalLiberado} unidades para libro ${idLibro}`);
+      
     } catch (error) {
       console.error('Error liberando reserva completa:', error);
       // No propagar el error para no romper el flujo principal
