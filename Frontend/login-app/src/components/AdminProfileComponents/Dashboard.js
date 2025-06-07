@@ -92,6 +92,12 @@ const Dashboard = ({ userData, setActiveTab }) => {
           }
         });
 
+        const MessagesResponse = await axios.get('http://localhost:5000/api/v1/mensajeria/contadores', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/json'
+          }
+        });
         
         // Fetch recent activities
         const activitiesResponse = await axios.get(`${API_BASE_URL}/api/v1/activities/recent?limite=5`, {
@@ -104,7 +110,8 @@ const Dashboard = ({ userData, setActiveTab }) => {
         // Check if requests were successful
         if (booksResponse.data.status === 'success' && 
             usersResponse.data.status === 'success' &&
-            salesResponse.data.status === 'success') {
+            salesResponse.data.status === 'success' &&
+            MessagesResponse.data.status === 'success') {
           
           // Process activities data if it exists
           let activitiesData = [];
@@ -129,7 +136,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
             totalUsers: usersResponse.data.paginacion.total,
             // Keep the dummy data for other stats that are not provided by API yet
             totalSales: salesResponse.data.data.resumen.cantidad_ordenes,
-            pendingMessages: 0,
+            pendingMessages: salesResponse.data.data.mensajes_no_leidos,
             recentActivity: activitiesData.length > 0 ? activitiesData : [
               { id: 1, type: 'user', action: 'Nuevo usuario registrado', timestamp: '2023-11-10 14:25', user: 'maria_lopez' },
               { id: 2, type: 'book', action: 'Nuevo libro añadido', timestamp: '2023-11-10 13:15', book: 'Historia de la Literatura' },

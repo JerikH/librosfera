@@ -224,7 +224,7 @@ const AdminProfile = () => {
             />
             
             {/* Main content area */}
-            <div className="flex-1 flex h-full">
+            <div className="flex-1 h-full">
               {activeTab === 'inicio' && <Dashboard userData={userData} setActiveTab={setActiveTab} />}
               {activeTab === 'administrar-libro' && <ManageBooks />}
               {activeTab === 'administrar-ventas' && <ManageSales />}
