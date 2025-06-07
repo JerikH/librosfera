@@ -245,7 +245,7 @@ const LoginPage = () => {
             <h2 className="text-4xl font-bold mb-6">Iniciar Sesión</h2>
             <p className="mb-6">
               ¿No tienes cuenta? <a 
-                href="/Register"  
+                href="/register"  
                 className="text-blue-600 font-medium"
               >
                 Crear Cuenta
