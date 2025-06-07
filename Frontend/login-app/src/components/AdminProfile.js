@@ -53,19 +53,19 @@ const AdminProfile = () => {
         // Route users to the appropriate profile page
         if (!userType) {
           console.log("No user type found, redirecting to login");
-          window.location.replace('/Login');
+          navigate('/Login');
           return;
         } else if (userType === 'root') {
           console.log("Root user detected, redirecting to RootProfile");
-          window.location.replace('/RootProfile');
+          navigate('/RootProfile');
           return;
         } else if (userType === 'cliente') {
           console.log("Regular user detected, redirecting to Profile");
-          window.location.replace('/Profile');
+          navigate('/Profile');
           return;
         } else if (userType !== 'administrador') {
           console.log("Unknown user type, redirecting to login");
-          window.location.replace('/Login');
+          navigate('/Login');
           return;
         }
         
