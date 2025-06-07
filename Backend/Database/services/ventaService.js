@@ -173,9 +173,10 @@ class VentaService {
       console.error('Error procesando pago:', errorPago);
       throw new Error(`Error procesando el pago: ${errorPago.message}`);
     }
-
-    const tiendaService = require('./tiendaService');
-    const tienda = await tiendaService.obtenerTiendaPorId(datosVenta.id_tienda_recogida);
+    if (datosVenta.tipo_envio === 'recogida_tienda') {
+      const tiendaService = require('./tiendaService');
+      const tienda = await tiendaService.obtenerTiendaPorId(datosVenta.id_tienda_recogida);
+    }
     // 4. FASE DE TRANSACCIÓN PRINCIPAL (con retry automático)
     return await this._ejecutarConRetry(async () => {
       const session = await mongoose.startSession();
