@@ -111,7 +111,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
     }
   ];
   const PROFILE_PIC_BASE_URL = '';
-  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com//uploads/profiles/default.jpg';
+  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com/uploads/profiles/default.jpg';
 
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
