@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, navigate } from 'react';
 import axios from 'axios';
+import CachedImage from '../CachedImage';
 
-const Dashboard = ({ userData }) => {
+const Dashboard = ({ userData, setActiveTab }) => {
   // Estados para las tarjetas y navegación
   const [defaultCard, setDefaultCard] = useState(null);
   const [accountBalance, setAccountBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [recentPurchases, setRecentPurchases] = useState([]);
+  const [loadingPurchases, setLoadingPurchases] = useState(true);
 
   // Format user name from userData
   const userName = userData ? `${userData.nombres || ''} ${userData.apellidos || ''}` : 'Usuario';
@@ -55,6 +58,48 @@ const Dashboard = ({ userData }) => {
     }
   }), [authToken]);
 
+  // Función para navegar a métodos de pago
+  const handleCardClick = () => {
+    if (setActiveTab) {
+      setActiveTab('tarjeta');
+      navigate('/Profile', { state: { activeTab: 'tarjeta' } });
+    }
+  };
+
+  // Función para navegar al carrito
+  const handleCartClick = () => {
+    if (setActiveTab) {
+      setActiveTab('carrito');
+      
+    }
+  };
+
+  // Función para navegar a compras
+  const handlePurchasesClick = () => {
+    if (setActiveTab) {
+      navigate('/Profile', { state: { activeTab: 'compras' } });
+    }
+  };
+
+  // Función para obtener compras recientes
+  const fetchRecentPurchases = useCallback(async () => {
+    try {
+      setLoadingPurchases(true);
+      
+      const response = await axios.get(`${API_BASE_URL}/ventas/mis-ventas?limit=5`, axiosConfig);
+      
+      if (response.data.status === 'success' && response.data.data) {
+        console.log("response", response.data.data);
+        setRecentPurchases(response.data.data);
+        console.log(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching recent purchases:', err);
+    } finally {
+      setLoadingPurchases(false);
+    }
+  }, [axiosConfig]);
+
   // Función para obtener la tarjeta principal del usuario
   const fetchDefaultCard = useCallback(async () => {
     try {
@@ -98,17 +143,11 @@ const Dashboard = ({ userData }) => {
     }
   }, [axiosConfig]);
 
-  // Función para manejar la navegación a tarjetas
-  // const handleNavigateToCards = () => {
-  //   // Aquí puedes usar react-router si lo tienes configurado
-  //   // navigate('/cards');
-  //   window.location.href = '/cards'; // Redirige a la página de tarjetas
-  // };
-
-  // useEffect para cargar la tarjeta predeterminada al montar el componente
+  // useEffect para cargar datos al montar el componente
   useEffect(() => {
     fetchDefaultCard();
-  }, [fetchDefaultCard]);
+    fetchRecentPurchases();
+  }, [fetchDefaultCard, fetchRecentPurchases]);
 
   // Función para renderizar la tarjeta principal
   const renderMainCard = () => {
@@ -144,7 +183,7 @@ const Dashboard = ({ userData }) => {
       // Mostrar la tarjeta predeterminada del usuario
       return (
         <div className="bg-gradient-to-r from-gray-800 to-gray-900 text-white rounded-lg p-5 mb-8 w-96 h-56 flex flex-col justify-between shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
-             >
+             onClick={handleCardClick}>
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm opacity-80">Tarjeta {defaultCard.type}</p>
@@ -202,7 +241,7 @@ const Dashboard = ({ userData }) => {
       // Mostrar tarjeta de saldo por defecto si no hay tarjeta principal
       return (
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-5 mb-8 w-96 h-56 flex flex-col justify-between shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
-             >
+             onClick={handleCardClick}>
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm opacity-80">Tarjeta de</p>
@@ -239,7 +278,7 @@ const Dashboard = ({ userData }) => {
             <button 
               onClick={(e) => {
                 e.stopPropagation();
-                
+                handleCardClick();
               }}
               className="bg-white text-blue-600 font-medium py-2 px-4 rounded-md hover:bg-blue-50 transition-colors text-sm"
             >
@@ -250,9 +289,89 @@ const Dashboard = ({ userData }) => {
       );
     }
   };
+
+  // Función para renderizar las compras recientes
+  const renderRecentPurchases = () => {
+    if (loadingPurchases) {
+      return (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="animate-pulse space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center space-x-3">
+                <div className="w-12 h-16 bg-gray-200 rounded"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (recentPurchases.length === 0) {
+      return (
+        <div className="bg-white rounded-lg shadow p-4 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
+          </div>
+          <p className="text-gray-500 text-sm">No hay compras recientes</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="space-y-3">
+          {recentPurchases.slice(0, 5).map((purchase) => (
+            <div key={purchase._id} className="flex items-center space-x-3 pb-3 border-b border-gray-100 last:border-b-0">
+              <div className="w-12 h-16 bg-amber-100 border border-amber-200 flex justify-center items-center flex-shrink-0">
+                {purchase.items[0].snapshot.imagen_portada ? (
+                  <CachedImage 
+                    src={purchase.items?.[0]?.snapshot?.imagen_portada} 
+                    alt={purchase.items?.[0]?.snapshot?.titulo || "Libro"} 
+                    className="w-full h-full object-contain"
+                    fallbackSrc="http://localhost:5000/uploads/libros/Default.png"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {purchase.items?.[0]?.snapshot?.titulo || 'Producto sin título'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {purchase.items?.[0]?.snapshot?.autor || 'Autor desconocido'}
+                </p>
+                <p className="text-sm font-semibold text-green-600">
+                  ${purchase.totales?.total_final?.toLocaleString('es-CO') || '0'}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* <div className="mt-4 pt-3 border-t">
+          <button 
+            onClick={handlePurchasesClick}
+            className="text-blue-600 text-sm hover:underline w-full text-center"
+          >
+            Ver todas mis compras →
+          </button>
+        </div> */}
+      </div>
+    );
+  };
   
-  return (
-    <>
+   return (
+    <div className="flex">
       {/* Middle column - Column 2 (larger) */}
       <div className="w-2/3 p-6">
         <header className="mb-8">
@@ -261,74 +380,28 @@ const Dashboard = ({ userData }) => {
         
         {/* Main Card - Tarjeta principal del usuario o saldo por defecto */}
         {renderMainCard()}
-        
-        {/* Recent Purchases */}
-        {/* <div>
-          <h2 className="text-xl font-bold mb-4">Compras recientes</h2>
-          <div className="bg-white rounded-lg shadow p-5">
-            <div className="border-b pb-5 mb-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-16 h-16 bg-amber-100 border border-amber-200 flex justify-center items-center mr-3 p-1">
-                    <div className="text-center text-xs">
-                      <div>Libro</div>
-                      <div>5</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="truncate max-w-[120px] mr-3">Libro 5</div>
-                    <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full whitespace-nowrap">Devolución Disponible</span>
-                  </div>
-                </div>
-                <div className="font-bold">$ 14,200.00</div>
-              </div>
-            </div>
-            
-            <div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-16 h-16 bg-red-100 border border-red-200 flex justify-center items-center mr-3 p-1">
-                    <div className="text-center text-xs">
-                      <div>Libro</div>
-                      <div>4</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="truncate max-w-[120px] mr-3">Libro 4</div>
-                    <span className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded-full whitespace-nowrap">Devolución no disponible</span>
-                  </div>
-                </div>
-                <div className="font-bold">$ 12,999.00</div>
-              </div>
-            </div>
-          </div>
-        </div> */}
-      </div>
-      
-      {/* Right column - Column 3 (smaller) */}
-      <div className="w-1/3 p-6">
-        {/* Tarjeta de acceso rápido a métodos de pago */}
+
+        {/* Tarjeta de acceso rápido al carrito de compras */}
         <div className="mb-8">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">Acceso Rápido</h3>
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
-                    <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd" />
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.5 6m4.5-6v6m8-6v6" />
                   </svg>
                 </div>
                 <div>
-                  <p className="font-medium text-gray-800">Métodos de Pago</p>
+                  <p className="font-medium text-gray-800">Carrito de Compras</p>
                   <p className="text-sm text-gray-500">
-                    {defaultCard ? `${defaultCard.type} •••• ${defaultCard.lastFour}` : 'Gestiona tus tarjetas'}
+                    Ver productos guardados
                   </p>
                 </div>
               </div>
               <button 
-                
-                className="text-blue-600 hover:text-blue-800 transition-colors"
+                onClick={handleCartClick}
+                className="text-green-600 hover:text-green-800 transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -338,69 +411,31 @@ const Dashboard = ({ userData }) => {
             
             <div className="space-y-2">
               <button 
-                
+                onClick={handleCartClick}
                 className="w-full text-left p-2 rounded-md hover:bg-gray-50 transition-colors flex items-center"
               >
-                <span className="text-sm text-gray-600">💳 Ver todas las tarjetas</span>
+                <span className="text-sm text-gray-600">🛒 Ver carrito completo</span>
               </button>
               <button 
-                
+                onClick={handlePurchasesClick}
                 className="w-full text-left p-2 rounded-md hover:bg-gray-50 transition-colors flex items-center"
               >
-                <span className="text-sm text-gray-600">💰 Recargar saldo</span>
+                <span className="text-sm text-gray-600">📦 Mis compras</span>
               </button>
             </div>
           </div>
         </div>
-        
-        {/* Resumen de actividad */}
-        {/* <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-700">Actividad Reciente</h3>
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Recarga de saldo</p>
-                    <p className="text-xs text-gray-500">Hace 2 días</p>
-                  </div>
-                </div>
-                <span className="text-sm font-medium text-green-600">+$50,000</span>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Compra de libro</p>
-                    <p className="text-xs text-gray-500">Hace 3 días</p>
-                  </div>
-                </div>
-                <span className="text-sm font-medium text-red-600">-$14,200</span>
-              </div>
-            </div>
-            
-            <div className="mt-4 pt-3 border-t">
-              <button 
-                onClick={handleNavigateToCards}
-                className="text-blue-600 text-sm hover:underline"
-              >
-                Ver historial completo
-              </button>
-            </div>
-          </div>
-        </div> */}
       </div>
-    </>
+      
+      {/* Right column - Column 3 (smaller) */}
+      <div className="w-1/3 p-6">
+        {/* Compras recientes moved to right column */}
+        <div>
+          <h3 className="text-lg font-semibold mb-4 text-gray-700">Compras Recientes</h3>
+          {renderRecentPurchases()}
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -167,7 +167,17 @@ useEffect(() => {
       const currentCart = localStorage.getItem('shoppingCart') 
         ? JSON.parse(localStorage.getItem('shoppingCart')) 
         : [];
-      const bookIds = new Set(currentCart.map(item => item.bookId));
+      
+      // FIXED: Extract book IDs properly, handling both full book objects and ID strings
+      const bookIds = new Set(currentCart.map(item => {
+        if (typeof item.bookId === 'string') {
+          return item.bookId;
+        } else if (item.bookId && typeof item.bookId === 'object') {
+          return item.bookId._id || item.bookId.id;
+        }
+        return null;
+      }).filter(id => id !== null));
+      
       console.log("ids in cart:", bookIds);
       setBooksInCart(bookIds);
       return bookIds;
@@ -222,17 +232,20 @@ useEffect(() => {
         : [];
       
       // FIXED: Check if book is already in cart to avoid duplicates
-      const existingItemIndex = currentCart.findIndex(item => item.bookId === book._id);
-      
+      const existingItemIndex = currentCart.findIndex(item => {
+        const itemId = typeof item.bookId === 'string' ? item.bookId : item.bookId?._id;
+        return itemId === book._id;
+      });
+
       if (existingItemIndex === -1) {
-        // FIXED: Store only the book ID, not the entire book object
-        currentCart.push({
-          bookId: book._id, // Store only ID, not entire book object
-          quantity: 1
-        });
-        
-        localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
-      }
+      // FIXED: Store only the book ID, not the entire book object
+      currentCart.push({
+        bookId: book._id, // Store only ID, not entire book object
+        quantity: 1
+      });
+      
+      localStorage.setItem('shoppingCart', JSON.stringify(currentCart));
+    }
 
       // Update cart counter based on server response
       const newCount = response.data.data.carrito.n_item;
@@ -448,33 +461,33 @@ useEffect(() => {
                       {/* Botones */}
                       <div className="space-y-2 w-full">
                         <button 
-      className={`w-full px-4 py-2 rounded transition-colors text-sm flex items-center justify-center ${
-        [...booksInCart].some(cartBook => cartBook._id === book._id)
-          ? 'bg-green-600 text-white cursor-default' 
-          : addingToCart === book._id 
-            ? 'bg-gray-400 text-white cursor-not-allowed' 
-            : 'bg-blue-600 text-white hover:bg-blue-700'
-      }`}
-      onClick={() => {
-        const isInCart = [...booksInCart].some(cartBook => cartBook._id === book._id);
-        if (!isInCart && addingToCart !== book._id) {
-          console.log('Agregar al carrito:', book.titulo);
-          handleAddToCart(book);
-        }
-      }}
-      disabled={[...booksInCart].some(cartBook => cartBook._id === book._id) || addingToCart === book._id}
-    >
-      {addingToCart === book._id ? (
-        <>
-          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-          Agregando...
-        </>
-      ) : [...booksInCart].some(cartBook => cartBook._id === book._id) ? (
-        'Agregado'
-      ) : (
-        'Agregar al carrito'
-      )}
-    </button>
+                          className={`w-full px-4 py-2 rounded transition-colors text-sm flex items-center justify-center ${
+                            booksInCart.has(book._id) // This should now work correctly
+                              ? 'bg-green-600 text-white cursor-default' 
+                              : addingToCart === book._id 
+                                ? 'bg-gray-400 text-white cursor-not-allowed' 
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                          onClick={() => {
+                            const isInCart = booksInCart.has(book._id); // This should now work correctly
+                            if (!isInCart && addingToCart !== book._id) {
+                              console.log('Agregar al carrito:', book.titulo);
+                              handleAddToCart(book);
+                            }
+                          }}
+                          disabled={booksInCart.has(book._id) || addingToCart === book._id} // This should now work correctly
+                        >
+                          {addingToCart === book._id ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                              Agregando...
+                            </>
+                          ) : booksInCart.has(book._id) ? ( // This should now work correctly
+                            'Agregado'
+                          ) : (
+                            'Agregar al carrito'
+                          )}
+                        </button>
                         <button 
                           className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 transition-colors text-sm"
                           onClick={() => goToBookDetails(book._id)}
