@@ -456,7 +456,7 @@ const mensajeriaService = {
           {
             $match: {
               'remitente_info.tipo': 'cliente',
-              'leido_por.usuario': { $ne: mongoose.Types.ObjectId(usuarioId) }
+              'leido_por.usuario': { $ne: new mongoose.Types.ObjectId(usuarioId) }
             }
           },
           {
@@ -487,9 +487,9 @@ const mensajeriaService = {
           },
           {
             $match: {
-              'conv_info.cliente': mongoose.Types.ObjectId(usuarioId),
+              'conv_info.cliente': new mongoose.Types.ObjectId(usuarioId),
               'remitente_info.tipo': 'administrador',
-              'leido_por.usuario': { $ne: mongoose.Types.ObjectId(usuarioId) }
+              'leido_por.usuario': { $ne: new mongoose.Types.ObjectId(usuarioId) }
             }
           },
           {
