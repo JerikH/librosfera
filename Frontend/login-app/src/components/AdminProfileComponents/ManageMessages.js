@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   MessageCircle, 
   Send, 
@@ -32,6 +32,11 @@ const AdminMessagesPage = () => {
   const [adminList, setAdminList] = useState([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
   
+  // Real-time polling refs
+  const messagesEndRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
+  const lastMessageTimestampRef = useRef(null);
+  
   // Filter states
   const [filters, setFilters] = useState({
     page: 1,
@@ -54,8 +59,6 @@ const AdminMessagesPage = () => {
     limite: 20,
     totalPaginas: 1
   });
-
-  const messagesEndRef = useRef(null);
 
   // Fetch administrators from API
   const fetchAdmins = async () => {
@@ -158,7 +161,7 @@ const AdminMessagesPage = () => {
   };
 
   // Fetch messages for a conversation
-  const fetchMessages = async (conversationId) => {
+  const fetchMessages = async (conversationId, silent = false) => {
     const token = getAuthToken();
     if (!token) return;
 
@@ -172,44 +175,135 @@ const AdminMessagesPage = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setMessages(data.data.mensajes || []);
+        const newMessages = data.data.mensajes || [];
         
-        // Mark as read
-        await fetch(`http://localhost:5000/api/v1/mensajeria/conversaciones/${conversationId}/leer`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
+        // If this is a background check, only update if there are actually new messages
+        if (silent && messages.length > 0) {
+          const lastCurrentMessageTime = messages[messages.length - 1]?.fecha_envio;
+          const hasNewMessages = newMessages.some(msg => 
+            new Date(msg.fecha_envio) > new Date(lastCurrentMessageTime)
+          );
+          
+          if (hasNewMessages) {
+            setMessages(newMessages);
+            // Update last message timestamp for polling
+            if (newMessages.length > 0) {
+              lastMessageTimestampRef.current = newMessages[newMessages.length - 1].fecha_envio;
+            }
           }
-        });
+        } else {
+          setMessages(newMessages);
+          if (newMessages.length > 0) {
+            lastMessageTimestampRef.current = newMessages[newMessages.length - 1].fecha_envio;
+          }
+        }
+        
+        // Mark as read (only on initial load, not during polling)
+        if (!silent) {
+          await fetch(`http://localhost:5000/api/v1/mensajeria/conversaciones/${conversationId}/leer`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
       // Mock messages for demo
-      setMessages([
-        {
-          _id: '60d85e3a9f15d71f5019e125',
-          contenido: 'Hola, necesito devolver un libro que compré la semana pasada porque llegó en mal estado.',
-          remitente_info: {
-            tipo: 'cliente',
-            nombre: 'Juan Carlos Pérez López',
-            email: 'juan.perez@email.com'
+      if (!silent) {
+        setMessages([
+          {
+            _id: '60d85e3a9f15d71f5019e125',
+            contenido: 'Hola, necesito devolver un libro que compré la semana pasada porque llegó en mal estado.',
+            remitente_info: {
+              tipo: 'cliente',
+              nombre: 'Juan Carlos Pérez López',
+              email: 'juan.perez@email.com'
+            },
+            fecha_envio: '2023-06-27T10:15:23.456Z',
+            estado: 'leido'
           },
-          fecha_envio: '2023-06-27T10:15:23.456Z',
-          estado: 'leido'
-        },
-        {
-          _id: '60d85e3a9f15d71f5019e127',
-          contenido: 'Hola Juan Carlos, lamento escuchar sobre el problema con su libro. Vamos a procesar su devolución inmediatamente.',
-          remitente_info: {
-            tipo: 'administrador',
-            nombre: 'admin_soporte',
-            email: 'maria.gonzalez@libreria.com'
-          },
-          fecha_envio: '2023-06-27T11:25:15.789Z',
-          estado: 'leido'
+          {
+            _id: '60d85e3a9f15d71f5019e127',
+            contenido: 'Hola Juan Carlos, lamento escuchar sobre el problema con su libro. Vamos a procesar su devolución inmediatamente.',
+            remitente_info: {
+              tipo: 'administrador',
+              nombre: 'admin_soporte',
+              email: 'maria.gonzalez@libreria.com'
+            },
+            fecha_envio: '2023-06-27T11:25:15.789Z',
+            estado: 'leido'
+          }
+        ]);
+      }
+    }
+  };
+
+  // Optimized polling function that only fetches new messages
+  const checkForNewMessages = useCallback(async (conversationId) => {
+    const token = getAuthToken();
+    if (!token || !conversationId) return;
+
+    try {
+      // If we have a timestamp, we can ask the server for messages after that timestamp
+      // This is more efficient than fetching all messages every time
+      let url = `http://localhost:5000/api/v1/mensajeria/conversaciones/${conversationId}`;
+      
+      // If your API supports filtering by timestamp, uncomment this:
+      // if (lastMessageTimestampRef.current) {
+      //   url += `?after=${encodeURIComponent(lastMessageTimestampRef.current)}`;
+      // }
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
-      ]);
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const serverMessages = data.data.mensajes || [];
+        
+        // Compare with current messages to see if there are new ones
+        if (serverMessages.length > messages.length) {
+          const newMessagesOnly = serverMessages.slice(messages.length);
+          setMessages(prev => [...prev, ...newMessagesOnly]);
+          
+          // Update timestamp
+          if (newMessagesOnly.length > 0) {
+            lastMessageTimestampRef.current = newMessagesOnly[newMessagesOnly.length - 1].fecha_envio;
+          }
+          
+          // Optionally update conversations list to show new unread status
+          fetchConversations();
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for new messages:', error);
+    }
+  }, [messages.length]);
+
+  // Start polling for new messages
+  const startPolling = useCallback((conversationId) => {
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    
+    // Set up new polling interval (check every 3 seconds)
+    pollingIntervalRef.current = setInterval(() => {
+      checkForNewMessages(conversationId);
+    }, 3000);
+  }, [checkForNewMessages]);
+
+  // Stop polling
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
     }
   };
 
@@ -238,6 +332,10 @@ const AdminMessagesPage = () => {
         const data = await response.json();
         setMessages(prev => [...prev, data.data]);
         setNewMessage('');
+        
+        // Update timestamp for polling
+        lastMessageTimestampRef.current = data.data.fecha_envio;
+        
         fetchConversations();
       }
     } catch (error) {
@@ -330,10 +428,32 @@ const AdminMessagesPage = () => {
     });
   };
 
+  // Handle conversation selection with polling
+  const selectConversation = (conversation) => {
+    setSelectedConversation(conversation);
+    fetchMessages(conversation._id);
+    // Start polling for this conversation
+    startPolling(conversation._id);
+  };
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Set up polling when conversation changes
+  useEffect(() => {
+    if (selectedConversation) {
+      startPolling(selectedConversation._id);
+    } else {
+      stopPolling();
+    }
+
+    // Cleanup on unmount or conversation change
+    return () => {
+      stopPolling();
+    };
+  }, [selectedConversation, startPolling]);
 
   // Fetch conversations when filters change
   useEffect(() => {
@@ -344,6 +464,11 @@ const AdminMessagesPage = () => {
   useEffect(() => {
     fetchAdmins();
     console.log("Admins", adminList);
+    
+    // Cleanup on component unmount
+    return () => {
+      stopPolling();
+    };
   }, []);
 
   // Format date
@@ -397,14 +522,17 @@ const AdminMessagesPage = () => {
 
   return (
     <div className="h-full flex bg-white">
-      {/* Conversations List - 40% width */}
-      <div className={`${selectedConversation ? 'hidden lg:block' : 'block'} w-full lg:w-2/5 border-r border-gray-200 flex flex-col`}>
+      {/* Conversations List - Now 33% width to match second code */}
+      <div className={`${selectedConversation ? 'hidden lg:block' : 'block'} w-full lg:w-1/3 border-r border-gray-200 flex flex-col`}>
         {/* Header */}
         <div className="p-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center">
               <MessageCircle className="w-6 h-6 mr-2" />
               Gestión de Mensajes
+              {pollingIntervalRef.current && (
+                <div className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Actualizando en tiempo real" />
+              )}
             </h2>
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -530,10 +658,7 @@ const AdminMessagesPage = () => {
             conversations.map((conversation) => (
               <div
                 key={conversation._id}
-                onClick={() => {
-                  setSelectedConversation(conversation);
-                  fetchMessages(conversation._id);
-                }}
+                onClick={() => selectConversation(conversation)}
                 className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
                   selectedConversation?._id === conversation._id ? 'bg-blue-50 border-blue-200' : ''
                 }`}
@@ -616,15 +741,18 @@ const AdminMessagesPage = () => {
         )}
       </div>
 
-      {/* Chat Area - 60% width */}
+      {/* Chat Area - Now flex-1 (about 67% width) to match second code */}
       {selectedConversation ? (
-        <div className="w-full lg:w-3/5 flex flex-col">
+        <div className="flex-1 flex flex-col">
           {/* Chat Header */}
           <div className="p-4 border-b border-gray-200 bg-gray-50">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <button
-                  onClick={() => setSelectedConversation(null)}
+                  onClick={() => {
+                    setSelectedConversation(null);
+                    stopPolling();
+                  }}
                   className="lg:hidden mr-3 p-1 hover:bg-gray-200 rounded"
                 >
                   <ArrowLeft className="w-5 h-5" />
@@ -641,6 +769,12 @@ const AdminMessagesPage = () => {
                     <span className="text-xs text-gray-500">
                       Cliente: {selectedConversation.cliente_info?.nombres} {selectedConversation.cliente_info?.apellidos}
                     </span>
+                    {pollingIntervalRef.current && (
+                      <span className="text-xs text-green-600 flex items-center">
+                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse" />
+                        En vivo
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -777,7 +911,7 @@ const AdminMessagesPage = () => {
           </div>
         </div>
       ) : (
-        <div className="hidden lg:flex w-3/5 items-center justify-center bg-gray-50">
+        <div className="hidden lg:flex flex-1 items-center justify-center bg-gray-50">
           <div className="text-center text-gray-500">
             <MessageCircle className="w-16 h-16 mx-auto mb-4 text-gray-300" />
             <p className="text-lg font-medium mb-2">Selecciona una conversación</p>

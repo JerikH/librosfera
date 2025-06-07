@@ -817,10 +817,41 @@ const PurchasesPage = () => {
     }
   };
 
+
+  const getStatusColorReturn = (status) => {
+    switch (status) {
+      case 'devolucion_solicitada':
+        return 'text-purple-600 bg-purple-100';
+      case 'enviado':
+        return 'text-blue-600 bg-blue-100';
+      case 'procesando':
+        return 'text-yellow-600 bg-yellow-100';
+      case 'cancelado':
+        return 'text-red-600 bg-red-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
+    }
+  };
+
   const getStatusText = (status) => {
     switch (status) {
       case 'entregado':
         return 'Entregado';
+      case 'enviado':
+        return 'Enviado';
+      case 'procesando':
+        return 'Procesando';
+      case 'cancelado':
+        return 'Cancelado';
+      default:
+        return status;
+    }
+  };
+
+  const getStatusTextReturn = (status) => {
+    switch (status) {
+      case 'devolucion_solicitada':
+        return 'Devolucion Solicitada';
       case 'enviado':
         return 'Enviado';
       case 'procesando':
@@ -930,6 +961,14 @@ const PurchasesPage = () => {
                   <span className={`ml-3 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedPurchase.estado)}`}>
                     {getStatusText(selectedPurchase.estado)}
                   </span>
+
+                  {selectedPurchase.estado === 'entregado' && 
+                    selectedPurchase.envio.fecha_entrega_real &&
+                    new Date() - new Date(selectedPurchase.envio.fecha_entrega_real) < 8 * 24 * 60 * 60 * 1000 && selectedPurchase.resumen_devoluciones.tiene_devoluciones && (
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColorReturn(selectedPurchase.resumen_devoluciones.estado_devolucion)}`}>
+                      {getStatusTextReturn(selectedPurchase.resumen_devoluciones.estado_devolucion)}
+                    </span>
+                  )}
                 </div>
                 <p className="text-gray-600 mt-1">Realizada el {formatDate(selectedPurchase.fecha_creacion)}</p>
               </div>
@@ -1088,7 +1127,7 @@ const PurchasesPage = () => {
           {/* Mostrar botón de devolución solo si el pedido está entregado y tiene menos de 8 días */}
           {selectedPurchase.estado === 'entregado' && 
             selectedPurchase.envio.fecha_entrega_real &&
-            new Date() - new Date(selectedPurchase.envio.fecha_entrega_real) < 8 * 24 * 60 * 60 * 1000 && (
+            new Date() - new Date(selectedPurchase.envio.fecha_entrega_real) < 8 * 24 * 60 * 60 * 1000 && !selectedPurchase.resumen_devoluciones.tiene_devoluciones &&(
             <button 
               onClick={initializeRefundRequest}
               className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded-md transition-colors shadow-sm font-medium"
@@ -1182,6 +1221,15 @@ const PurchasesPage = () => {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(purchase.estado)}`}>
                           {getStatusText(purchase.estado)}
                         </span>
+
+                        {purchase.estado === 'entregado' && 
+                          purchase.envio.fecha_entrega_real &&
+                          new Date() - new Date(purchase.envio.fecha_entrega_real) < 8 * 24 * 60 * 60 * 1000 && purchase.resumen_devoluciones.tiene_devoluciones && (
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColorReturn(purchase.resumen_devoluciones.estado_devolucion)}`}>
+                            {getStatusTextReturn(purchase.resumen_devoluciones.estado_devolucion)}
+                          </span>
+                        )}
+                        
                       </div>
                       <div className="text-sm text-gray-500 space-y-1">
                         <p>Comprado el {formatDate(purchase.fecha_creacion)}</p>
