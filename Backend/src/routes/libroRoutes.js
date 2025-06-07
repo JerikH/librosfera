@@ -83,7 +83,6 @@ const {
  *       200:
  *         description: Lista de libros obtenida exitosamente
  */
-router.get('/', getLibros);
 
 /**
  * @swagger
@@ -194,7 +193,6 @@ router.get('/', getLibros);
  *       500:
  *         description: Error del servidor
  */
-router.get('/buscar', buscarLibros);
 
 /**
  * @swagger
@@ -258,7 +256,6 @@ router.get('/buscar', buscarLibros);
  *       500:
  *         description: Error del servidor
  */
-router.get('/autocompletar', autocompletarTerminos);
 
 /**
  * @swagger
@@ -335,7 +332,6 @@ router.get('/autocompletar', autocompletarTerminos);
  *       500:
  *         description: Error del servidor
  */
-router.get('/busqueda-difusa', busquedaDifusa);
 
 /**
  * @swagger
@@ -360,7 +356,6 @@ router.get('/busqueda-difusa', busquedaDifusa);
  *       200:
  *         description: Interacción registrada correctamente
  */
-router.post('/buscar/:idBusqueda/interaccion/:idLibro', registrarInteraccion);
 
 /**
  * @swagger
@@ -372,7 +367,6 @@ router.post('/buscar/:idBusqueda/interaccion/:idLibro', registrarInteraccion);
  *       200:
  *         description: Lista de libros con descuento
  */
-router.get('/descuentos', getLibrosConDescuento);
 
 /**
  * @swagger
@@ -384,7 +378,6 @@ router.get('/descuentos', getLibrosConDescuento);
  *       200:
  *         description: Lista de libros destacados
  */
-router.get('/destacados', getLibrosDestacados);
 
 /**
  * @swagger
@@ -400,7 +393,6 @@ router.get('/destacados', getLibrosDestacados);
  *       401:
  *         description: Requiere autenticación
  */
-router.get('/recomendaciones', protect, getRecomendaciones);
 
 /**
  * @swagger
@@ -421,7 +413,6 @@ router.get('/recomendaciones', protect, getRecomendaciones);
  *       404:
  *         description: Libro no encontrado
  */
-router.get('/:id', getLibroPorId);
 
 // Rutas protegidas para administración de libros
 
@@ -457,7 +448,6 @@ router.get('/:id', getLibroPorId);
  *       403:
  *         description: No tiene permisos para crear libros
  */
-router.post('/', protect, authorize('administrador', 'root'), crearLibro);
 
 /**
  * @swagger
@@ -487,7 +477,6 @@ router.post('/', protect, authorize('administrador', 'root'), crearLibro);
  *       403:
  *         description: No tiene permisos para actualizar libros
  */
-router.put('/:id', protect, authorize('administrador', 'root'), actualizarLibro);
 
 /**
  * @swagger
@@ -509,7 +498,6 @@ router.put('/:id', protect, authorize('administrador', 'root'), actualizarLibro)
  *       403:
  *         description: No tiene permisos para eliminar libros
  */
-router.delete('/:id', protect, authorize('administrador', 'root'), eliminarLibro);
 
 /**
  * @swagger
@@ -531,7 +519,6 @@ router.delete('/:id', protect, authorize('administrador', 'root'), eliminarLibro
  *       403:
  *         description: No tiene permisos para eliminar libros permanentemente
  */
-router.delete('/:id/permanente', protect, authorize('root'), eliminarLibroPermanente);
 
 /**
  * @swagger
@@ -553,7 +540,6 @@ router.delete('/:id/permanente', protect, authorize('root'), eliminarLibroPerman
  *       403:
  *         description: No tiene permisos para esta acción
  */
-router.patch('/:id/historico', protect, authorize('administrador', 'root'), marcarComoHistorico);
 
 // Rutas para calificaciones
 /**
@@ -591,7 +577,6 @@ router.patch('/:id/historico', protect, authorize('administrador', 'root'), marc
  *       401:
  *         description: Requiere autenticación
  */
-router.post('/:id/calificacion', protect, calificarLibro);
 
 // Rutas para gestión de ejemplares
 /**
@@ -624,7 +609,6 @@ router.post('/:id/calificacion', protect, calificarLibro);
  *       403:
  *         description: No tiene permisos para agregar ejemplares
  */
-router.post('/:id/ejemplares', protect, authorize('administrador', 'root'), agregarEjemplar);
 
 /**
  * @swagger
@@ -651,7 +635,6 @@ router.post('/:id/ejemplares', protect, authorize('administrador', 'root'), agre
  *       403:
  *         description: No tiene permisos para actualizar ejemplares
  */
-router.put('/:id/ejemplares/:codigo', protect, authorize('administrador', 'root'), actualizarEjemplar);
 
 /**
  * @swagger
@@ -678,7 +661,6 @@ router.put('/:id/ejemplares/:codigo', protect, authorize('administrador', 'root'
  *       403:
  *         description: No tiene permisos para eliminar ejemplares
  */
-router.delete('/:id/ejemplares/:codigo', protect, authorize('administrador', 'root'), eliminarEjemplar);
 
 // Rutas para gestión de descuentos
 /**
@@ -712,7 +694,6 @@ router.delete('/:id/ejemplares/:codigo', protect, authorize('administrador', 'ro
  *       403:
  *         description: No tiene permisos para agregar descuentos
  */
-router.post('/:id/descuentos', protect, authorize('administrador', 'root'), agregarDescuento);
 
 /**
  * @swagger
@@ -734,7 +715,6 @@ router.post('/:id/descuentos', protect, authorize('administrador', 'root'), agre
  *       403:
  *         description: No tiene permisos para desactivar descuentos
  */
-router.delete('/:id/descuentos', protect, authorize('administrador', 'root'), desactivarDescuentos);
 
 // Rutas para gestión de imágenes
 /**
@@ -777,15 +757,6 @@ router.delete('/:id/descuentos', protect, authorize('administrador', 'root'), de
  *       403:
  *         description: No tiene permisos para subir imágenes
  */
-router.post(
-  '/:id/imagenes', 
-  protect, 
-  authorize('administrador', 'root'), 
-  checkUploadDirs,
-  uploadSingleImage,
-  handleMulterError,
-  subirImagenLibro
-);
 
 /**
  * @swagger
@@ -833,12 +804,7 @@ router.post(
  *       403:
  *         description: No tiene permisos para ordenar imágenes
  */
-router.patch(
-  '/:id/imagenes/orden', 
-  protect, 
-  authorize('administrador', 'root'), 
-  actualizarOrdenImagenes
-);
+
 
 /**
  * @swagger
@@ -867,7 +833,6 @@ router.patch(
  *       403:
  *         description: No tiene permisos para eliminar imágenes
  */
-router.delete('/:id/imagenes/:idImagen', protect, authorize('administrador', 'root'), eliminarImagenLibro);
 
 // Rutas para gestión de stock
 /**
@@ -903,7 +868,6 @@ router.delete('/:id/imagenes/:idImagen', protect, authorize('administrador', 'ro
  *       409:
  *         description: Stock insuficiente
  */
-router.post('/:id/reservar', protect, reservarStockLibro);
 
 /**
  * @swagger
@@ -936,7 +900,6 @@ router.post('/:id/reservar', protect, reservarStockLibro);
  *       401:
  *         description: Requiere autenticación
  */
-router.post('/:id/liberar', protect, liberarStockLibro);
 
 /**
  * @swagger
@@ -970,6 +933,45 @@ router.post('/:id/liberar', protect, liberarStockLibro);
  *       401:
  *         description: Requiere autenticación
  */
+
+router.get('/', getLibros);
+router.get('/buscar', buscarLibros);
+router.get('/autocompletar', autocompletarTerminos);
+router.get('/busqueda-difusa', busquedaDifusa);
+router.post('/buscar/:idBusqueda/interaccion/:idLibro', registrarInteraccion);
+router.get('/descuentos', getLibrosConDescuento);
+router.get('/destacados', getLibrosDestacados);
+router.get('/recomendaciones', protect, getRecomendaciones);
+router.get('/:id', getLibroPorId);
+router.post('/', protect, authorize('administrador', 'root'), crearLibro);
+router.put('/:id', protect, authorize('administrador', 'root'), actualizarLibro);
+router.delete('/:id', protect, authorize('administrador', 'root'), eliminarLibro);
+router.delete('/:id/permanente', protect, authorize('root'), eliminarLibroPermanente);
+router.patch('/:id/historico', protect, authorize('administrador', 'root'), marcarComoHistorico);
+router.post('/:id/calificacion', protect, calificarLibro);
+router.post('/:id/ejemplares', protect, authorize('administrador', 'root'), agregarEjemplar);
+router.put('/:id/ejemplares/:codigo', protect, authorize('administrador', 'root'), actualizarEjemplar);
+router.delete('/:id/ejemplares/:codigo', protect, authorize('administrador', 'root'), eliminarEjemplar);
+router.post('/:id/descuentos', protect, authorize('administrador', 'root'), agregarDescuento);
+router.delete('/:id/descuentos', protect, authorize('administrador', 'root'), desactivarDescuentos);
+router.post(
+  '/:id/imagenes', 
+  protect, 
+  authorize('administrador', 'root'), 
+  checkUploadDirs,
+  uploadSingleImage,
+  handleMulterError,
+  subirImagenLibro
+);
+router.patch(
+  '/:id/imagenes/orden', 
+  protect, 
+  authorize('administrador', 'root'), 
+  actualizarOrdenImagenes
+);
+router.delete('/:id/imagenes/:idImagen', protect, authorize('administrador', 'root'), eliminarImagenLibro);
+router.post('/:id/reservar', protect, reservarStockLibro);
+router.post('/:id/liberar', protect, liberarStockLibro);
 router.post('/:id/comprar', protect, confirmarCompraLibro);
 
 module.exports = router;
