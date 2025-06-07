@@ -143,7 +143,7 @@ const AdminProfile = () => {
     });
     
     // Redireccionar a la página de login
-    navigate('/login');
+    navigate('/Login');
   };
 
   // Función para ir al perfil de usuario
