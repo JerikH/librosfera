@@ -464,7 +464,8 @@ const createAdmin = catchAsync(async (req, res, next) => {
     if (nuevoAdmin && nuevoAdmin.password) {
       delete nuevoAdmin.password;
     }
-
+    const perfilCompleto = nuevoAdmin.DNI && nuevoAdmin.nombres && nuevoAdmin.apellidos;
+    
     await req.logActivity('administracion', 'creacion_administrador', {
       detalles: {
         email: email,
@@ -475,7 +476,7 @@ const createAdmin = catchAsync(async (req, res, next) => {
     });
     
     // Verificar si el perfil está completo
-    const perfilCompleto = nuevoAdmin.DNI && nuevoAdmin.nombres && nuevoAdmin.apellidos;
+    
     
     // Responder con información del administrador y token
     res.status(201).json({
