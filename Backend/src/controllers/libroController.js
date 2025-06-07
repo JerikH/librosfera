@@ -631,7 +631,7 @@ const getLibrosConDescuento = catchAsync(async (req, res, next) => {
     return res.status(200).json({
       status: 'success',
       resultados: libros.length,
-      data: libros
+      data: libros // Ya incluye stock consolidado
     });
   } catch (error) {
     console.error('Error en controlador getLibrosConDescuento:', error);
