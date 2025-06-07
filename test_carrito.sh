@@ -10,7 +10,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuración
-BASE_URL="http://localhost:5000"
+BASE_URL="https://librosfera.onrender.com"
 USER_ID_CLIENTE="" # Se llenará automáticamente después del login
 LIBRO_ID_1=""     # Se llenará automáticamente
 LIBRO_ID_2=""     # Se llenará automáticamente

@@ -4,7 +4,7 @@ export LC_ALL=es_ES.UTF-8
 # Script de pruebas completo para el sistema de gestión de libros
 
 # Ajuste estos parámetros a su entorno
-BASE_URL="http://localhost:5000"
+BASE_URL="https://librosfera.onrender.com"
 
 # Colores para mensajes en consola
 GREEN='\033[0;32m'

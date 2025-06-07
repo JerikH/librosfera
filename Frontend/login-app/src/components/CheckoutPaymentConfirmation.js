@@ -167,7 +167,7 @@ function CheckoutPaymentConfirmation() {
           "Entrega a domicilio"
       };
       
-      const response = await axios.post('http://localhost:5000/api/v1/ventas', requestPayload, {
+      const response = await axios.post('https://librosfera.onrender.com//api/v1/ventas', requestPayload, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json',

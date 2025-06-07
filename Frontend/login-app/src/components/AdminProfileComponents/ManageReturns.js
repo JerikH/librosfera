@@ -82,7 +82,7 @@ const ManageReturns = () => {
       });
 
       const response = await fetch(
-        `http://localhost:5000/api/v1/devoluciones/admin/todas?${queryParams}`,
+        `https://librosfera.onrender.com//api/v1/devoluciones/admin/todas?${queryParams}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -123,7 +123,7 @@ const ManageReturns = () => {
       if (!token) return;
 
       const response = await fetch(
-        'http://localhost:5000/api/v1/devoluciones/estadisticas',
+        'https://librosfera.onrender.com//api/v1/devoluciones/estadisticas',
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -150,7 +150,7 @@ const ManageReturns = () => {
       if (!token) return;
 
       const response = await fetch(
-        `http://localhost:5000/api/v1/devoluciones/${codigo}`,
+        `https://librosfera.onrender.com//api/v1/devoluciones/${codigo}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -183,23 +183,23 @@ const ManageReturns = () => {
 
       switch (action) {
         case 'aprobar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/aprobar`;
+          url = `https://librosfera.onrender.com//api/v1/devoluciones/${codigo}/aprobar`;
           break;
         case 'rechazar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/rechazar`;
+          url = `https://librosfera.onrender.com//api/v1/devoluciones/${codigo}/rechazar`;
           break;
         case 'recibir':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/recibir`;
+          url = `https://librosfera.onrender.com//api/v1/devoluciones/${codigo}/recibir`;
           break;
         case 'reembolsar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/reembolsar`;
+          url = `https://librosfera.onrender.com//api/v1/devoluciones/${codigo}/reembolsar`;
           break;
         case 'cancelar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}`;
+          url = `https://librosfera.onrender.com//api/v1/devoluciones/${codigo}`;
           method = 'DELETE';
           break;
         case 'inspeccionar':
-          url = `http://localhost:5000/api/v1/devoluciones/${codigo}/items/${data.idItem}/inspeccionar`;
+          url = `https://librosfera.onrender.com//api/v1/devoluciones/${codigo}/items/${data.idItem}/inspeccionar`;
           break;
         default:
           throw new Error('Acción no válida');
@@ -241,7 +241,7 @@ const ManageReturns = () => {
       if (!token) return false;
 
       const response = await fetch(
-        `http://localhost:5000/api/v1/devoluciones/${codigo}/comunicaciones`,
+        `https://librosfera.onrender.com//api/v1/devoluciones/${codigo}/comunicaciones`,
         {
           method: 'POST',
           headers: {

@@ -43,7 +43,7 @@ const ManageSales = () => {
     { value: 'entregado', label: 'Entregado', color: 'bg-green-100 text-green-800' }
   ];
 
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://librosfera.onrender.com/';
 
   const getCookie = (name) => {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
