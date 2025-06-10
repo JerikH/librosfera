@@ -131,6 +131,11 @@ const devolucionSchema = new Schema({
     required: true,
     index: true
   },
+
+  // TipoEnvio: {
+  //   type: String,
+  //   required: true
+  // },
   
   // Items a devolver
   items: [devolucionItemSchema],
@@ -477,7 +482,14 @@ devolucionSchema.methods.inspeccionarItem = function(idItem, resultado, usuarioI
   if (todosInspeccionados) {
     // Calcular total de reembolso
     this.totales.monto_aprobado_reembolso = this.items.reduce((total, i) => total + i.monto_reembolso, 0);
-    
+    console.log("Infom devolucion:", this);
+    //console.log("rembolso aprobado:", this.totales.monto_aprobado_reembolso);
+    console.log("Monto Total:", this.totales.monto_total_compra);
+    console.log("Diff:", (parseInt(this.totales.monto_total_compra) - parseInt(this.totales.monto_aprobado_reembolso)));
+    if((parseInt(this.totales.monto_total_compra) - parseInt(this.totales.monto_aprobado_reembolso)) == 7000){
+      this.totales.monto_aprobado_reembolso += 7000;
+    }
+    console.log("rembolso aprobado:", this.totales.monto_aprobado_reembolso);
     this.cambiarEstado('reembolso_aprobado', usuarioId, 'Inspección completada, reembolso aprobado');
   }
   
@@ -570,6 +582,8 @@ devolucionSchema.statics.crearDesdeVenta = async function(venta, itemsDevolucion
   if (!validacion.puede) {
     throw new Error(validacion.razon);
   }
+
+
   
   // Preparar items de devolución
   const itemsPreparados = itemsDevolucion.map(itemDev => {
@@ -601,7 +615,7 @@ devolucionSchema.statics.crearDesdeVenta = async function(venta, itemsDevolucion
   
   // Calcular totales
   const montoItemsDevolucion = itemsPreparados.reduce((total, item) => {
-    return total + (item.info_libro.precio_pagado * item.cantidad_a_devolver);
+    return (total + (item.info_libro.precio_pagado * item.cantidad_a_devolver));
   }, 0);
   
   // Crear devolución
@@ -615,6 +629,8 @@ devolucionSchema.statics.crearDesdeVenta = async function(venta, itemsDevolucion
       monto_items_devolucion: montoItemsDevolucion
     }
   });
+
+  console.log("Devolcuion creada:", devolucion);
   
   // Registrar evento inicial (sin guardar)
   devolucion.registrarEvento(

@@ -351,6 +351,7 @@ const renderStatusButton = (sale) => {
               sale.numero_venta === numeroVenta 
                 ? { 
                     ...sale, 
+                    estado: newStatus, // Update the main estado field
                     envio: { 
                       ...sale.envio, 
                       estado_envio: newStatus,
@@ -369,6 +370,7 @@ const renderStatusButton = (sale) => {
           if (selectedSale && selectedSale.numero_venta === numeroVenta) {
             setSelectedSale(prev => ({
               ...prev,
+              estado: newStatus, // Update the main estado field
               envio: {
                 ...prev.envio,
                 estado_envio: newStatus,
@@ -398,12 +400,13 @@ const renderStatusButton = (sale) => {
     }
   };
 
+
   const handleViewDetails = async (sale) => {
     const saleDetails = await fetchSaleDetails(sale.numero_venta);
     if (saleDetails) {
       
       setSelectedSale(saleDetails);
-      console.log("Details:", selectedSale);
+      console.log("Details:", saleDetails);
       setShowModal(true);
       
     }
@@ -974,10 +977,31 @@ return (
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
-                      {formatCurrency(item.precios?.precio_unitario_final || 0)}
+                      {item.precios.descuento_aplicado > 0 ? (
+                      <>
+                        <p className="font-s line-through text-gray-500">
+                          {formatCurrency(item.precios.precio_unitario_base || 0)}
+                        </p>
+                        <p className="font-medium text-red-600">
+                          {formatCurrency(item.precios.precio_unitario_base - item.precios.descuento_aplicado || 0)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="font-medium text-gray-800">{formatCurrency(item.precios.precio_unitario_base || 0)}</p>
+                    )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
-                      {formatCurrency(item.precios?.subtotal || 0)}
+                      {/* {formatCurrency((item.precios?.precio_unitario_base * item.cantidad) || 0)} */}
+                      {item.precios.descuento_aplicado > 0 ? (
+                      <>
+                        <p className="font-medium">
+                          {formatCurrency((item.precios.precio_unitario_base - item.precios.descuento_aplicado) * item.cantidad || 0)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="font-medium text-gray-800">{formatCurrency(item.precios.precio_unitario_base * item.cantidad || 0)}</p>
+                    )}
+
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -1003,7 +1027,8 @@ return (
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span>Subtotal:</span>
-                <span>{formatCurrency(selectedSale.totales?.subtotal_sin_descuentos || 0)}</span>
+                <span>
+                  {formatCurrency(selectedSale.totales?.subtotal_sin_descuentos || 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Descuentos:</span>
@@ -1053,31 +1078,43 @@ return (
         <div className="bg-white border-2 border-gray-200 rounded-lg p-4 mb-4">
           <h4 className="font-semibold text-gray-900 mb-3">Cambiar Estado de Envío</h4>
           <div className="flex flex-wrap gap-2">
-            {shippingStates.map((state) => (
-              <button
-                key={state.value}
-                onClick={() => updateShippingStatus(selectedSale.numero_venta, state.value)}
-                disabled={updatingStatus}
-                className={`px-4 py-2 rounded-lg border transition-colors ${
-                  selectedSale.estado === state.value
-                    ? `${state.color} border-current`
-                    : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'
-                } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {updatingStatus && updatingVenta === selectedSale.numero_venta ? (
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Actualizando...
-                  </div>
-                ) : (
-                  state.label
-                )}
-              </button>
-            ))}
+            {shippingStates.map((state) => {
+              const isCurrentState = selectedSale.estado === state.value || selectedSale.envio?.estado_envio === state.value;
+              const isUpdatingThis = updatingStatus && updatingVenta === selectedSale.numero_venta;
+              
+              return (
+                <button
+                  key={state.value}
+                  onClick={() => updateShippingStatus(selectedSale.numero_venta, state.value)}
+                  disabled={updatingStatus || isCurrentState}
+                  className={`px-4 py-2 rounded-lg border transition-colors ${
+                    isCurrentState
+                      ? `${state.color} border-current ring-2 ring-offset-2 ring-blue-500`
+                      : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700 hover:border-gray-400'
+                  } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : ''} ${
+                    isCurrentState ? 'cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                >
+                  {isUpdatingThis ? (
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Actualizando...
+                    </div>
+                  ) : (
+                    <>
+                      {state.label}
+                      {isCurrentState && (
+                        <span className="ml-2 text-xs">✓</span>
+                      )}
+                    </>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <p className="text-sm text-gray-500 mt-2">
-            Estado actual: <span className={`px-2 py-1 rounded-full text-xs ${getStatusInfo(selectedSale.estado).color}`}>
-              {getStatusInfo(selectedSale.estado).label}
+            Estado actual: <span className={`px-2 py-1 rounded-full text-xs ${getStatusInfo(selectedSale.estado || selectedSale.envio?.estado_envio).color}`}>
+              {getStatusInfo(selectedSale.estado || selectedSale.envio?.estado_envio).label}
             </span>
           </p>
         </div>

@@ -151,13 +151,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
         lugar_nacimiento: userData.lugar_nacimiento || '',
         suscrito_noticias: userData.suscrito_noticias || false,
         // Address fields - assuming primary address is the first one
-        calle: userData.direcciones && userData.direcciones[0]?.calle || '',
-        ciudad: userData.direcciones && userData.direcciones[0]?.ciudad || '',
-        codigo_postal: userData.direcciones && userData.direcciones[0]?.codigo_postal || '',
-        pais: userData.direcciones && userData.direcciones[0]?.pais || '',
-        estado_provincia: userData.direcciones && userData.direcciones[0]?.estado_provincia || '',
-        referencias: userData.direcciones && userData.direcciones[0]?.referencias || '',
-        tipo_direccion: userData.direcciones && userData.direcciones[0]?.tipo || 'casa',
+        direcciones: userData.direcciones || '',
         // Password fields (empty by default)
         password: '',
         confirmPassword: '',
@@ -321,21 +315,21 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
     
     try {
       // Create the primary address
-      const primaryAddress = {
-        calle: formData.calle,
-        ciudad: formData.ciudad,
-        departamento: formData.estado_provincia,
-        direccion_completa: `${formData.calle}, ${formData.ciudad}, ${formData.estado_provincia || ''}, ${formData.codigo_postal || ''}, ${formData.pais || ''}`.trim(),
-        codigo_postal: formData.codigo_postal,
-        pais: formData.pais,
-        tipo: formData.tipo_direccion || 'casa'
-      };
+      // const primaryAddress = {
+      //   calle: formData.calle,
+      //   ciudad: formData.ciudad,
+      //   departamento: formData.estado_provincia,
+      //   direccion_completa: `${formData.calle}, ${formData.ciudad}, ${formData.estado_provincia || ''}, ${formData.codigo_postal || ''}, ${formData.pais || ''}`.trim(),
+      //   codigo_postal: formData.codigo_postal,
+      //   pais: formData.pais,
+      //   tipo: formData.tipo_direccion || 'casa'
+      // };
       
-      // If there's a secondary address in the existing user data, include it
-      let direcciones = [primaryAddress];
-      if (userData?.direcciones && userData.direcciones.length > 1) {
-        direcciones = [primaryAddress, ...userData.direcciones.slice(1)];
-      }
+      // // If there's a secondary address in the existing user data, include it
+      // let direcciones = [primaryAddress];
+      // if (userData?.direcciones && userData.direcciones.length > 1) {
+      //   direcciones = [primaryAddress, ...userData.direcciones.slice(1)];
+      // }
       
       // Prepare data for API submission - follow the exact format from the curl example
       const updatedUserData = {
@@ -343,7 +337,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
         apellidos: formData.apellidos,
         telefono: formData.telefono,
         telefono_alternativo: formData.telefono_alternativo,
-        direcciones: direcciones,
+        direcciones: formData.direcciones,
         email: formData.email,
         genero: formData.genero,
         suscrito_noticias: formData.suscrito_noticias,
@@ -506,7 +500,8 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
               
               <div>
                 <span className="text-gray-600 font-semibold">Última actualización:</span>
-                <span className="ml-2">{userData?.ultima_actualizacion || 'N/A'}</span>
+                <br/>
+                <span className="ml-2">{userData?.fecha_actualizacion || 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -653,9 +648,9 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
             </div>
             
             {/* Address Information */}
-            <h2 className="text-xl font-semibold mb-4">Dirección Principal</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="col-span-1 md:col-span-2">
+            {/* <h2 className="text-xl font-semibold mb-4">Dirección Principal</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"> */}
+              {/* <div className="col-span-1 md:col-span-2">
                 <label className="block text-gray-700 mb-1">Calle</label>
                 <input
                   type="text"
@@ -692,7 +687,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
               </div>
               
               {/* País with Autocomplete */}
-              <div ref={countryInputRef} className="relative">
+              {/* <div ref={countryInputRef} className="relative">
                 <label className="block text-gray-700 mb-1">País</label>
                 <input
                   type="text"
@@ -713,7 +708,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
                   </div>
                 )}
                 
-                {/* Countries Dropdown */}
+                
                 {showCountriesList && filteredCountries.length > 0 && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
                     {filteredCountries.map(country => (
@@ -764,7 +759,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 />
               </div>
-            </div>
+            </div> */}
             
             {/* Preferences */}
             <h2 className="text-xl font-semibold mb-4">Preferencias</h2>

@@ -56,7 +56,7 @@ const CheckoutDeliveryPage = () => {
             State: defaultAddress.departamento,
             Country: defaultAddress.pais,
             Postal: defaultAddress.codigo_postal,
-            Street: defaultAddress.calle
+            Street: defaultAddress.direccion_completa
           });
         } else if (response.data.data.length > 0) {
           // If no default address, select the first one
@@ -67,7 +67,7 @@ const CheckoutDeliveryPage = () => {
             State: firstAddress.departamento,
             Country: firstAddress.pais,
             Postal: firstAddress.codigo_postal,
-            Street: firstAddress.calle
+            Street: firstAddress.direccion_completa
           });
         }
       }
@@ -185,7 +185,7 @@ const CheckoutDeliveryPage = () => {
           State: '', // Not available in the cookie data
           Country: firstAddress.pais || '',
           Postal: firstAddress.codigo_postal || '',
-          Street: firstAddress.calle || ''
+          Street: firstAddress.direccion_completa || ''
         });
       }
     } else {
@@ -203,7 +203,7 @@ const CheckoutDeliveryPage = () => {
       State: address.departamento,
       Country: address.pais,
       Postal: address.codigo_postal,
-      Street: address.calle
+      Street: address.direccion_completa
     });
   };
 

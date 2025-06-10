@@ -163,6 +163,7 @@ const ManageReturns = () => {
         const data = await response.json();
         if (data.status === 'success') {
           setSelectedReturn(data.data);
+          console.log("Return details:", data.data);
         }
       }
     } catch (error) {
