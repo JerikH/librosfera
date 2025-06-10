@@ -623,6 +623,8 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
           }
         });
         bookId = book.id;
+
+        console.log("Apidata of put", apiData);
         
         // En modo edición, también actualizamos el orden y los tipos de imágenes
         await updateAllImageTypes();

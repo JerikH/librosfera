@@ -207,7 +207,7 @@ const UserProfile = () => {
             <div className="h-full overflow-y-auto p-6">
               <EditProfile 
                 userData={userData}
-                userType="user"
+                userType={userData.tipo_usuario}
                 onGoBack={handleGoBack}
               />
             </div>

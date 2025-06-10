@@ -611,10 +611,21 @@ const carritoService = {
           
           // Calcular precios
           const precioBase = libro.precio_info?.precio_base || libro.precio;
-          const impuesto = Math.round(precioBase * 0.19); // IVA 19%
-          const precioConImpuesto = precioBase + impuesto;
+          const precioConDescuento = libro.precio || 0;
+          let impuesto = Math.round(precioBase * 0.19); // IVA 19%
+          let precioConImpuesto = precioBase + impuesto;
           const subtotal = precioConImpuesto * cantidad;
-          
+          let totalDescuento = 0;
+          if((precioBase - precioConDescuento) > 0){
+            impuesto = Math.round(precioConDescuento * 0.19);
+            totalDescuento = precioBase - precioConDescuento;
+            precioConImpuesto = precioConDescuento + impuesto;
+          }
+          console.log("Libro:", libro);
+          console.log("precio base:", precioBase);
+          console.log("presio impuesto:", precioConImpuesto);
+          console.log("precio descuento:", precioConDescuento);
+          console.log("totalDescuento:", totalDescuento);
           // Crear item con TODOS los campos requeridos
           const nuevoItemData = {
             id_carrito: carrito._id,
@@ -622,14 +633,14 @@ const carritoService = {
             cantidad: cantidad,
             precios: {
               precio_base: precioBase,
-              precio_con_descuentos: precioBase,
+              precio_con_descuentos: precioConDescuento,
               precio_con_impuestos: precioConImpuesto,
               impuesto: {
                 tipo: 'IVA',
                 porcentaje: 19,
                 valor_impuesto: impuesto
               },
-              total_descuentos: 0
+              total_descuentos: totalDescuento
             },
             reserva_info: {
               cantidad_reservada: cantidad,

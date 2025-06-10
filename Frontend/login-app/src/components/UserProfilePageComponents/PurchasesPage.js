@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { getAuthToken } from './authUtils';
 import CachedImage from '../CachedImage';
+import { AArrowDown } from 'lucide-react';
 
 // Componente para seguimiento de envío a domicilio
 const DeliveryTracking = ({ envio , Data}) => {
@@ -153,7 +154,7 @@ const DeliveryTracking = ({ envio , Data}) => {
 };  
 
 // Componente para seguimiento de recogida en tienda
-const StorePickupTracking = ({ envio, data}) => {
+const StorePickupTracking = ({ envio, data, selectedPurchaseStoreInfo }) => {
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mb-6">
       <h3 className="text-lg font-bold mb-4 flex items-center">
@@ -165,21 +166,34 @@ const StorePickupTracking = ({ envio, data}) => {
       
       <div className="bg-blue-50 rounded-lg p-4 mb-6">
         <h4 className="font-medium text-gray-800 mb-2">Punto de entrega</h4>
-        {envio.tienda && (
-          <div>
-            <p className="font-medium text-gray-800">{envio.tienda.nombre}</p>
-            <p className="text-gray-600">{envio.tienda.direccion}</p>
-            <p className="text-gray-600">{envio.tienda.ciudad}</p>
-            {envio.tienda.telefono && (
-              <p className="text-gray-600">Tel: {envio.tienda.telefono}</p>
-            )}
-            {envio.tienda.horario && (
-              <p className="text-gray-600 mt-2">
-                <span className="font-medium">Horario:</span> {envio.tienda.horario}
-              </p>
-            )}
+        <div>
+          <p className="font-medium text-gray-800">
+            {selectedPurchaseStoreInfo?.nombre || 'Cargando información de tienda...'}
+          </p>
+          <p className="text-gray-600">{selectedPurchaseStoreInfo?.direccion_formateada}</p>
+          {selectedPurchaseStoreInfo?.telefono_principal && (
+            <p className="text-gray-600">Tel: {selectedPurchaseStoreInfo?.telefono_principal}</p>
+          )}
+          {selectedPurchaseStoreInfo?.horarios && (
+          <div className="mt-3">
+            <span className="font-medium text-gray-800 block mb-2">Horarios:</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-sm">
+              {Object.entries(selectedPurchaseStoreInfo.horarios)
+                .map(([day, schedule]) => {
+                  const dayName = day.charAt(0).toUpperCase() + day.slice(1);
+                  return (
+                    <div key={day} className="flex justify-between items-center py-1">
+                      <span className="font-medium text-gray-700">{dayName}:</span>
+                      <span className={`${schedule.activo ? 'text-green-600' : 'text-red-500'}`}>
+                        {schedule.activo ? `${schedule.apertura} - ${schedule.cierre}` : 'Cerrado'}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         )}
+        </div>
       </div>
       
       <div className="relative">
@@ -338,6 +352,7 @@ const RefundModal = ({
           id_item_venta: item.id_item_venta,
           cantidad: item.cantidad_devolver,
           motivo: item.motivo,
+          TipoCompra: '',
           descripcion: item.descripcion.trim()
         }));
       
@@ -656,6 +671,7 @@ const PurchasesPage = () => {
   const [selectedPurchaseId, setSelectedPurchaseId] = useState(null);
   const [selectedPurchaseNum, setSelectedPurchaseNum] = useState(null);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [selectedPurchaseStoreInfo, setSelectedPurchaseStoreInfo] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundItems, setRefundItems] = useState([]);
@@ -672,15 +688,47 @@ const PurchasesPage = () => {
     if (selectedPurchaseNum) {
       console.log("Num", selectedPurchaseNum);
       fetchPurchaseDetails(selectedPurchaseNum);
+
     }
   }, [selectedPurchaseNum]);
 
+
   useEffect(() => {
     if (selectedPurchase) {
-      console.log("Selected Purchase updated:", selectedPurchase);
-      // Perform any actions that depend on the updated selectedPurchase
+      console.log("Selected purchase updated to get store:", selectedPurchase);
+      // If it's a store pickup and has store ID, fetch store information
+      if (selectedPurchase.envio.tipo !== 'domicilio') {
+        GetStoreToSendInfo(selectedPurchase.envio.id_tienda_recogida);
+      }
     }
   }, [selectedPurchase]);
+
+  useEffect(() => {
+    if (selectedPurchaseStoreInfo) {
+      console.log("Selected store info updated:", selectedPurchaseStoreInfo);
+      // Perform any actions that depend on the updated selectedPurchase
+    }
+  }, [selectedPurchaseStoreInfo]);
+
+  const GetStoreToSendInfo = async (TiendaId) => {
+    try {
+      const response = await axios.get(`https://librosfera.onrender.com/api/v1/tiendas/${TiendaId}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.status === 'success') {
+        // Changed from response.data.data.venta to response.data.data
+        const StoreData = response.data.data;
+        console.log("Store response:", StoreData);
+        setSelectedPurchaseStoreInfo(StoreData);
+      }
+    } catch (err) {
+      console.error('Error fetching store details:', err);
+      setSelectedPurchaseStoreInfo(null);
+    }
+  };
 
   const fetchPurchases = async () => {
     try {
@@ -736,6 +784,7 @@ const PurchasesPage = () => {
    const handleRefundSubmit = async (refundData) => {
     setRefundLoading(true);
     try {
+      console.log("Refund data:", refundData);
       const response = await axios.post(
         `https://librosfera.onrender.com/api/v1/ventas/${selectedPurchase.numero_venta}/devolucion`,
         { items: refundData },
@@ -778,8 +827,13 @@ const PurchasesPage = () => {
       precio_unitario: item.precios.precio_unitario_base,
       motivo: '',
       descripcion: '',
+      TipoCompra: selectedPurchase.envio.tipo,
+      ValorEnvio: selectedPurchase.envio.costo,
       selected: false
     }));
+
+    console.log("selected purchase:", selectedPurchase);
+    console.log("availabel items:", availableItems);
     setRefundItems(availableItems);
     setShowRefundModal(true);
   };
@@ -1012,8 +1066,8 @@ const PurchasesPage = () => {
                   </p>
                 ) : (
                   <p className="text-sm text-gray-600">
-                    {selectedPurchase.envio.tienda ? 
-                      `${selectedPurchase.envio.tienda.nombre}, ${selectedPurchase.envio.tienda.direccion}` :
+                    {selectedPurchaseStoreInfo?.nombre ? 
+                      `${selectedPurchaseStoreInfo?.nombre}` :
                       'Información de tienda no disponible'
                     }
                   </p>
@@ -1033,7 +1087,7 @@ const PurchasesPage = () => {
                 <p className="text-sm text-gray-600">
                   {selectedPurchase.estado === 'entregado'
                     ? formatDate(selectedPurchase.envio.fecha_entrega_real)
-                    : formatDate(selectedPurchase.envio.fecha_envio)}
+                    : (selectedPurchase.envio.fecha_envio? formatDate(selectedPurchase.envio.fecha_envio) : 'En proceso')}
                 </p>
               </div>
             </div>
@@ -1081,7 +1135,19 @@ const PurchasesPage = () => {
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-end">
                     <p className="text-sm text-gray-600 sm:mb-1">Cantidad: {item.cantidad || 0}</p>
-                    <p className="font-medium text-gray-800">{formatCurrency(item.precios.precio_unitario_base || 0)}</p>
+                    {/* <p className="font-medium text-gray-800">{formatCurrency(item.precios.precio_unitario_base || 0)}</p> */}
+                    {item.precios.descuento_aplicado > 0 ? (
+                      <>
+                        <p className="font-s line-through text-gray-500">
+                          {formatCurrency(item.precios.precio_unitario_base || 0)}
+                        </p>
+                        <p className="font-medium text-red-600">
+                          {formatCurrency(item.precios.precio_unitario_base - item.precios.descuento_aplicado || 0)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="font-medium text-gray-800">{formatCurrency(item.precios.precio_unitario_base || 0)}</p>
+                    )}
                   </div>
                 </div>
               )) || <p className="text-gray-500">No hay productos disponibles</p>}
@@ -1100,8 +1166,8 @@ const PurchasesPage = () => {
                 </div>
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-600">Envío</span>
-                  {(selectedPurchase.totales.envio || 0) > 0 ? (
-                    <span>{formatCurrency(selectedPurchase.totales.envio)}</span>
+                  {(selectedPurchase.totales.costo_envio|| 0) > 0 ? (
+                    <span>{formatCurrency(selectedPurchase.totales.costo_envio)}</span>
                   ) : (
                     <span className="text-green-600">Gratis</span>
                   )}
@@ -1119,7 +1185,11 @@ const PurchasesPage = () => {
         {selectedPurchase.envio.tipo === 'domicilio' ? (
           <DeliveryTracking envio={selectedPurchase.envio} Data={selectedPurchase}/>
         ) : (
-          <StorePickupTracking envio={selectedPurchase.envio} data={selectedPurchase} />
+          <StorePickupTracking 
+            envio={selectedPurchase.envio} 
+            data={selectedPurchase} 
+            selectedPurchaseStoreInfo={selectedPurchaseStoreInfo}
+          />
         )}
         
         {/* Botones de acción */}
