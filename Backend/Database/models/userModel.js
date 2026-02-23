@@ -116,7 +116,7 @@ const personaSchema = new Schema({
   },
   foto_perfil: {
     type: String,
-    default: 'https://librosfera.onrender.com/uploads/profiles/default.jpg'
+    default: function() { return `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/profiles/default.jpg`; }
   }
 });
 

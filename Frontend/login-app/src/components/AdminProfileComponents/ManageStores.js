@@ -3,7 +3,8 @@ import 'leaflet/dist/leaflet.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getAuthToken } from '../UserProfilePageComponents/authUtils';
-import axios from 'axios'
+import axios from 'axios';
+import { API_URL as API_BASE_URL } from '../../config';
 
 const ManageStores = () => {
   const [stores, setStores] = useState([]);
@@ -96,8 +97,7 @@ const ManageStores = () => {
   const newMarkerRef = useRef(null);
   const L = useRef(null);
 
-  // API Configuration
-  const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
+  // API Configuration (imported from config)
 
 
   // Axios-like implementation (In real app, use: import axios from 'axios')

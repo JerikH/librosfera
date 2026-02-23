@@ -6,9 +6,9 @@ import CachedImage from './CachedImage';
 import { useCallback } from 'react';
 import { getCartCount } from './cartUtils';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL, BASE_URL } from '../config';
 
 // URL base para las llamadas a la API
-const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
 
 const BookListPage = ({ category }) => {
     
@@ -287,7 +287,7 @@ const BookListPage = ({ category }) => {
           return;
         }
   
-        const response = await axios.post('https://librosfera.onrender.com/api/v1/carrito/agregar', {
+        const response = await axios.post(`${API_BASE_URL}/carrito/agregar`, {
           id_libro: book._id,
           cantidad: 1
         }, {
@@ -413,7 +413,7 @@ const BookListPage = ({ category }) => {
     } else if (!imagesVerified) {
       // No images or empty array - set default and mark as verified
       setValidImageUrls([{ 
-        url: "https://librosfera.onrender.com/uploads/libros/Default.png",
+        url: `${BASE_URL}/uploads/libros/Default.png`,
         alt_text: "Default book image"
       }]);
       setImagesVerified(true);

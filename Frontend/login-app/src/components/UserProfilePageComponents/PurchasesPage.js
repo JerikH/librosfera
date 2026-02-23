@@ -3,6 +3,7 @@ import axios from 'axios';
 import { getAuthToken } from './authUtils';
 import CachedImage from '../CachedImage';
 import { AArrowDown } from 'lucide-react';
+import { API_URL as API_BASE_URL, BASE_URL } from '../../config';
 
 // Componente para seguimiento de envío a domicilio
 const DeliveryTracking = ({ envio , Data}) => {
@@ -712,7 +713,7 @@ const PurchasesPage = () => {
 
   const GetStoreToSendInfo = async (TiendaId) => {
     try {
-      const response = await axios.get(`https://librosfera.onrender.com/api/v1/tiendas/${TiendaId}`, {
+      const response = await axios.get(`${API_BASE_URL}/tiendas/${TiendaId}`, {
         headers: {
           'Content-Type': 'application/json'
         }
@@ -735,7 +736,7 @@ const PurchasesPage = () => {
       setLoading(true);
       setError(null);
       
-      const response = await axios.get('https://librosfera.onrender.com/api/v1/ventas/mis-ventas', {
+      const response = await axios.get(`${API_BASE_URL}/ventas/mis-ventas`, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json'
@@ -757,7 +758,7 @@ const PurchasesPage = () => {
   const fetchPurchaseDetails = async (purchaseId) => {
     setLoadingDetails(true);
     try {
-      const response = await axios.get(`https://librosfera.onrender.com/api/v1/ventas/${purchaseId}`, {
+      const response = await axios.get(`${API_BASE_URL}/ventas/${purchaseId}`, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json'
@@ -786,7 +787,7 @@ const PurchasesPage = () => {
     try {
       console.log("Refund data:", refundData);
       const response = await axios.post(
-        `https://librosfera.onrender.com/api/v1/ventas/${selectedPurchase.numero_venta}/devolucion`,
+        `${API_BASE_URL}/ventas/${selectedPurchase.numero_venta}/devolucion`,
         { items: refundData },
         {
           headers: {
@@ -1112,7 +1113,7 @@ const PurchasesPage = () => {
                           src={item.snapshot.imagen_portada} 
                           alt={item.snapshot.titulo || "Libro"} 
                           className="w-full h-full object-contain"
-                          fallbackSrc="https://librosfera.onrender.com/uploads/libros/Default.png"
+                          fallbackSrc={`${BASE_URL}/uploads/libros/Default.png`}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gray-200">
@@ -1334,7 +1335,7 @@ const PurchasesPage = () => {
                                   src={item.snapshot.imagen_portada} 
                                   alt={item.snapshot.titulo || "Libro"} 
                                   className="w-full h-full object-contain"
-                                  fallbackSrc="https://librosfera.onrender.com/uploads/libros/Default.png"
+                                  fallbackSrc={`${BASE_URL}/uploads/libros/Default.png`}
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-gray-200">

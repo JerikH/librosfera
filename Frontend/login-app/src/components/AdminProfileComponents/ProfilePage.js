@@ -3,6 +3,7 @@ import { formatDate } from './authUtils';
 import { useNavigate } from 'react-router-dom';
 import CachedImage from '../CachedImage';
 import EditProfile from '../EditProfile';
+import { BASE_URL } from '../../config';
 
 const ProfilePage = ({ userData }) => {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const ProfilePage = ({ userData }) => {
 
   // Define profile image base URL - same as in EditProfile
   const PROFILE_PIC_BASE_URL = '';
-  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com/uploads/profiles/default.jpg';
+  const DEFAULT_PROFILE_PIC = `${BASE_URL}/uploads/profiles/default.jpg`;
 
   // Get profile image URL
   const profileImage = userData?.foto_perfil 

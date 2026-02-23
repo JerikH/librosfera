@@ -3,8 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
-
-const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
+import { API_URL as API_BASE_URL } from '../config';
 
 function CheckoutPaymentPage() {
   const navigate = useNavigate();

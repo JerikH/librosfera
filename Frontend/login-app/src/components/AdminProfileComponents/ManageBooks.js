@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import BookEditor from './BookEditor';
 import CachedImage from '../CachedImage';
+import { API_URL as API_BASE_URL } from '../../config';
 
 const ManageBooks = () => {
   const [books, setBooks] = useState([]);
@@ -25,7 +26,7 @@ const ManageBooks = () => {
     setIsLoading(true);
     try {
       // Solicitar todos los libros sin ningún parámetro de paginación
-      const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros?page=${page}`);
+      const response = await axios.get(`${API_BASE_URL}/libros?page=${page}`);
       
       if (response.data && response.data.status === 'success') {
 
@@ -121,7 +122,7 @@ const ManageBooks = () => {
       setIsLoading(true);
       try {
         // Request all books without pagination when searching
-        const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros?limite=100`);
+        const response = await axios.get(`${API_BASE_URL}/libros?limite=100`);
         
         if (response.data && response.data.status === 'success') {
           const formattedBooks = response.data.data.map(book => {
@@ -224,7 +225,7 @@ const ManageBooks = () => {
       const token = parsedData.authToken;
       
       // Llamada a la API para eliminar el libro
-      await axios.delete(`https://librosfera.onrender.com/api/v1/libros/${bookId}`, {
+      await axios.delete(`${API_BASE_URL}/libros/${bookId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

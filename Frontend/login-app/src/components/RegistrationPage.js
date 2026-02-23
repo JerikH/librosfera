@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL as API_BASE_URL } from '../config';
 
 const RegistrationPage = () => {
   const navigate = useNavigate();
@@ -463,7 +464,7 @@ const RegistrationPage = () => {
         }
       };
       // Make POST request to register API
-      const response = await axios.post('https://librosfera.onrender.com/api/v1/users/register', userData, config);
+      const response = await axios.post(`${API_BASE_URL}/users/register`, userData, config);
       console.log("response");
       console.log(response);
       

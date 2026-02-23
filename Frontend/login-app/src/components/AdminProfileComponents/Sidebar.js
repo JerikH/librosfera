@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { logoutUser } from '../UserProfilePageComponents/authUtils';
 import CachedImage from '../CachedImage';
 import { useNavigate } from 'react-router-dom';
+import { BASE_URL } from '../../config';
 
 
 const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }) => {
@@ -113,7 +114,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile }
     }
   ];
   const PROFILE_PIC_BASE_URL = '';
-  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com/uploads/profiles/default.jpg';
+  const DEFAULT_PROFILE_PIC = `${BASE_URL}/uploads/profiles/default.jpg`;
 
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
