@@ -9,26 +9,6 @@ const RegistrationPage = () => {
     navigate('/Login');
   };
 
-  const getCookie = (name) => {
-    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-    return match ? decodeURIComponent(match[2]) : null;
-  };
-
-  const PrintCookies = () => {
-    // console.log(getCookie("authToken")); // Output: your_jwt_token
-    const rawData = getCookie("data");
-    if (rawData) {
-      try {
-        const parsedData = JSON.parse(rawData);
-        console.log(parsedData); // Correct JSON object
-        console.log(parsedData.Data.usuario);
-      } catch (error) {
-        console.error("Error parsing JSON:", error);
-      }
-    } else {
-      console.log("Cookie not found!");
-    }
-  };
 
   const [formData, setFormData] = useState({
     nombres: '',
@@ -88,7 +68,6 @@ const RegistrationPage = () => {
 
   // ==================== API Keys and Configuration ====================
   // For production, store these in environment variables
-  const GEONAMES_USERNAME = 'demo'; // Replace with your actual GeoNames username
   const GEODB_API_KEY = '9ef26e52c8mshb54d0e0f3b6c2e6p1c2b82jsn9c1a4b6ec2cf'; // Replace with your actual RapidAPI key
 
   // ==================== API Helper Functions ====================

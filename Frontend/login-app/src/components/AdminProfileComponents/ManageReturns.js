@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { API_URL as API_BASE_URL } from '../../config';
 
 const ManageReturns = () => {
@@ -270,6 +270,7 @@ const ManageReturns = () => {
   useEffect(() => {
     loadReturns(1, filters);
     loadStatistics();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Función para manejar cambio de filtros
@@ -303,13 +304,6 @@ const ManageReturns = () => {
       currency: 'COP',
       minimumFractionDigits: 0
     }).format(amount);
-  };
-
-  // Función para formatear tiempo de procesamiento
-  const formatProcessingTime = (milliseconds) => {
-    if (!milliseconds) return '-';
-    const days = Math.floor(milliseconds / (1000 * 60 * 60 * 24));
-    return `${days} días`;
   };
 
   // Componente de estado
@@ -361,6 +355,8 @@ const ManageReturns = () => {
             notas: inputData.notas || '',
             porcentajeReembolso: inputData.porcentajeReembolso
           });
+          break;
+        default:
           break;
       }
 

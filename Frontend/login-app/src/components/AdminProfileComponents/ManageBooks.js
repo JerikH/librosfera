@@ -9,7 +9,7 @@ const ManageBooks = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBook, setSelectedBook] = useState(null);
-  const [Bookid, setSelectedBookid] = useState(null);
+  const [, setSelectedBookid] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add', 'edit', 'delete'
   const [showEditor, setShowEditor] = useState(false);

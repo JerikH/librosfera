@@ -115,6 +115,7 @@ const CartPage = ({ updateCartCount }) => {
       setIsLoading(false);
       hasLoadedInitially.current = true;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // SOLUCIÓN 4: Dependencias vacías para evitar ejecuciones innecesarias
 
   // SOLUCIÓN 5: useEffect simplificado que solo se ejecuta una vez al montar
@@ -122,6 +123,7 @@ const CartPage = ({ updateCartCount }) => {
     if (!hasLoadedInitially.current) {
       fetchCartItems();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Solo se ejecuta al montar el componente
 
   const fetchCartTotals = useCallback(async () => {

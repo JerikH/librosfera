@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
@@ -8,7 +8,7 @@ import { API_URL as API_BASE_URL } from '../config';
 function CheckoutPaymentPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const [cartItems, setCartItems] = useState([]);
+  const [, setCartItems] = useState([]);
   const [shippingInfo, setShippingInfo] = useState({
     method: '',
     storeName: '',
@@ -17,7 +17,7 @@ function CheckoutPaymentPage() {
   });
   
   // Estados para el formulario de pago
-  const [paymentMethod, setPaymentMethod] = useState('credit_card');
+  const [paymentMethod] = useState('credit_card');
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
@@ -145,6 +145,7 @@ function CheckoutPaymentPage() {
     
     loadPaymentData();
     fetchCards();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   // Back button function - goes back to previous page based on shipping method

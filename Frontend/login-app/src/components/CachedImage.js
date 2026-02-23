@@ -12,7 +12,6 @@ const CachedImage = ({
 }) => {
   // Always use the default fallback if none provided explicitly
   const defaultFallback = `${BASE_URL}/uploads/libros/Default.png`;
-  const actualFallbackSrc = fallbackSrc || defaultFallback;
   
   const [imageSrc, setImageSrc] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -90,6 +89,7 @@ const CachedImage = ({
         URL.revokeObjectURL(imageSrc);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, error, defaultFallback, usingFallback]);
 
   // If we're loading, show loading indicator

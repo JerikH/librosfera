@@ -9,7 +9,7 @@ import CardPage from './UserProfilePageComponents/CardPage';
 import MessagesPage from './UserProfilePageComponents/MessagesPage';
 import ReturnsPage from './UserProfilePageComponents/ReturnsPage'; // Nuevo componente de devoluciones
 import EditProfile from './EditProfile';
-import { fetchUserData, logoutUser } from './UserProfilePageComponents/authUtils';
+import { fetchUserData } from './UserProfilePageComponents/authUtils';
 import { getCartCount } from './cartUtils';
 
 const UserProfile = () => {
@@ -17,7 +17,6 @@ const UserProfile = () => {
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -104,7 +103,7 @@ const UserProfile = () => {
     } else {
       navigate('/Login');
     }
-  }, []);
+  }, [navigate]);
 
   // SOLUCIÓN 3: Reducir llamadas innecesarias - solo refrescar en casos específicos
   useEffect(() => {

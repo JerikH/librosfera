@@ -7,13 +7,13 @@ const ManageSales = () => {
   const [loading, setLoading] = useState(true);
   const [selectedSale, setSelectedSale] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('todos');
-  const [dateFilter, setDateFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalResults, setTotalResults] = useState(0);
+  const [statusFilter] = useState('todos');
+  const [dateFilter] = useState('');
+  const [currentPage] = useState(1);
+  const [, setTotalPages] = useState(1);
+  const [, setTotalResults] = useState(0);
   const [statistics, setStatistics] = useState(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updatingVenta, setUpdatingVenta] = useState(null);
@@ -25,7 +25,7 @@ const ManageSales = () => {
     onConfirm: null, 
     onCancel: null 
   });
-  const [returnStatusFilter, setReturnStatusFilter] = useState('');
+  const [returnStatusFilter] = useState('');
 
   const showModalE = (type, title, message) => {
     setModalInfo({
@@ -229,6 +229,7 @@ const renderStatusButton = (sale) => {
   // Load initial data and statistics
   useEffect(() => {
     fetchStatistics();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   useEffect(() => {
@@ -237,9 +238,10 @@ const renderStatusButton = (sale) => {
     const timer = setTimeout(() => {
       fetchStatistics();
     }, 1000); // Delay to ensure backend is updated
-    
+
     return () => clearTimeout(timer);
   }
+// eslint-disable-next-line react-hooks/exhaustive-deps
 }, [updatingStatus]);
 
   // Fetch sales when filters change (using debounced search term)
@@ -252,8 +254,9 @@ const renderStatusButton = (sale) => {
       estado_devolucion: returnStatusFilter,
       tiene_devoluciones: returnStatusFilter ? (returnStatusFilter === 'sin_devolucion' ? false : true) : undefined
     };
-    
+
     fetchSales(currentPage, filters);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, statusFilter, debouncedSearchTerm, dateFilter, returnStatusFilter]);
 
   // Apply local filtering for immediate UI response
@@ -454,14 +457,6 @@ const renderStatusButton = (sale) => {
     });
   };
 
-  const handleClearFilters = () => {
-    setSearchTerm('');
-    setStatusFilter('todos');
-    setReturnStatusFilter('');
-    setDateFilter('');
-    setCurrentPage(1);
-  };
-
   const InfoModal = () => {
   if (!modalInfo.show) return null;
 
@@ -538,7 +533,8 @@ const renderStatusButton = (sale) => {
         inputModal.fields.reduce((acc, field) => ({ ...acc, [field.name]: field.value || '' }), {})
       );
     }
-  }, [inputModal.show, inputModal.fields]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Conditional return AFTER useState
   if (!inputModal.show) return null;

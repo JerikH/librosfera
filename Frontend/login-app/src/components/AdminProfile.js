@@ -80,7 +80,7 @@ const AdminProfile = () => {
     };
     
     checkAuth();
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     window.isEditingProfile = isEditingProfile;

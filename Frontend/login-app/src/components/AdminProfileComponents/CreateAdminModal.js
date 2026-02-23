@@ -24,7 +24,7 @@ const CreateAdminModal = ({ isOpen, onClose, getAuthToken, API_BASE_URL }) => {
     
     try {
       // Make POST request to backend API
-      const response = await axios.post(
+      await axios.post(
         `${API_BASE_URL}/api/v1/users/admin`,
         formData,
         {

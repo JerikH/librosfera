@@ -8,7 +8,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
   const navigate = useNavigate();
   // Estados para las tarjetas y navegación
   const [defaultCard, setDefaultCard] = useState(null);
-  const [accountBalance, setAccountBalance] = useState(0);
+  const [accountBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [recentPurchases, setRecentPurchases] = useState([]);

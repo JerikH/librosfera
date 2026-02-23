@@ -4,7 +4,7 @@ import CachedImage from '../CachedImage';
 import { BASE_URL } from '../../config';
 
 const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, onDataRefresh, cartCount = 0 }) => {
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing] = useState(false);
   
   // Elementos de navegación con iconos SVG
   const navItems = [

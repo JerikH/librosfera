@@ -15,15 +15,12 @@ const SearchResults = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchId, setSearchId] = useState('');
-  const [isInCart, setIsInCart] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [, setToast] = useState({ visible: false, message: '', type: 'success' });
   const [addingToCart, setAddingToCart] = useState(false);
-  const [quantity, setQuantity] = useState(1);
-  const [addedToCart, setAddedToCart] = useState(false);
-  const [cartCount, setCartCount] = useState(0);
+  const [, setCartCount] = useState(0);
   const [booksInCart, setBooksInCart] = useState(new Set());
 
 
