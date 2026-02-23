@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { logoutUser } from '../UserProfilePageComponents/authUtils';
 import CachedImage from '../CachedImage';
 import { useNavigate } from 'react-router-dom';

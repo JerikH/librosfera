@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { formatDate } from './authUtils';
-import { useNavigate } from 'react-router-dom';
 import CachedImage from '../CachedImage';
 import EditProfile from '../EditProfile';
 import { BASE_URL } from '../../config';
 
 const ProfilePage = ({ userData }) => {
-  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   
   // Get primary address if available

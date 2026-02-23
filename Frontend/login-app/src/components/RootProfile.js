@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Sidebar from './AdminProfileComponents/Sidebar';
 import Dashboard from './AdminProfileComponents/Dashboard';
-import ManageBooks from './AdminProfileComponents/ManageBooks';
-import ManageMessages from './AdminProfileComponents/ManageMessages';
 import ManageUsers from './AdminProfileComponents/ManageUsers';
 import ProfilePage from './AdminProfileComponents/ProfilePage';
 import EditProfile from './EditProfile';

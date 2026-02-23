@@ -527,22 +527,6 @@ const HomePage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [fetchAllBooks, pagination.totalPages, pagination.limit]);
 
-  // Function to render stars for rating
-  const renderStars = useCallback((rating) => {
-    const calculatedRating = rating || 0;
-    const stars = [];
-    for (let i = 0; i < 5; i++) {
-      stars.push(
-        <span 
-          key={i} 
-          className={`text-lg ${i < calculatedRating ? 'text-yellow-400' : 'text-gray-300'}`}
-        >
-          ★
-        </span>
-      );
-    }
-    return stars;
-  }, []);
 
   // Function to add to cart - optimized to not trigger unnecessary re-renders
   const handleAddToCart = useCallback(async (e, book) => {
@@ -898,7 +882,8 @@ const HomePage = () => {
         </div>
       );
     };
-  }, [isLoading, CategoriesList, PromoBanner, DiscountedBooksSection, FeaturedBooksSection, AllBooksSection]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
 
   return (
     <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>

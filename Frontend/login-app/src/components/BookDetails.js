@@ -16,14 +16,14 @@ const BookDetails = () => {
   const navigate = useNavigate();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [displayedImageIndex, setDisplayedImageIndex] = useState(0); // Used in image transition logic
+  const [, setDisplayedImageIndex] = useState(0); // Used in image transition logic
+  const [, setAddedToCart] = useState(false);
   const [validImageUrls, setValidImageUrls] = useState([]);
   const [imagesVerified, setImagesVerified] = useState(false);
   
   // States for cart functionality
   const [cartCount, setCartCount] = useState(0);
   const [addingToCart, setAddingToCart] = useState(false);
-  const [addedToCart, setAddedToCart] = useState(false);
   const [isInCart, setIsInCart] = useState(false);
   
   // State for toast notifications
@@ -251,6 +251,7 @@ const BookDetails = () => {
       window.removeEventListener('globalCartUpdate', handleGlobalCartUpdate);
       window.removeEventListener('cartChange', handleCartUpdate);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Check cart status whenever book data changes
@@ -259,6 +260,7 @@ const BookDetails = () => {
       console.log('BookDetails: Book data changed, checking cart status...');
       checkIfInCart();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book]);
 
   // Periodic check to ensure synchronization (fallback)
@@ -274,6 +276,7 @@ const BookDetails = () => {
     }, 2000); // Check every 2 seconds
 
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book, isInCart]);
 
   useEffect(() => {
@@ -476,9 +479,6 @@ const handleAddToCart = async () => {
     });
 
     if (response.data.status === 'success') {
-      // Actualizar el contador del carrito basado en la respuesta del servidor
-      const newCount = response.data.data.carrito.n_item;
-
       const result = addToCart(book, Math.min(quantity, 3));
     
       console.log('BookDetails: Cart update result:', result);

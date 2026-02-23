@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { getAuthToken } from './authUtils';
 import CachedImage from '../CachedImage';
-import { AArrowDown } from 'lucide-react';
 import { API_URL as API_BASE_URL, BASE_URL } from '../../config';
 
 // Componente para seguimiento de envío a domicilio
@@ -83,7 +82,7 @@ const DeliveryTracking = ({ envio , Data}) => {
           ) : (
             // Fallback to current status display if no history available
             <>
-              {Data.estado == 'entregado' && (
+              {Data.estado === 'entregado' && (
                 <div className="relative flex items-start">
                   <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
                   <div className="ml-10">
@@ -99,7 +98,7 @@ const DeliveryTracking = ({ envio , Data}) => {
                 </div>
               )}
 
-              {Data.estado == 'preparando' && (
+              {Data.estado === 'preparando' && (
                 <div className="relative flex items-start">
                   <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
                   <div className="ml-10">
@@ -115,7 +114,7 @@ const DeliveryTracking = ({ envio , Data}) => {
                 </div>
               )}
 
-              {Data.estado == 'listo_para_envio' && (
+              {Data.estado === 'listo_para_envio' && (
                 <div className="relative flex items-start">
                   <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
                   <div className="ml-10">
@@ -131,7 +130,7 @@ const DeliveryTracking = ({ envio , Data}) => {
                 </div>
               )}
 
-              {Data.estado == 'enviado' && (
+              {Data.estado === 'enviado' && (
                 <div className="relative flex items-start">
                   <div className="absolute left-5 -translate-x-1/2 w-6 h-6 rounded-full bg-green-300 flex items-center justify-center z-10"></div>
                   <div className="ml-10">
@@ -673,7 +672,7 @@ const PurchasesPage = () => {
   const [selectedPurchaseNum, setSelectedPurchaseNum] = useState(null);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [selectedPurchaseStoreInfo, setSelectedPurchaseStoreInfo] = useState(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [, setLoadingDetails] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundItems, setRefundItems] = useState([]);
   const [refundLoading, setRefundLoading] = useState(false);

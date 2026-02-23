@@ -84,6 +84,7 @@ const ManageUsers = () => {
   useEffect(() => {
     getCurrentUserType();
     fetchUsers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.pagina, filterType, searchTerm]);
 
   // Fetch users from API
@@ -130,11 +131,11 @@ const ManageUsers = () => {
         
         // Set users and update pagination
         setUsers(paginatedUsers);
-        setPagination({
-          ...pagination,
+        setPagination(prev => ({
+          ...prev,
           total: totalCount,
           totalPaginas: Math.ceil(totalCount / pageSize)
-        });
+        }));
       } else {
         throw new Error('Error al obtener usuarios');
       }

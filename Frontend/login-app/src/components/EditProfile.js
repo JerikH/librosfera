@@ -13,15 +13,14 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
   const [previewImage, setPreviewImage] = useState(null);
   const [isDefaultProfilePic, setIsDefaultProfilePic] = useState(true);
   const [countries, setCountries] = useState([]);
-  const [filteredCountries, setFilteredCountries] = useState([]);
-  const [showCountriesList, setShowCountriesList] = useState(false);
-  const [isLoadingCountries, setIsLoadingCountries] = useState(false);
+  const [, setFilteredCountries] = useState([]);
+  const [, setShowCountriesList] = useState(false);
+  const [, setIsLoadingCountries] = useState(false);
   const [isLoadingProfilePic, setIsLoadingProfilePic] = useState(false);
   const countryInputRef = useRef(null);
   const [showPreferencesList, setShowPreferencesList] = useState(false);
   const [selectedPreferences, setSelectedPreferences] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [alternatePhone, setAlternatePhone] = useState('');
 
   // Available preferences list (same as in registration)
   const availablePreferences = ['Ficción', 'No Ficción', 'Ciencia Ficción', 'Fantasía', 'Romance', 'Biografía', 'Historia', 'Ciencia', 'Filosofía', 'Arte', 'Tecnología'];
@@ -174,6 +173,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
       
       setIsLoadingProfilePic(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData]);
 
   const handleChange = (e) => {
@@ -198,14 +198,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
     }
   };
 
-  // Select a country from the dropdown
-  const selectCountry = (country) => {
-    setFormData({
-      ...formData,
-      pais: country
-    });
-    setShowCountriesList(false);
-  };
+
 
   // Toggle selection of a preference
   const togglePreference = (preference) => {

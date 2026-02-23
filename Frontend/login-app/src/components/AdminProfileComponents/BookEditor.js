@@ -406,6 +406,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       };
       loadBookImages();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, book?.id]);
   
   // Load book images if in edit mode
@@ -505,6 +506,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       setLanguageQuery(book.language || '');
       fetchDiscountData();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, book]);
 
   // Filter languages based on user input
@@ -530,13 +532,6 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     });
   };
 
-  const handleChangeDiscount = (e) => {
-    const { name, value } = e.target;
-    setDiscountData({
-      ...discountData,
-      [name]: value
-    });
-  };
 
   const handleLanguageInputChange = (e) => {
     setLanguageQuery(e.target.value);
@@ -738,10 +733,6 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
   const handleDragOver = (e, index) => {
     e.preventDefault();
     if (draggedIndex !== null && draggedIndex !== index) {
-      // Check if we are moving the cover or trying to make another image the cover
-      const isMovingCover = draggedIndex === 0;
-      const isBecomingCover = index === 0;
-      
       // Reorder the images
       const newImages = [...bookImages];
       const draggedImage = newImages[draggedIndex];

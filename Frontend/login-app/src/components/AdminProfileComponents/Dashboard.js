@@ -167,6 +167,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
     };
 
     fetchStats();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Componente para mostrar una estadística con iconos SVG

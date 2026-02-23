@@ -8,13 +8,8 @@ import {
   Circle, 
   Filter,
   User,
-  AlertCircle,
   Settings,
-  Search,
-  Calendar,
-  ChevronDown,
-  UserCheck,
-  X
+  Search
 } from 'lucide-react';
 
 import { getAuthToken } from '../UserProfilePageComponents/authUtils';
@@ -285,6 +280,7 @@ const AdminMessagesPage = () => {
     } catch (error) {
       console.error('Error checking for new messages:', error);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 
   // Start polling for new messages
@@ -459,13 +455,13 @@ const AdminMessagesPage = () => {
   // Fetch conversations when filters change
   useEffect(() => {
     fetchConversations();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   // Fetch admin list on component mount
   useEffect(() => {
     fetchAdmins();
-    console.log("Admins", adminList);
-    
+
     // Cleanup on component unmount
     return () => {
       stopPolling();

@@ -4,7 +4,6 @@ import axios from 'axios';
 import UserLayout from './UserLayout';
 import CachedImage from './CachedImage';
 import { useCallback } from 'react';
-import { getCartCount } from './cartUtils';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL, BASE_URL } from '../config';
 
@@ -16,8 +15,8 @@ const BookListPage = ({ category }) => {
     const [books, setBooks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [title, setTitle] = useState('');
-    const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
-    const [cartCount, setCartCount] = useState(0);
+    const [, setToast] = useState({ visible: false, message: '', type: 'success' });
+    const [, setCartCount] = useState(0);
     const [booksInCart, setBooksInCart] = useState(new Set());
     // Store actual filters and form state separately to prevent auto-requests
     const [formFilters, setFormFilters] = useState({
@@ -94,6 +93,7 @@ const BookListPage = ({ category }) => {
     
         // Initial fetch with these filters
         fetchBooks(1, initialFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     },  [category, categoryName]);
 
     useEffect(() => {
@@ -372,22 +372,6 @@ const BookListPage = ({ category }) => {
     // No data fetching here, just toggle the filters visibility
   }, []);
 
-  // Función para renderizar estrellas de calificación
-  const renderStars = (rating) => {
-    const calculatedRating = rating || 0;
-    const stars = [];
-    for (let i = 0; i < 5; i++) {
-      stars.push(
-        <span 
-          key={i} 
-          className={`text-lg ${i < calculatedRating ? 'text-yellow-400' : 'text-gray-300'}`}
-        >
-          ★
-        </span>
-      );
-    }
-    return stars;
-  };
 
   // Componente para mostrar un libro (reutilizado de HomePage)
   const BookCard = React.memo(({ book, booksInCart, handleAddToCart }) => {

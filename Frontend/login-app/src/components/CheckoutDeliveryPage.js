@@ -7,9 +7,9 @@ import { API_URL as API_BASE_URL } from '../config';
 
 const CheckoutDeliveryPage = () => {
   const navigate = useNavigate();
-  const [cartItems, setCartItems] = useState([]);
+  const [, setCartItems] = useState([]);
   const [cartPrices, setCartPrices] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const [deliveryMethod, setDeliveryMethod] = useState('');
   const [userAddresses, setUserAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
@@ -157,7 +157,7 @@ const CheckoutDeliveryPage = () => {
 
   // Handle delivery method change
   const handleDeliveryMethodChange = (method) => {
-    if(method == 'domicilio'){
+    if(method === 'domicilio'){
       setShowAddressDropdown(true);
       fetchUserAddresses();
       

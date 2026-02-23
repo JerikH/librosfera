@@ -20,8 +20,8 @@ const verifyToken = async (token) => {
     console.log(response);
     if(response.status === 200){
       console.log(response.data.user.tipo_usuario);
-      console.log(response.data.user.tipo_usuario == "root");
-      return response.data.user.tipo_usuario == "root";
+      console.log(response.data.user.tipo_usuario === "root");
+      return response.data.user.tipo_usuario === "root";
     }
     return false;
   } catch (err) {

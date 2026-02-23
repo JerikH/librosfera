@@ -14,8 +14,8 @@ const ManageStores = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [mapCenter, setMapCenter] = useState([19.432608, -99.133209]);
-  const [newMarkerPosition, setNewMarkerPosition] = useState(null);
-  
+  const [, setNewMarkerPosition] = useState(null);
+
   // Pagination and filters
   const [pagination, setPagination] = useState({
     page: 1,
@@ -35,7 +35,6 @@ const ManageStores = () => {
   const [storeInventory, setStoreInventory] = useState([]);
   const [storePickups, setStorePickups] = useState([]);
   const [storeStatistics, setStoreStatistics] = useState(null);
-  const [storeNotes, setStoreNotes] = useState([]);
 
   // Form states
   const [storeForm, setStoreForm] = useState({
@@ -90,7 +89,6 @@ const ManageStores = () => {
   });
 
   // Referencias
-  const searchInputRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const storeMarkersRef = useRef([]);
@@ -208,10 +206,12 @@ const ManageStores = () => {
         mapInstanceRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     loadStores();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, filters]);
 
   // Initialize map

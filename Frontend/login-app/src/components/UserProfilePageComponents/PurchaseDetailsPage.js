@@ -18,6 +18,7 @@ const PurchaseDetailsPage = () => {
 
   useEffect(() => {
     fetchPurchaseDetails();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purchaseId]);
 
   const fetchPurchaseDetails = async () => {

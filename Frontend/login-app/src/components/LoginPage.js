@@ -5,14 +5,6 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { API_URL as API_BASE_URL } from '../config';
 
-const clearCookies = () => {
-  document.cookie.split(";").forEach((cookie) => {
-    document.cookie = cookie
-      .replace(/^ +/, "")
-      .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
-  });
-  console.log("Cookies cleared!");
-};
 
 const getCookie = (name) => {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -172,7 +164,7 @@ const LoginPage = () => {
       }
 
     } catch (err) {
-      if(err.message == 'Request failed with status code 401'){
+      if(err.message === 'Request failed with status code 401'){
         console.error('Login error:', err.response.data);
         setErrorMessage(err.response.data.message);
       }else{

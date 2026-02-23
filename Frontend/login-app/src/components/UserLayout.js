@@ -18,7 +18,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [userData, setUserData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const searchRef = useRef(null);
   const [isCartOpen, setIsCartOpen] = useState(false); // Estado para controlar la visibilidad del carrito
 
@@ -52,7 +52,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
         console.log(parsedData.Data);
         setUserData(parsedData.Data);
 
-        if (parsedData && !(parsedData.Data.tipo_usuario == "administrador")&& !(parsedData.Data.tipo_usuario == "root")) {
+        if (parsedData && !(parsedData.Data.tipo_usuario === "administrador")&& !(parsedData.Data.tipo_usuario === "root")) {
           fetchCartUtils();
         }
         setIsLoading(false);
@@ -176,9 +176,6 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
 
   // Verificar el tipo de usuario (Si está logueado)
   const isLoggedIn = !!userData;
-  const userType = userData?.tipo_usuario?.toLowerCase();
-  const isAdminOrRoot = userType === 'administrador' || userType === 'root';
-  const isRegularUser = isLoggedIn && !isAdminOrRoot;
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">

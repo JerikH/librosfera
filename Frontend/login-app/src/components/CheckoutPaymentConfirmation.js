@@ -8,7 +8,7 @@ import { API_URL as API_BASE_URL } from '../config';
 function CheckoutPaymentConfirmation() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const [cartItems, setCartItems] = useState([]);
+  const [, setCartItems] = useState([]);
   const [paymentInfo, setPaymentInfo] = useState({
     method: 'credit_card',
     cardNumber: '',
@@ -181,20 +181,6 @@ function CheckoutPaymentConfirmation() {
       
       if (response.status === 200 || response.status === 201) {
         // Payment successful - Show custom modal instead of alert
-        const paymentConfirmation = {
-          method: paymentInfo.method,
-          cardNumber: paymentInfo.cardNumber ? paymentInfo.cardNumber.replace(/\d(?=\d{4})/g, "*") : '',
-          cardholderName: paymentInfo.cardholderName,
-          total,
-          subtotal,
-          shippingCost,
-          shippingMethod: shippingInfo.method,
-          timestamp: new Date().toISOString(),
-          transactionId: response.data.id || response.data.transactionId
-        };
-        
-        //localStorage.setItem('paymentData', JSON.stringify(paymentConfirmation));
-        
         // Clear temporary data
         localStorage.removeItem('tempPaymentInfo');
         localStorage.removeItem('shoppingCart');

@@ -1,7 +1,6 @@
 // cartUtils.js - Funciones de utilidad para el carrito de compras
 import axios from "axios";
 import { getAuthToken } from "./UserProfilePageComponents/authUtils";
-import { Await } from "react-router-dom";
 import { API_URL as API_BASE_URL } from "../config";
 
 // SOLUCIÓN: Cache para evitar múltiples llamadas simultáneas
