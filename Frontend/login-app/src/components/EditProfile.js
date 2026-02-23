@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import CachedImage from './CachedImage';
 import { refreshUserData } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL, BASE_URL } from '../config';
 
 const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
   const navigate = useNavigate();
@@ -81,7 +82,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
 
   // Configure axios defaults
   const api = axios.create({
-    baseURL: 'https://librosfera.onrender.com/api/v1',
+    baseURL: API_BASE_URL,
     headers: {
       'Authorization': `Bearer ${authToken}`,
       'Content-Type': 'application/json',
@@ -92,7 +93,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
   
   // Define profile image base URL
   const PROFILE_PIC_BASE_URL = '';
-  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com/uploads/profiles/default.jpg';
+  const DEFAULT_PROFILE_PIC = `${BASE_URL}/uploads/profiles/default.jpg`;
 
   // Fetch countries for autocomplete, just like in registration
   useEffect(() => {
@@ -280,7 +281,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
       formData.append('foto_perfil', file);
       
       const response = await axios.post(
-        'https://librosfera.onrender.com/api/v1/users/profile/foto', 
+        `${API_BASE_URL}/users/profile/foto`,
         formData, 
         {
           headers: {
@@ -357,7 +358,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
       
       // Make API call to update profile data using axios with proper headers
       const response = await axios.put(
-        'https://librosfera.onrender.com/api/v1/users/profile', 
+        `${API_BASE_URL}/users/profile`,
         updatedUserData, 
         {
           headers: {

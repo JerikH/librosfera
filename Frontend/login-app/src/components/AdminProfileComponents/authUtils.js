@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { API_URL as API_BASE_URL } from '../../config';
 
 // Helper function to get cookies
 export const getCookie = (name) => {
@@ -22,7 +23,7 @@ export const setCookie = (name, value, days = 1) => {
 // Function to verify token
 export const verifyToken = async (token) => {
   try {
-    const response = await axios.get('https://librosfera.onrender.com/api/v1/auth/verify-token', {
+    const response = await axios.get(`${API_BASE_URL}/auth/verify-token`, {
       headers: {
         'Authorization': `Bearer ${String(token)}`,
         'Content-Type': 'application/json',

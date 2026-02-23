@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL } from '../config';
 
 const CheckoutStoreSelectionPage = () => {
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ const CheckoutStoreSelectionPage = () => {
       let response;
       try {
         // First try a public endpoint
-        response = await axios.get('https://librosfera.onrender.com/api/v1/tiendas/publicas', {
+        response = await axios.get(`${API_BASE_URL}/tiendas/publicas`, {
           params: {
             estado: 'activa',
             recogida_productos: true
@@ -47,7 +48,7 @@ const CheckoutStoreSelectionPage = () => {
       } catch (error) {
         // If public endpoint doesn't exist, try the general tiendas endpoint
         if (error.response?.status === 404) {
-          response = await axios.get('https://librosfera.onrender.com/api/v1/tiendas', {
+          response = await axios.get(`${API_BASE_URL}/tiendas`, {
             params: {
               estado: 'activa',
               recogida_productos: true

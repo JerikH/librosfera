@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { getAuthToken } from './authUtils';
 import CachedImage from '../CachedImage';
+import { API_URL as API_BASE_URL, BASE_URL } from '../../config';
 
 // Componentes auxiliares para diferentes tipos de seguimiento
 import DeliveryTracking from './DeliveryTracking';
@@ -24,7 +25,7 @@ const PurchaseDetailsPage = () => {
       setIsLoading(true);
       setError(null);
       console.log("Details id:", purchaseId);
-      const response = await axios.get(`https://librosfera.onrender.com/api/v1/ventas/${purchaseId}`, {
+      const response = await axios.get(`${API_BASE_URL}/ventas/${purchaseId}`, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json'
@@ -103,7 +104,7 @@ const PurchaseDetailsPage = () => {
             autor: 'Gabriel García Márquez',
             editorial: 'Editorial Sudamericana',
             isbn: '9780307474728',
-            imagen_portada: 'https://librosfera.onrender.com/uploads/libros/cien-anios-soledad.jpg'
+            imagen_portada: `${BASE_URL}/uploads/libros/cien-anios-soledad.jpg`
           },
           cantidad: 1,
           precio_unitario: 35000
@@ -114,7 +115,7 @@ const PurchaseDetailsPage = () => {
             autor: 'Gabriel García Márquez',
             editorial: 'Editorial Oveja Negra',
             isbn: '9780307387264',
-            imagen_portada: 'https://librosfera.onrender.com/uploads/libros/amor-tiempos-colera.jpg'
+            imagen_portada: `${BASE_URL}/uploads/libros/amor-tiempos-colera.jpg`
           },
           cantidad: 1,
           precio_unitario: 32000
@@ -458,7 +459,7 @@ const PurchaseDetailsPage = () => {
                         src={item.snapshot.imagen_portada} 
                         alt={item.snapshot.titulo || "Libro"} 
                         className="w-full h-full object-contain"
-                        fallbackSrc="https://librosfera.onrender.com/uploads/libros/Default.png"
+                        fallbackSrc={`${BASE_URL}/uploads/libros/Default.png`}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gray-200">

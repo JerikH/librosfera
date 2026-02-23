@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import ShoppingCart from './ShoppingCart'; // Importar el componente de carrito
 import { fetchCartUtils } from './cartUtils';
+import { API_URL as API_BASE_URL } from '../config';
 
 // Helper function to get cookie data - same as in AdminProfile
 const getCookie = (name) => {
@@ -88,7 +89,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
       } 
       
       try {
-        const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros/autocompletar`, {
+        const response = await axios.get(`${API_BASE_URL}/libros/autocompletar`, {
           params: {
             q: searchTerm.trim(),
             limit: 5

@@ -3,6 +3,7 @@ import axios from 'axios';
 import CachedImage from '../CachedImage';
 import UserModal from './UserModal';
 import CreateAdminModal from './CreateAdminModal';
+import { BASE_URL } from '../../config';
 
 const ManageUsers = () => {
   // State declarations
@@ -29,8 +30,8 @@ const ManageUsers = () => {
   const [isMessageVisible, setIsMessageVisible] = useState(true);
 
   // Constants
-  const API_BASE_URL = 'https://librosfera.onrender.com';
-  const DEFAULT_PROFILE_PIC = `${API_BASE_URL}/uploads/profiles/default.jpg`;
+  const API_BASE_URL = BASE_URL;
+  const DEFAULT_PROFILE_PIC = `${BASE_URL}/uploads/profiles/default.jpg`;
 
   useEffect(() => {
     if (actionMessage.text && !isModalOpen) {

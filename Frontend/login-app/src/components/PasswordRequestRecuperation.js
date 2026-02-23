@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL as API_BASE_URL } from '../config';
 
 export default function PasswordResetRequest({ onBackToLogin }) {
   const [email, setEmail] = useState('');
@@ -23,7 +24,7 @@ export default function PasswordResetRequest({ onBackToLogin }) {
       };
       
       // Make POST request to backend API
-      const response = await axios.post("https://librosfera.onrender.com/api/v1/users/forgot-password", {
+      const response = await axios.post(`${API_BASE_URL}/users/forgot-password`, {
         email: email,
       }, config);
       

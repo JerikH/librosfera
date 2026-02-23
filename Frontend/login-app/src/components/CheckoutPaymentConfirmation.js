@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL } from '../config';
 
 function CheckoutPaymentConfirmation() {
   const navigate = useNavigate();
@@ -167,7 +168,7 @@ function CheckoutPaymentConfirmation() {
           "Entrega a domicilio"
       };
       
-      const response = await axios.post('https://librosfera.onrender.com/api/v1/ventas', requestPayload, {
+      const response = await axios.post(`${API_BASE_URL}/ventas`, requestPayload, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json',

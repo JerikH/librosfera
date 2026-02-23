@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL } from '../config';
 
 const CheckoutDeliveryPage = () => {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ const CheckoutDeliveryPage = () => {
   const fetchUserAddresses = async () => {
     setLoadingAddresses(true);
     try {
-      const response = await axios.get('https://librosfera.onrender.com/api/v1/direcciones', {
+      const response = await axios.get(`${API_BASE_URL}/direcciones`, {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`
         }

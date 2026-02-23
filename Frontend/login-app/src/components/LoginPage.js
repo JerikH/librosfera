@@ -3,6 +3,7 @@ import RegistrationPage from './RegistrationPage';
 import PasswordResetPage from './PasswordRequestRecuperation';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
+import { API_URL as API_BASE_URL } from '../config';
 
 const clearCookies = () => {
   document.cookie.split(";").forEach((cookie) => {
@@ -20,7 +21,7 @@ const getCookie = (name) => {
 
 const verifyToken = async (token) => {
   try {
-    const response = await axios.get('https://librosfera.onrender.com/api/v1/auth/verify-token', {
+    const response = await axios.get(`${API_BASE_URL}/auth/verify-token`, {
       headers: {
         'Authorization': `Bearer ${String(token)}`,
       },
@@ -143,7 +144,7 @@ const LoginPage = () => {
       console.log("Login attempt with:", formData);
       
       // Make POST request to backend API
-      const response = await axios.post('https://librosfera.onrender.com/api/v1/users/login', formData, config);
+      const response = await axios.post(`${API_BASE_URL}/users/login`, formData, config);
       
       // Print the response
       console.log('Login response received:', response.data);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { BASE_URL } from '../../config';
 
 const ManageSales = () => {
   const [sales, setSales] = useState([]);
@@ -43,7 +44,7 @@ const ManageSales = () => {
     { value: 'entregado', label: 'Entregado', color: 'bg-green-100 text-green-800' }
   ];
 
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://librosfera.onrender.com';
+  const API_BASE_URL = BASE_URL;
 
   const getCookie = (name) => {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));

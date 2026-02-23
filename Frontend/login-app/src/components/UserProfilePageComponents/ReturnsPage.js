@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Search, Filter, FileText, Clock, CheckCircle, XCircle, AlertCircle, Package } from 'lucide-react';
+import { API_URL as API_BASE_URL } from '../../config';
 
 const ReturnsPage = () => {
   const [returns, setReturns] = useState([]);
@@ -64,7 +65,7 @@ const ReturnsPage = () => {
       });
 
       const response = await fetch(
-        `https://librosfera.onrender.com/api/v1/devoluciones/mis-devoluciones?${queryParams}`,
+        `${API_BASE_URL}/devoluciones/mis-devoluciones?${queryParams}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

@@ -1,16 +1,17 @@
 // CachedImage.js
 import React, { useState, useEffect } from 'react';
 import imageCacheService from './ImageCacheService';
+import { BASE_URL } from '../config';
 
 const CachedImage = ({ 
   src, 
   alt, 
   className, 
-  fallbackSrc = 'https://librosfera.onrender.com/uploads/libros/Default.png',
+  fallbackSrc = `${BASE_URL}/uploads/libros/Default.png`,
   onClick 
 }) => {
   // Always use the default fallback if none provided explicitly
-  const defaultFallback = 'https://librosfera.onrender.com/uploads/libros/Default.png';
+  const defaultFallback = `${BASE_URL}/uploads/libros/Default.png`;
   const actualFallbackSrc = fallbackSrc || defaultFallback;
   
   const [imageSrc, setImageSrc] = useState(null);

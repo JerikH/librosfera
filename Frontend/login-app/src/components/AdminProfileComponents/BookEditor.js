@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import CachedImage from '../CachedImage';
+import { API_URL as API_BASE_URL } from '../../config';
 
 const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
   const isEditMode = mode === 'edit';
@@ -82,7 +83,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     try {
       // Llamar a la API para actualizar el tipo de imagen
       const response = await axios.put(
-        `https://librosfera.onrender.com/api/v1/libros/${book.id}/imagenes/${imageId}`,
+        `${API_BASE_URL}/libros/${book.id}/imagenes/${imageId}`,
         { tipo: newType },
         {
           headers: {
@@ -142,7 +143,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       // Enviar la solicitud PATCH para actualizar el orden
       const response = await axios({
         method: 'PATCH',
-        url: `https://librosfera.onrender.com/api/v1/libros/${book.id}/imagenes/orden`,
+        url: `${API_BASE_URL}/libros/${book.id}/imagenes/orden`,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -175,7 +176,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     if (!isEditMode || !book || !book.id) return;
     
     try {
-      const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros/${book.id}`);
+      const response = await axios.get(`${API_BASE_URL}/libros/${book.id}`);
       if (response.data.status === 'success' && response.data.data.imagenes) {
         const serverImages = response.data.data.imagenes.map(img => ({
           _id: img._id,
@@ -289,7 +290,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       console.log('Enviando descuento:', JSON.stringify(discountPayload, null, 2));
       
       const response = await axios.post(
-        `https://librosfera.onrender.com/api/v1/libros/${bookId}/descuentos`,
+        `${API_BASE_URL}/libros/${bookId}/descuentos`,
         discountPayload,
         {
           headers: {
@@ -320,7 +321,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     if (!isEditMode || !book || !book.id) return;
     
     try {
-      const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros/${book.id}`);
+      const response = await axios.get(`${API_BASE_URL}/libros/${book.id}`);
       if (response.data.status === 'success' && 
           response.data.data.precio_info && 
           response.data.data.precio_info.descuentos && 
@@ -418,7 +419,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         setIsLoadingImages(true);
         try {
           // Cargar todas las imágenes del libro
-          const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros/${book.id}`);
+          const response = await axios.get(`${API_BASE_URL}/libros/${book.id}`);
           if (response.data.status === 'success' && response.data.data.imagenes) {
             // Mapear todas las imágenes desde la respuesta de la API
             const images = response.data.data.imagenes.map(img => ({
@@ -616,7 +617,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
       let bookId;
       
       if (isEditMode) {
-        response = await axios.put(`https://librosfera.onrender.com/api/v1/libros/${book.id}`, apiData, {
+        response = await axios.put(`${API_BASE_URL}/libros/${book.id}`, apiData, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -630,7 +631,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
         await updateAllImageTypes();
         await updateImageOrder();
       } else {
-        response = await axios.post('https://librosfera.onrender.com/api/v1/libros', apiData, {
+        response = await axios.post(`${API_BASE_URL}/libros`, apiData, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -665,7 +666,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
           
           try {
             await axios.post(
-              `https://librosfera.onrender.com/api/v1/libros/${bookId}/imagenes`,
+              `${API_BASE_URL}/libros/${bookId}/imagenes`,
               formData,
               {
                 headers: {
@@ -879,7 +880,7 @@ const BookEditor = ({ book, onSave, onCancel, id, mode = 'add' }) => {
     
     try {
       const response = await axios.delete(
-        `https://librosfera.onrender.com/api/v1/libros/${book.id}/imagenes/${imageId}`,
+        `${API_BASE_URL}/libros/${book.id}/imagenes/${imageId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`

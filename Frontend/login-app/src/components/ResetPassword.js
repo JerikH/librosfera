@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
+import { API_URL as API_BASE_URL } from '../config';
 
 export default function ResetPassword({ onBackToLogin }) {
   const [newPassword, setNewPassword] = useState('');
@@ -26,7 +27,7 @@ export default function ResetPassword({ onBackToLogin }) {
       
       try {
         console.log("Token from URL:", tokenFromUrl);
-        const response = await axios.get(`https://librosfera.onrender.com/api/v1/users/reset-password/${tokenFromUrl}`);
+        const response = await axios.get(`${API_BASE_URL}/users/reset-password/${tokenFromUrl}`);
         
         console.log("Token validation response:", response);
         if (response.data.status === 'success') {
@@ -73,7 +74,7 @@ export default function ResetPassword({ onBackToLogin }) {
         // console.log(newPassword);
         // console.log(confirmPassword);
         const response = await axios.post(
-            `https://librosfera.onrender.com/api/v1/users/reset-password/${tokenFromUrl}`,
+            `${API_BASE_URL}/users/reset-password/${tokenFromUrl}`,
             {
               verificationCode: pin,
               password: newPassword,

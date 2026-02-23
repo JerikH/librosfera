@@ -4,6 +4,7 @@ import axios from 'axios';
 import AddCardPage from './AddCardPage';
 import RechargeBalancePage from './RechargeBalancePage';
 import { getCookie } from './authUtils';
+import { API_URL as API_BASE_URL } from '../../config';
 
 const CardPage = () => {
   const [showAddCard, setShowAddCard] = useState(false);
@@ -26,8 +27,7 @@ const CardPage = () => {
   // Saldo predeterminado (en pesos)
   const accountBalance = 0;
 
-  // Base URL para la API
-  const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
+  // Base URL para la API (imported from config)
 
   // Configuración base para axios
   const token = getCookie("data");
