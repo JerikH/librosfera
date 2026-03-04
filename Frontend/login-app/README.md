@@ -6,5 +6,5 @@ Usage:
 npm start
 
 
-https://librosferafront.onrender.com/Login
-https://librosferafront.onrender.com/CreateAdmin
+http://localhost:3000/Login
+http://localhost:3000/CreateAdmin

@@ -7,8 +7,6 @@ import { useCallback } from 'react';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL, BASE_URL } from '../config';
 
-// URL base para las llamadas a la API
-
 const BookListPage = ({ category }) => {
     
     const { categoryName } = useParams();

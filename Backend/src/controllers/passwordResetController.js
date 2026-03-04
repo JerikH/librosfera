@@ -69,7 +69,7 @@ const requestPasswordReset = catchAsync(async (req, res, next) => {
   });
 
   // Construir el enlace de recuperación
-  const resetLink = `${process.env.FRONT_URL || 'https://librosferafront.onrender.com'}/reset-password/${resetToken}`;
+  const resetLink = `${process.env.FRONT_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
 
   try {
     // Enviar email con link de recuperación y código
