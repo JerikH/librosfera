@@ -2,19 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
-import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL } from '../config';
 
 const CheckoutStoreSelectionPage = () => {
   const navigate = useNavigate();
   const [selectedStore, setSelectedStore] = useState(null);
   const [cartItems, setCartItems] = useState([]);
-  const [cartPrices, setCartPrices] = useState({});
+  const [, setCartPrices] = useState({});
   const [availableStores, setAvailableStores] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [storesLoading, setStoresLoading] = useState(false);
   const [storesError, setStoresError] = useState(null);
-  const [redirectTo, setRedirectTo] = useState(null);
+  const [redirectTo] = useState(null);
 
   // Pricing states
   const [subtotal, setSubtotal] = useState(0);
@@ -38,7 +38,7 @@ const CheckoutStoreSelectionPage = () => {
       let response;
       try {
         // First try a public endpoint
-        response = await axios.get('https://librosfera.onrender.com/api/v1/tiendas/publicas', {
+        response = await axios.get(`${API_BASE_URL}/tiendas/publicas`, {
           params: {
             estado: 'activa',
             recogida_productos: true
@@ -47,7 +47,7 @@ const CheckoutStoreSelectionPage = () => {
       } catch (error) {
         // If public endpoint doesn't exist, try the general tiendas endpoint
         if (error.response?.status === 404) {
-          response = await axios.get('https://librosfera.onrender.com/api/v1/tiendas', {
+          response = await axios.get(`${API_BASE_URL}/tiendas`, {
             params: {
               estado: 'activa',
               recogida_productos: true
@@ -233,6 +233,7 @@ const CheckoutStoreSelectionPage = () => {
     };
 
     validateAndLoadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   // Update selected store when stores are loaded and there was a pre-selected store

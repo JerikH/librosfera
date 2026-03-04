@@ -3,7 +3,8 @@ import 'leaflet/dist/leaflet.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getAuthToken } from '../UserProfilePageComponents/authUtils';
-import axios from 'axios'
+import axios from 'axios';
+import { API_URL as API_BASE_URL } from '../../config';
 
 const ManageStores = () => {
   const [stores, setStores] = useState([]);
@@ -13,8 +14,8 @@ const ManageStores = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [mapCenter, setMapCenter] = useState([19.432608, -99.133209]);
-  const [newMarkerPosition, setNewMarkerPosition] = useState(null);
-  
+  const [, setNewMarkerPosition] = useState(null);
+
   // Pagination and filters
   const [pagination, setPagination] = useState({
     page: 1,
@@ -34,7 +35,6 @@ const ManageStores = () => {
   const [storeInventory, setStoreInventory] = useState([]);
   const [storePickups, setStorePickups] = useState([]);
   const [storeStatistics, setStoreStatistics] = useState(null);
-  const [storeNotes, setStoreNotes] = useState([]);
 
   // Form states
   const [storeForm, setStoreForm] = useState({
@@ -89,15 +89,13 @@ const ManageStores = () => {
   });
 
   // Referencias
-  const searchInputRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const storeMarkersRef = useRef([]);
   const newMarkerRef = useRef(null);
   const L = useRef(null);
 
-  // API Configuration
-  const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
+  // API Configuration (imported from config)
 
 
   // Axios-like implementation (In real app, use: import axios from 'axios')
@@ -208,10 +206,12 @@ const ManageStores = () => {
         mapInstanceRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     loadStores();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, filters]);
 
   // Initialize map

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { BASE_URL, API_URL } from '../../config';
 
 const Dashboard = ({ userData, setActiveTab }) => {
   const [stats, setStats] = useState({
@@ -14,7 +15,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
   const [error, setError] = useState(null);
 
   // API base URL
-  const API_BASE_URL = 'https://librosfera.onrender.com/';
+  const API_BASE_URL = BASE_URL;
 
   // API token from localStorage
   const getCookie = (name) => {
@@ -85,14 +86,14 @@ const Dashboard = ({ userData, setActiveTab }) => {
           }
         });
 
-        const salesResponse = await axios.get('https://librosfera.onrender.com/api/v1/ventas/estadisticas', {
+        const salesResponse = await axios.get(`${API_URL}/ventas/estadisticas`, {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'
           }
         });
 
-        const MessagesResponse = await axios.get('https://librosfera.onrender.com/api/v1/mensajeria/contadores', {
+        const MessagesResponse = await axios.get(`${API_URL}/mensajeria/contadores`, {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'
@@ -166,6 +167,7 @@ const Dashboard = ({ userData, setActiveTab }) => {
     };
 
     fetchStats();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Componente para mostrar una estadística con iconos SVG

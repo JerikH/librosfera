@@ -4,11 +4,8 @@ import axios from 'axios';
 import UserLayout from './UserLayout';
 import CachedImage from './CachedImage';
 import { useCallback } from 'react';
-import { getCartCount } from './cartUtils';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
-
-// URL base para las llamadas a la API
-const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
+import { API_URL as API_BASE_URL, BASE_URL } from '../config';
 
 const BookListPage = ({ category }) => {
     
@@ -16,8 +13,8 @@ const BookListPage = ({ category }) => {
     const [books, setBooks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [title, setTitle] = useState('');
-    const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
-    const [cartCount, setCartCount] = useState(0);
+    const [, setToast] = useState({ visible: false, message: '', type: 'success' });
+    const [, setCartCount] = useState(0);
     const [booksInCart, setBooksInCart] = useState(new Set());
     // Store actual filters and form state separately to prevent auto-requests
     const [formFilters, setFormFilters] = useState({
@@ -94,6 +91,7 @@ const BookListPage = ({ category }) => {
     
         // Initial fetch with these filters
         fetchBooks(1, initialFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     },  [category, categoryName]);
 
     useEffect(() => {
@@ -287,7 +285,7 @@ const BookListPage = ({ category }) => {
           return;
         }
   
-        const response = await axios.post('https://librosfera.onrender.com/api/v1/carrito/agregar', {
+        const response = await axios.post(`${API_BASE_URL}/carrito/agregar`, {
           id_libro: book._id,
           cantidad: 1
         }, {
@@ -372,22 +370,6 @@ const BookListPage = ({ category }) => {
     // No data fetching here, just toggle the filters visibility
   }, []);
 
-  // Función para renderizar estrellas de calificación
-  const renderStars = (rating) => {
-    const calculatedRating = rating || 0;
-    const stars = [];
-    for (let i = 0; i < 5; i++) {
-      stars.push(
-        <span 
-          key={i} 
-          className={`text-lg ${i < calculatedRating ? 'text-yellow-400' : 'text-gray-300'}`}
-        >
-          ★
-        </span>
-      );
-    }
-    return stars;
-  };
 
   // Componente para mostrar un libro (reutilizado de HomePage)
   const BookCard = React.memo(({ book, booksInCart, handleAddToCart }) => {
@@ -413,7 +395,7 @@ const BookListPage = ({ category }) => {
     } else if (!imagesVerified) {
       // No images or empty array - set default and mark as verified
       setValidImageUrls([{ 
-        url: "https://librosfera.onrender.com/uploads/libros/Default.png",
+        url: `${BASE_URL}/uploads/libros/Default.png`,
         alt_text: "Default book image"
       }]);
       setImagesVerified(true);

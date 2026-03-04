@@ -5,9 +5,9 @@ import axios from 'axios';
 import CachedImage from './CachedImage';
 import { getCartCount } from './cartUtils';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL, BASE_URL } from '../config';
 
 // URL base for API calls
-const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
 
 // Create a caching mechanism for API responses
 const apiCache = {
@@ -67,7 +67,7 @@ const BookCard = React.memo(({ book, booksInCart, handleAddToCart }) => {
     } else if (!imagesVerified) {
       // No images or empty array - set default and mark as verified
       setValidImageUrls([{ 
-        url: "https://librosfera.onrender.com/uploads/libros/Default.png",
+        url: `${BASE_URL}/uploads/libros/Default.png`,
         alt_text: "Default book image"
       }]);
       setImagesVerified(true);
@@ -527,22 +527,6 @@ const HomePage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [fetchAllBooks, pagination.totalPages, pagination.limit]);
 
-  // Function to render stars for rating
-  const renderStars = useCallback((rating) => {
-    const calculatedRating = rating || 0;
-    const stars = [];
-    for (let i = 0; i < 5; i++) {
-      stars.push(
-        <span 
-          key={i} 
-          className={`text-lg ${i < calculatedRating ? 'text-yellow-400' : 'text-gray-300'}`}
-        >
-          ★
-        </span>
-      );
-    }
-    return stars;
-  }, []);
 
   // Function to add to cart - optimized to not trigger unnecessary re-renders
   const handleAddToCart = useCallback(async (e, book) => {
@@ -567,7 +551,7 @@ const HomePage = () => {
         return;
       }
 
-      const response = await axios.post('https://librosfera.onrender.com/api/v1/carrito/agregar', {
+      const response = await axios.post(`${API_BASE_URL}/carrito/agregar`, {
         id_libro: book._id,
         cantidad: 1
       }, {
@@ -898,7 +882,8 @@ const HomePage = () => {
         </div>
       );
     };
-  }, [isLoading, CategoriesList, PromoBanner, DiscountedBooksSection, FeaturedBooksSection, AllBooksSection]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
 
   return (
     <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>

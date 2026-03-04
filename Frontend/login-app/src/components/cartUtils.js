@@ -1,7 +1,7 @@
 // cartUtils.js - Funciones de utilidad para el carrito de compras
 import axios from "axios";
 import { getAuthToken } from "./UserProfilePageComponents/authUtils";
-import { Await } from "react-router-dom";
+import { API_URL as API_BASE_URL } from "../config";
 
 // SOLUCIÓN: Cache para evitar múltiples llamadas simultáneas
 let fetchCartPromise = null;
@@ -128,7 +128,7 @@ export const UpdateQuantityBook = async (BookId, Quantity) => {
     console.log(`Updating quantity for book ${BookId} to ${Quantity}`);
 
     const response = await axios.put(
-      `https://librosfera.onrender.com/api/v1/carrito/item/${BookId}`, 
+      `${API_BASE_URL}/carrito/item/${BookId}`,
       updateData, 
       {
         headers: {
@@ -195,7 +195,6 @@ const performCartFetch = async () => {
   //localStorage.removeItem('shoppingCart');
   
   try {
-    const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
     const response = await axios.get(`${API_BASE_URL}/carrito`, {
       headers: {
         'Authorization': `Bearer ${getAuthToken()}`
@@ -298,7 +297,7 @@ export const syncCartIfNeeded = async () => {
 export const removeCartItem = async (itemId) => {
   try {
     const response = await axios.delete(
-      `https://librosfera.onrender.com/api/v1/carrito/item/${itemId}`,
+      `${API_BASE_URL}/carrito/item/${itemId}`,
       {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,
@@ -336,7 +335,7 @@ export const removeCartItem = async (itemId) => {
 export const clearCartAPI = async () => {
   try {
     const response = await axios.delete(
-      `https://librosfera.onrender.com/api/v1/carrito`,
+      `${API_BASE_URL}/carrito`,
       {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,
@@ -375,7 +374,7 @@ export const clearCartAPI = async () => {
 export const getCartTotals = async () => {
   try {
     const response = await axios.get(
-      `https://librosfera.onrender.com/api/v1/carrito/total`,
+      `${API_BASE_URL}/carrito/total`,
       {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,

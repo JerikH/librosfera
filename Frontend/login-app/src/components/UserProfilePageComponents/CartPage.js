@@ -4,8 +4,7 @@ import axios from 'axios';
 import CachedImage from '../CachedImage';
 import { getAuthToken } from './authUtils';
 import { UpdateQuantityBook } from '../cartUtils';
-
-const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
+import { API_URL as API_BASE_URL, BASE_URL } from '../../config';
 
 const CartPage = ({ updateCartCount }) => {
   const [cartItems, setCartItems] = useState([]);
@@ -116,6 +115,7 @@ const CartPage = ({ updateCartCount }) => {
       setIsLoading(false);
       hasLoadedInitially.current = true;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // SOLUCIÓN 4: Dependencias vacías para evitar ejecuciones innecesarias
 
   // SOLUCIÓN 5: useEffect simplificado que solo se ejecuta una vez al montar
@@ -123,6 +123,7 @@ const CartPage = ({ updateCartCount }) => {
     if (!hasLoadedInitially.current) {
       fetchCartItems();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Solo se ejecuta al montar el componente
 
   const fetchCartTotals = useCallback(async () => {
@@ -467,7 +468,7 @@ useEffect(() => {
                             src={item.bookDetails.imagenes[0].url} 
                             alt={item.bookDetails.titulo || "Libro"} 
                             className="w-full h-full object-contain"
-                            fallbackSrc="https://librosfera.onrender.com/uploads/libros/Default.png"
+                            fallbackSrc={`${BASE_URL}/uploads/libros/Default.png`}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center bg-gray-200">

@@ -4,9 +4,9 @@ import UserLayout from './UserLayout';
 import axios from 'axios';
 import CachedImage from './CachedImage';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL } from '../config';
 
 // URL base para las llamadas a la API
-const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
 
 
 
@@ -15,15 +15,12 @@ const SearchResults = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchId, setSearchId] = useState('');
-  const [isInCart, setIsInCart] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [, setToast] = useState({ visible: false, message: '', type: 'success' });
   const [addingToCart, setAddingToCart] = useState(false);
-  const [quantity, setQuantity] = useState(1);
-  const [addedToCart, setAddedToCart] = useState(false);
-  const [cartCount, setCartCount] = useState(0);
+  const [, setCartCount] = useState(0);
   const [booksInCart, setBooksInCart] = useState(new Set());
 
 
@@ -214,7 +211,7 @@ useEffect(() => {
     }
 
     // Make request to add to cart endpoint
-    const response = await axios.post('https://librosfera.onrender.com/api/v1/carrito/agregar', {
+    const response = await axios.post(`${API_BASE_URL}/carrito/agregar`, {
       id_libro: book._id,
       cantidad: 1
     }, {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL as API_BASE_URL } from '../config';
 
 const getCookie = (name) => {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -9,7 +10,7 @@ const getCookie = (name) => {
 
 const verifyToken = async (token) => {
     try {
-      const response = await axios.get('https://librosfera.onrender.com/api/v1/auth/verify-token', {
+      const response = await axios.get(`${API_BASE_URL}/auth/verify-token`, {
         headers: {
           'Authorization': `Bearer ${String(token)}`,
         },
@@ -274,7 +275,7 @@ export default function ProfilePage() {
                     )}
                   </div>
                   
-                  <div className="mt-4 pt-4 border-t border-gray-100">
+                  {/* <div className="mt-4 pt-4 border-t border-gray-100">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium">Recibir Noticias</p>
@@ -286,7 +287,7 @@ export default function ProfilePage() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </div> */}
                   
                   <div className="mt-6 pt-4 border-t border-gray-100">
                     <div className="flex items-center justify-between">

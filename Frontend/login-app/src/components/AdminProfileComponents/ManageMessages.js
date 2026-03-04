@@ -8,16 +8,12 @@ import {
   Circle, 
   Filter,
   User,
-  AlertCircle,
   Settings,
-  Search,
-  Calendar,
-  ChevronDown,
-  UserCheck,
-  X
+  Search
 } from 'lucide-react';
 
 import { getAuthToken } from '../UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL } from '../../config';
 
 const AdminMessagesPage = () => {
   const [conversations, setConversations] = useState([]);
@@ -67,7 +63,7 @@ const AdminMessagesPage = () => {
     if (!token) return;
 
     try {
-      const response = await fetch(`https://librosfera.onrender.com/api/v1/users?tipo_usuario=administrador&activo=true`, {
+      const response = await fetch(`${API_BASE_URL}/users?tipo_usuario=administrador&activo=true`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -108,7 +104,7 @@ const AdminMessagesPage = () => {
         }
       });
 
-      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones?${params}`, {
+      const response = await fetch(`${API_BASE_URL}/mensajeria/conversaciones?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -166,7 +162,7 @@ const AdminMessagesPage = () => {
     if (!token) return;
 
     try {
-      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${conversationId}`, {
+      const response = await fetch(`${API_BASE_URL}/mensajeria/conversaciones/${conversationId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -200,7 +196,7 @@ const AdminMessagesPage = () => {
         
         // Mark as read (only on initial load, not during polling)
         if (!silent) {
-          await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${conversationId}/leer`, {
+          await fetch(`${API_BASE_URL}/mensajeria/conversaciones/${conversationId}/leer`, {
             method: 'PATCH',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -249,7 +245,7 @@ const AdminMessagesPage = () => {
     try {
       // If we have a timestamp, we can ask the server for messages after that timestamp
       // This is more efficient than fetching all messages every time
-      let url = `https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${conversationId}`;
+      let url = `${API_BASE_URL}/mensajeria/conversaciones/${conversationId}`;
       
       // If your API supports filtering by timestamp, uncomment this:
       // if (lastMessageTimestampRef.current) {
@@ -284,6 +280,7 @@ const AdminMessagesPage = () => {
     } catch (error) {
       console.error('Error checking for new messages:', error);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 
   // Start polling for new messages
@@ -319,7 +316,7 @@ const AdminMessagesPage = () => {
       formData.append('contenido', newMessage);
       formData.append('tipo', 'mensaje');
 
-      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${selectedConversation._id}/mensajes`, {
+      const response = await fetch(`${API_BASE_URL}/mensajeria/conversaciones/${selectedConversation._id}/mensajes`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -351,7 +348,7 @@ const AdminMessagesPage = () => {
     if (!token) return;
 
     try {
-      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${selectedConversation._id}/estado`, {
+      const response = await fetch(`${API_BASE_URL}/mensajeria/conversaciones/${selectedConversation._id}/estado`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -380,7 +377,7 @@ const AdminMessagesPage = () => {
     if (!token) return;
 
     try {
-      const response = await fetch(`https://librosfera.onrender.com/api/v1/mensajeria/conversaciones/${selectedConversation._id}/asignar`, {
+      const response = await fetch(`${API_BASE_URL}/mensajeria/conversaciones/${selectedConversation._id}/asignar`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -458,13 +455,13 @@ const AdminMessagesPage = () => {
   // Fetch conversations when filters change
   useEffect(() => {
     fetchConversations();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   // Fetch admin list on component mount
   useEffect(() => {
     fetchAdmins();
-    console.log("Admins", adminList);
-    
+
     // Cleanup on component unmount
     return () => {
       stopPolling();

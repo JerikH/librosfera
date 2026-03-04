@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL } from '../config';
 
 const CheckoutDeliveryPage = () => {
   const navigate = useNavigate();
-  const [cartItems, setCartItems] = useState([]);
+  const [, setCartItems] = useState([]);
   const [cartPrices, setCartPrices] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const [deliveryMethod, setDeliveryMethod] = useState('');
   const [userAddresses, setUserAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
@@ -39,7 +40,7 @@ const CheckoutDeliveryPage = () => {
   const fetchUserAddresses = async () => {
     setLoadingAddresses(true);
     try {
-      const response = await axios.get('https://librosfera.onrender.com/api/v1/direcciones', {
+      const response = await axios.get(`${API_BASE_URL}/direcciones`, {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`
         }
@@ -56,7 +57,7 @@ const CheckoutDeliveryPage = () => {
             State: defaultAddress.departamento,
             Country: defaultAddress.pais,
             Postal: defaultAddress.codigo_postal,
-            Street: defaultAddress.calle
+            Street: defaultAddress.direccion_completa
           });
         } else if (response.data.data.length > 0) {
           // If no default address, select the first one
@@ -67,7 +68,7 @@ const CheckoutDeliveryPage = () => {
             State: firstAddress.departamento,
             Country: firstAddress.pais,
             Postal: firstAddress.codigo_postal,
-            Street: firstAddress.calle
+            Street: firstAddress.direccion_completa
           });
         }
       }
@@ -156,7 +157,7 @@ const CheckoutDeliveryPage = () => {
 
   // Handle delivery method change
   const handleDeliveryMethodChange = (method) => {
-    if(method == 'domicilio'){
+    if(method === 'domicilio'){
       setShowAddressDropdown(true);
       fetchUserAddresses();
       
@@ -185,7 +186,7 @@ const CheckoutDeliveryPage = () => {
           State: '', // Not available in the cookie data
           Country: firstAddress.pais || '',
           Postal: firstAddress.codigo_postal || '',
-          Street: firstAddress.calle || ''
+          Street: firstAddress.direccion_completa || ''
         });
       }
     } else {
@@ -203,7 +204,7 @@ const CheckoutDeliveryPage = () => {
       State: address.departamento,
       Country: address.pais,
       Postal: address.codigo_postal,
-      Street: address.calle
+      Street: address.direccion_completa
     });
   };
 

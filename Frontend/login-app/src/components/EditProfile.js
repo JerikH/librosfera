@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import CachedImage from './CachedImage';
 import { refreshUserData } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL, BASE_URL } from '../config';
 
 const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
   const navigate = useNavigate();
@@ -12,15 +13,14 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
   const [previewImage, setPreviewImage] = useState(null);
   const [isDefaultProfilePic, setIsDefaultProfilePic] = useState(true);
   const [countries, setCountries] = useState([]);
-  const [filteredCountries, setFilteredCountries] = useState([]);
-  const [showCountriesList, setShowCountriesList] = useState(false);
-  const [isLoadingCountries, setIsLoadingCountries] = useState(false);
+  const [, setFilteredCountries] = useState([]);
+  const [, setShowCountriesList] = useState(false);
+  const [, setIsLoadingCountries] = useState(false);
   const [isLoadingProfilePic, setIsLoadingProfilePic] = useState(false);
   const countryInputRef = useRef(null);
   const [showPreferencesList, setShowPreferencesList] = useState(false);
   const [selectedPreferences, setSelectedPreferences] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [alternatePhone, setAlternatePhone] = useState('');
 
   // Available preferences list (same as in registration)
   const availablePreferences = ['Ficción', 'No Ficción', 'Ciencia Ficción', 'Fantasía', 'Romance', 'Biografía', 'Historia', 'Ciencia', 'Filosofía', 'Arte', 'Tecnología'];
@@ -46,7 +46,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
     pais: '',
     estado_provincia: '',
     referencias: '',
-    tipo_direccion: 'Casa',
+    tipo_direccion: 'casa',
     // Password fields (keep existing ones)
     password: '',
     confirmPassword: '',
@@ -81,7 +81,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
 
   // Configure axios defaults
   const api = axios.create({
-    baseURL: 'https://librosfera.onrender.com/api/v1',
+    baseURL: API_BASE_URL,
     headers: {
       'Authorization': `Bearer ${authToken}`,
       'Content-Type': 'application/json',
@@ -92,7 +92,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
   
   // Define profile image base URL
   const PROFILE_PIC_BASE_URL = '';
-  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com/uploads/profiles/default.jpg';
+  const DEFAULT_PROFILE_PIC = `${BASE_URL}/uploads/profiles/default.jpg`;
 
   // Fetch countries for autocomplete, just like in registration
   useEffect(() => {
@@ -151,13 +151,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
         lugar_nacimiento: userData.lugar_nacimiento || '',
         suscrito_noticias: userData.suscrito_noticias || false,
         // Address fields - assuming primary address is the first one
-        calle: userData.direcciones && userData.direcciones[0]?.calle || '',
-        ciudad: userData.direcciones && userData.direcciones[0]?.ciudad || '',
-        codigo_postal: userData.direcciones && userData.direcciones[0]?.codigo_postal || '',
-        pais: userData.direcciones && userData.direcciones[0]?.pais || '',
-        estado_provincia: userData.direcciones && userData.direcciones[0]?.estado_provincia || '',
-        referencias: userData.direcciones && userData.direcciones[0]?.referencias || '',
-        tipo_direccion: userData.direcciones && userData.direcciones[0]?.tipo || 'Casa',
+        direcciones: userData.direcciones || '',
         // Password fields (empty by default)
         password: '',
         confirmPassword: '',
@@ -179,6 +173,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
       
       setIsLoadingProfilePic(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData]);
 
   const handleChange = (e) => {
@@ -203,14 +198,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
     }
   };
 
-  // Select a country from the dropdown
-  const selectCountry = (country) => {
-    setFormData({
-      ...formData,
-      pais: country
-    });
-    setShowCountriesList(false);
-  };
+
 
   // Toggle selection of a preference
   const togglePreference = (preference) => {
@@ -286,7 +274,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
       formData.append('foto_perfil', file);
       
       const response = await axios.post(
-        'https://librosfera.onrender.com/api/v1/users/profile/foto', 
+        `${API_BASE_URL}/users/profile/foto`,
         formData, 
         {
           headers: {
@@ -321,19 +309,21 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
     
     try {
       // Create the primary address
-      const primaryAddress = {
-        calle: formData.calle,
-        ciudad: formData.ciudad,
-        codigo_postal: formData.codigo_postal,
-        pais: formData.pais,
-        tipo: formData.tipo_direccion || 'Casa'
-      };
+      // const primaryAddress = {
+      //   calle: formData.calle,
+      //   ciudad: formData.ciudad,
+      //   departamento: formData.estado_provincia,
+      //   direccion_completa: `${formData.calle}, ${formData.ciudad}, ${formData.estado_provincia || ''}, ${formData.codigo_postal || ''}, ${formData.pais || ''}`.trim(),
+      //   codigo_postal: formData.codigo_postal,
+      //   pais: formData.pais,
+      //   tipo: formData.tipo_direccion || 'casa'
+      // };
       
-      // If there's a secondary address in the existing user data, include it
-      let direcciones = [primaryAddress];
-      if (userData?.direcciones && userData.direcciones.length > 1) {
-        direcciones = [primaryAddress, ...userData.direcciones.slice(1)];
-      }
+      // // If there's a secondary address in the existing user data, include it
+      // let direcciones = [primaryAddress];
+      // if (userData?.direcciones && userData.direcciones.length > 1) {
+      //   direcciones = [primaryAddress, ...userData.direcciones.slice(1)];
+      // }
       
       // Prepare data for API submission - follow the exact format from the curl example
       const updatedUserData = {
@@ -341,7 +331,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
         apellidos: formData.apellidos,
         telefono: formData.telefono,
         telefono_alternativo: formData.telefono_alternativo,
-        direcciones: direcciones,
+        direcciones: formData.direcciones,
         email: formData.email,
         genero: formData.genero,
         suscrito_noticias: formData.suscrito_noticias,
@@ -361,7 +351,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
       
       // Make API call to update profile data using axios with proper headers
       const response = await axios.put(
-        'https://librosfera.onrender.com/api/v1/users/profile', 
+        `${API_BASE_URL}/users/profile`,
         updatedUserData, 
         {
           headers: {
@@ -504,7 +494,8 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
               
               <div>
                 <span className="text-gray-600 font-semibold">Última actualización:</span>
-                <span className="ml-2">{userData?.ultima_actualizacion || 'N/A'}</span>
+                <br/>
+                <span className="ml-2">{userData?.fecha_actualizacion || 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -651,9 +642,9 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
             </div>
             
             {/* Address Information */}
-            <h2 className="text-xl font-semibold mb-4">Dirección Principal</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="col-span-1 md:col-span-2">
+            {/* <h2 className="text-xl font-semibold mb-4">Dirección Principal</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"> */}
+              {/* <div className="col-span-1 md:col-span-2">
                 <label className="block text-gray-700 mb-1">Calle</label>
                 <input
                   type="text"
@@ -690,7 +681,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
               </div>
               
               {/* País with Autocomplete */}
-              <div ref={countryInputRef} className="relative">
+              {/* <div ref={countryInputRef} className="relative">
                 <label className="block text-gray-700 mb-1">País</label>
                 <input
                   type="text"
@@ -711,7 +702,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
                   </div>
                 )}
                 
-                {/* Countries Dropdown */}
+                
                 {showCountriesList && filteredCountries.length > 0 && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
                     {filteredCountries.map(country => (
@@ -746,9 +737,9 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
                 >
-                  <option value="Casa">Casa</option>
-                  <option value="Trabajo">Trabajo</option>
-                  <option value="Otro">Otro</option>
+                  <option value="casa">Casa</option>
+                  <option value="trabajo">Trabajo</option>
+                  <option value="otro">Otro</option>
                 </select>
               </div>
               
@@ -762,7 +753,7 @@ const EditProfile = ({ userData, userType = 'user', onGoBack }) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 />
               </div>
-            </div>
+            </div> */}
             
             {/* Preferences */}
             <h2 className="text-xl font-semibold mb-4">Preferencias</h2>

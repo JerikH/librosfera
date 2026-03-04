@@ -1,16 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { formatDate } from './authUtils';
-import { useNavigate } from 'react-router-dom';
 import CachedImage from '../CachedImage';
 import EditProfile from '../EditProfile';
 import axios from 'axios';
 import { getAuthToken } from './authUtils';
-
-
-const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
+import { API_URL as API_BASE_URL, BASE_URL } from '../../config';
 
 const ProfilePage = ({ userData }) => {
-  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
@@ -31,11 +27,6 @@ const ProfilePage = ({ userData }) => {
 
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
 
-  // Get primary address if available
-  const primaryAddress = addresses && addresses.length > 0 
-    ? addresses.find(addr => addr.es_principal) || addresses[0]
-    : null;
-    
   // Handle logout click
   const handleLogout = () => {
     localStorage.removeItem('shoppingCart');
@@ -45,7 +36,7 @@ const ProfilePage = ({ userData }) => {
 
   // Define profile image base URL - same as in EditProfile
   const PROFILE_PIC_BASE_URL = '';
-  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com/uploads/profiles/default.jpg';
+  const DEFAULT_PROFILE_PIC = `${BASE_URL}/uploads/profiles/default.jpg`;
 
   // Get profile image URL
   const profileImage = userData?.foto_perfil 
@@ -92,6 +83,7 @@ const ProfilePage = ({ userData }) => {
 
   useEffect(() => {
   fetchAddresses();
+// eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
   // Handle address form changes
@@ -482,7 +474,7 @@ const ProfilePage = ({ userData }) => {
               )}
             </div>
             
-            <div className="mt-4 pt-4 border-t border-gray-100">
+            {/* <div className="mt-4 pt-4 border-t border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Recibir Noticias</p>
@@ -494,7 +486,7 @@ const ProfilePage = ({ userData }) => {
                   </div>
                 </div>
               </div>
-            </div>
+            </div> */}
             
             <div className="mt-6 pt-4 border-t border-gray-100">
               <div className="flex items-center justify-between">

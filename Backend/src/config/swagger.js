@@ -21,12 +21,8 @@ const options = {
     },
     servers: [
       {
-        url: 'https://librosfera.onrender.com/',
-        description: 'Servidor de desarrollo'
-      },
-      {
-        url: 'https://api.librosfera.com/api/v1',
-        description: 'Servidor de producción'
+        url: process.env.BASE_URL || 'http://localhost:5000',
+        description: 'Servidor actual'
       }
     ],
     components: {

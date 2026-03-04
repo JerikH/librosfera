@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL as API_BASE_URL } from '../config';
 
 const getCookie = (name) => {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -9,7 +10,7 @@ const getCookie = (name) => {
 
 const verifyToken = async (token) => {
   try {
-    const response = await axios.get('https://librosfera.onrender.com/api/v1/auth/verify-token', {
+    const response = await axios.get(`${API_BASE_URL}/auth/verify-token`, {
       headers: {
         'Authorization': `Bearer ${String(token)}`,
       },
@@ -19,8 +20,8 @@ const verifyToken = async (token) => {
     console.log(response);
     if(response.status === 200){
       console.log(response.data.user.tipo_usuario);
-      console.log(response.data.user.tipo_usuario == "root");
-      return response.data.user.tipo_usuario == "root";
+      console.log(response.data.user.tipo_usuario === "root");
+      return response.data.user.tipo_usuario === "root";
     }
     return false;
   } catch (err) {
@@ -98,7 +99,7 @@ const CreateAdminPage = () => {
     try {
       // Make POST request to backend API
       const response = await axios.post(
-        "https://librosfera.onrender.com/api/v1/users/admin",
+        `${API_BASE_URL}/users/admin`,
         formData,
         {
           headers: {

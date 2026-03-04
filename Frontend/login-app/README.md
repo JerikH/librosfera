@@ -6,5 +6,5 @@ Usage:
 npm start
 
 
-https://librosfera-awmi.onrender.com/Login
-https://librosfera-awmi.onrender.com/CreateAdmin
+http://localhost:3000/Login
+http://localhost:3000/CreateAdmin

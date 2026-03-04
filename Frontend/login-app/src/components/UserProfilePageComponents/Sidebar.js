@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { logoutUser } from './authUtils';
 import CachedImage from '../CachedImage';
+import { BASE_URL } from '../../config';
 
 const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, onDataRefresh, cartCount = 0 }) => {
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing] = useState(false);
   
   // Elementos de navegación con iconos SVG
   const navItems = [
@@ -85,7 +86,7 @@ const Sidebar = ({ activeTab, setActiveTab, userData, isLoading, onEditProfile, 
 
   // Define profile image base URL
   const PROFILE_PIC_BASE_URL = '';
-  const DEFAULT_PROFILE_PIC = 'https://librosfera.onrender.com/uploads/profiles/default.jpg';
+  const DEFAULT_PROFILE_PIC = `${BASE_URL}/uploads/profiles/default.jpg`;
 
   // Handle tab click - now just using the data passed from parent
   const handleTabClick = (tabId) => {

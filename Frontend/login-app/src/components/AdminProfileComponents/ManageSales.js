@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { BASE_URL } from '../../config';
 
 const ManageSales = () => {
   const [sales, setSales] = useState([]);
@@ -6,13 +7,13 @@ const ManageSales = () => {
   const [loading, setLoading] = useState(true);
   const [selectedSale, setSelectedSale] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('todos');
-  const [dateFilter, setDateFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalResults, setTotalResults] = useState(0);
+  const [statusFilter] = useState('todos');
+  const [dateFilter] = useState('');
+  const [currentPage] = useState(1);
+  const [, setTotalPages] = useState(1);
+  const [, setTotalResults] = useState(0);
   const [statistics, setStatistics] = useState(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updatingVenta, setUpdatingVenta] = useState(null);
@@ -24,7 +25,7 @@ const ManageSales = () => {
     onConfirm: null, 
     onCancel: null 
   });
-  const [returnStatusFilter, setReturnStatusFilter] = useState('');
+  const [returnStatusFilter] = useState('');
 
   const showModalE = (type, title, message) => {
     setModalInfo({
@@ -43,7 +44,7 @@ const ManageSales = () => {
     { value: 'entregado', label: 'Entregado', color: 'bg-green-100 text-green-800' }
   ];
 
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://librosfera.onrender.com/';
+  const API_BASE_URL = BASE_URL;
 
   const getCookie = (name) => {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -228,6 +229,7 @@ const renderStatusButton = (sale) => {
   // Load initial data and statistics
   useEffect(() => {
     fetchStatistics();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   useEffect(() => {
@@ -236,9 +238,10 @@ const renderStatusButton = (sale) => {
     const timer = setTimeout(() => {
       fetchStatistics();
     }, 1000); // Delay to ensure backend is updated
-    
+
     return () => clearTimeout(timer);
   }
+// eslint-disable-next-line react-hooks/exhaustive-deps
 }, [updatingStatus]);
 
   // Fetch sales when filters change (using debounced search term)
@@ -251,8 +254,9 @@ const renderStatusButton = (sale) => {
       estado_devolucion: returnStatusFilter,
       tiene_devoluciones: returnStatusFilter ? (returnStatusFilter === 'sin_devolucion' ? false : true) : undefined
     };
-    
+
     fetchSales(currentPage, filters);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, statusFilter, debouncedSearchTerm, dateFilter, returnStatusFilter]);
 
   // Apply local filtering for immediate UI response
@@ -351,6 +355,7 @@ const renderStatusButton = (sale) => {
               sale.numero_venta === numeroVenta 
                 ? { 
                     ...sale, 
+                    estado: newStatus, // Update the main estado field
                     envio: { 
                       ...sale.envio, 
                       estado_envio: newStatus,
@@ -369,6 +374,7 @@ const renderStatusButton = (sale) => {
           if (selectedSale && selectedSale.numero_venta === numeroVenta) {
             setSelectedSale(prev => ({
               ...prev,
+              estado: newStatus, // Update the main estado field
               envio: {
                 ...prev.envio,
                 estado_envio: newStatus,
@@ -398,12 +404,13 @@ const renderStatusButton = (sale) => {
     }
   };
 
+
   const handleViewDetails = async (sale) => {
     const saleDetails = await fetchSaleDetails(sale.numero_venta);
     if (saleDetails) {
       
       setSelectedSale(saleDetails);
-      console.log("Details:", selectedSale);
+      console.log("Details:", saleDetails);
       setShowModal(true);
       
     }
@@ -448,14 +455,6 @@ const renderStatusButton = (sale) => {
       hour: '2-digit',
       minute: '2-digit'
     });
-  };
-
-  const handleClearFilters = () => {
-    setSearchTerm('');
-    setStatusFilter('todos');
-    setReturnStatusFilter('');
-    setDateFilter('');
-    setCurrentPage(1);
   };
 
   const InfoModal = () => {
@@ -534,7 +533,8 @@ const renderStatusButton = (sale) => {
         inputModal.fields.reduce((acc, field) => ({ ...acc, [field.name]: field.value || '' }), {})
       );
     }
-  }, [inputModal.show, inputModal.fields]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Conditional return AFTER useState
   if (!inputModal.show) return null;
@@ -974,10 +974,31 @@ return (
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
-                      {formatCurrency(item.precios?.precio_unitario_final || 0)}
+                      {item.precios.descuento_aplicado > 0 ? (
+                      <>
+                        <p className="font-s line-through text-gray-500">
+                          {formatCurrency(item.precios.precio_unitario_base || 0)}
+                        </p>
+                        <p className="font-medium text-red-600">
+                          {formatCurrency(item.precios.precio_unitario_base - item.precios.descuento_aplicado || 0)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="font-medium text-gray-800">{formatCurrency(item.precios.precio_unitario_base || 0)}</p>
+                    )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
-                      {formatCurrency(item.precios?.subtotal || 0)}
+                      {/* {formatCurrency((item.precios?.precio_unitario_base * item.cantidad) || 0)} */}
+                      {item.precios.descuento_aplicado > 0 ? (
+                      <>
+                        <p className="font-medium">
+                          {formatCurrency((item.precios.precio_unitario_base - item.precios.descuento_aplicado) * item.cantidad || 0)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="font-medium text-gray-800">{formatCurrency(item.precios.precio_unitario_base * item.cantidad || 0)}</p>
+                    )}
+
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -1003,7 +1024,8 @@ return (
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span>Subtotal:</span>
-                <span>{formatCurrency(selectedSale.totales?.subtotal_sin_descuentos || 0)}</span>
+                <span>
+                  {formatCurrency(selectedSale.totales?.subtotal_sin_descuentos || 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Descuentos:</span>
@@ -1053,31 +1075,43 @@ return (
         <div className="bg-white border-2 border-gray-200 rounded-lg p-4 mb-4">
           <h4 className="font-semibold text-gray-900 mb-3">Cambiar Estado de Envío</h4>
           <div className="flex flex-wrap gap-2">
-            {shippingStates.map((state) => (
-              <button
-                key={state.value}
-                onClick={() => updateShippingStatus(selectedSale.numero_venta, state.value)}
-                disabled={updatingStatus}
-                className={`px-4 py-2 rounded-lg border transition-colors ${
-                  selectedSale.estado === state.value
-                    ? `${state.color} border-current`
-                    : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'
-                } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {updatingStatus && updatingVenta === selectedSale.numero_venta ? (
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Actualizando...
-                  </div>
-                ) : (
-                  state.label
-                )}
-              </button>
-            ))}
+            {shippingStates.map((state) => {
+              const isCurrentState = selectedSale.estado === state.value || selectedSale.envio?.estado_envio === state.value;
+              const isUpdatingThis = updatingStatus && updatingVenta === selectedSale.numero_venta;
+              
+              return (
+                <button
+                  key={state.value}
+                  onClick={() => updateShippingStatus(selectedSale.numero_venta, state.value)}
+                  disabled={updatingStatus || isCurrentState}
+                  className={`px-4 py-2 rounded-lg border transition-colors ${
+                    isCurrentState
+                      ? `${state.color} border-current ring-2 ring-offset-2 ring-blue-500`
+                      : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700 hover:border-gray-400'
+                  } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : ''} ${
+                    isCurrentState ? 'cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                >
+                  {isUpdatingThis ? (
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Actualizando...
+                    </div>
+                  ) : (
+                    <>
+                      {state.label}
+                      {isCurrentState && (
+                        <span className="ml-2 text-xs">✓</span>
+                      )}
+                    </>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <p className="text-sm text-gray-500 mt-2">
-            Estado actual: <span className={`px-2 py-1 rounded-full text-xs ${getStatusInfo(selectedSale.estado).color}`}>
-              {getStatusInfo(selectedSale.estado).label}
+            Estado actual: <span className={`px-2 py-1 rounded-full text-xs ${getStatusInfo(selectedSale.estado || selectedSale.envio?.estado_envio).color}`}>
+              {getStatusInfo(selectedSale.estado || selectedSale.envio?.estado_envio).label}
             </span>
           </p>
         </div>

@@ -5,6 +5,7 @@ import UserLayout from './UserLayout';
 import CachedImage from './CachedImage';
 import { addToCart, getCartCount } from './cartUtils'; // Import cart utility functions
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
+import { API_URL as API_BASE_URL, BASE_URL } from '../config';
 
 const BookDetails = () => {
   const { bookId } = useParams();
@@ -15,14 +16,14 @@ const BookDetails = () => {
   const navigate = useNavigate();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [displayedImageIndex, setDisplayedImageIndex] = useState(0); // Used in image transition logic
+  const [, setDisplayedImageIndex] = useState(0); // Used in image transition logic
+  const [, setAddedToCart] = useState(false);
   const [validImageUrls, setValidImageUrls] = useState([]);
   const [imagesVerified, setImagesVerified] = useState(false);
   
   // States for cart functionality
   const [cartCount, setCartCount] = useState(0);
   const [addingToCart, setAddingToCart] = useState(false);
-  const [addedToCart, setAddedToCart] = useState(false);
   const [isInCart, setIsInCart] = useState(false);
   
   // State for toast notifications
@@ -126,7 +127,7 @@ const BookDetails = () => {
     const fetchBookDetails = async () => { 
       try {
         // Realizar la llamada a la API con axios
-        const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros/${bookId}`);
+        const response = await axios.get(`${API_BASE_URL}/libros/${bookId}`);
         
         // Con axios, los datos ya vienen en formato JSON
         const result = response.data;
@@ -250,6 +251,7 @@ const BookDetails = () => {
       window.removeEventListener('globalCartUpdate', handleGlobalCartUpdate);
       window.removeEventListener('cartChange', handleCartUpdate);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Check cart status whenever book data changes
@@ -258,6 +260,7 @@ const BookDetails = () => {
       console.log('BookDetails: Book data changed, checking cart status...');
       checkIfInCart();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book]);
 
   // Periodic check to ensure synchronization (fallback)
@@ -273,6 +276,7 @@ const BookDetails = () => {
     }, 2000); // Check every 2 seconds
 
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book, isInCart]);
 
   useEffect(() => {
@@ -292,7 +296,7 @@ const BookDetails = () => {
           }
         }
         
-        setValidImageUrls(validImages.length > 0 ? validImages : ["https://librosfera.onrender.com/uploads/libros/Default.png"]);
+        setValidImageUrls(validImages.length > 0 ? validImages : [`${BASE_URL}/uploads/libros/Default.png`]);
         setImagesVerified(true);
       };
       
@@ -305,11 +309,11 @@ const BookDetails = () => {
           if (response.status === 200) {
             setValidImageUrls([book.image]);
           } else {
-            setValidImageUrls(["https://librosfera.onrender.com/uploads/libros/Default.png"]);
+            setValidImageUrls([`${BASE_URL}/uploads/libros/Default.png`]);
           }
         } catch (error) {
           console.log(`Failed to verify image: ${book.image}`);
-          setValidImageUrls(["https://librosfera.onrender.com/uploads/libros/Default.png"]);
+          setValidImageUrls([`${BASE_URL}/uploads/libros/Default.png`]);
         }
         setImagesVerified(true);
       };
@@ -317,7 +321,7 @@ const BookDetails = () => {
       verifySingleImage();
     } else if (book && !imagesVerified) {
       // No images at all - set default image
-      setValidImageUrls(["https://librosfera.onrender.com/uploads/libros/Default.png"]);
+      setValidImageUrls([`${BASE_URL}/uploads/libros/Default.png`]);
       setImagesVerified(true);
     }
   }, [book, imagesVerified]);
@@ -463,7 +467,7 @@ const handleAddToCart = async () => {
       return;
     }
 
-    const response = await axios.post('https://librosfera.onrender.com/api/v1/carrito/agregar', {
+    const response = await axios.post(`${API_BASE_URL}/carrito/agregar`, {
       id_libro: book._id,
       cantidad: Math.min(quantity, 3) // Ensure we don't exceed the limit
     }, {
@@ -475,9 +479,6 @@ const handleAddToCart = async () => {
     });
 
     if (response.data.status === 'success') {
-      // Actualizar el contador del carrito basado en la respuesta del servidor
-      const newCount = response.data.data.carrito.n_item;
-
       const result = addToCart(book, Math.min(quantity, 3));
     
       console.log('BookDetails: Cart update result:', result);
@@ -698,7 +699,7 @@ const handleAddToCart = async () => {
                 />
               </svg>
               {book.categories && book.categories.length > 0 && (
-                <a href={`https://librosfera-awmi.onrender.com/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
+                <a href={`http://localhost:3000/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
                   {book.categories[0]}
                 </a>
               )}

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AddCardPage from './AddCardPage';
 import RechargeBalancePage from './RechargeBalancePage';
 import { getCookie } from './authUtils';
+import { API_URL as API_BASE_URL } from '../../config';
 
 const CardPage = () => {
   const [showAddCard, setShowAddCard] = useState(false);
@@ -19,15 +19,10 @@ const CardPage = () => {
   const [cardToModify, setCardToModify] = useState(null);
   const [amountType, setAmountType] = useState('precio fijo');
   const [amountValue, setAmountValue] = useState('');
-  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState('add');
   const [selectedCard, setSelectedCard] = useState(null);
 
-  // Saldo predeterminado (en pesos)
-  const accountBalance = 0;
-
-  // Base URL para la API
-  const API_BASE_URL = 'https://librosfera.onrender.com/api/v1';
+  // Base URL para la API (imported from config)
 
   // Configuración base para axios
   const token = getCookie("data");
@@ -80,6 +75,7 @@ const CardPage = () => {
   // useEffect para cargar las tarjetas al montar el componente
   useEffect(() => {
     fetchCards();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // useEffect para mostrar mensajes de acción
@@ -255,22 +251,6 @@ const CardPage = () => {
     setCardToDelete(null);
   };
 
-  // Función para eliminar una tarjeta (antigua - ahora usa confirmación)
-  const handleDeleteCard = async (cardId) => {
-    try {
-      const response = await axios.delete(`${API_BASE_URL}/tarjetas/${cardId}`, axiosConfig);
-      
-      if (response.data.status === 'success') {
-        // Recargar las tarjetas desde el servidor
-        await fetchCards();
-        console.log('Tarjeta eliminada exitosamente');
-      }
-    } catch (err) {
-      console.error('Error deleting card:', err);
-      alert('Error al eliminar la tarjeta. Por favor, intenta de nuevo.');
-    }
-  };
-
   // Función para establecer tarjeta como predeterminada
   const handleSetDefaultCard = async (cardId) => {
     try {
@@ -290,12 +270,6 @@ const CardPage = () => {
         text: 'Error al establecer la tarjeta como predeterminada.'
       });
     }
-  };
-
-  // Función para mostrar la página de recarga de saldo
-  const handleRechargeBalanceClick = () => {
-    setShowRechargeBalance(true);
-    setShowAddCard(false);
   };
 
   // Función para cancelar la recarga de saldo

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import ShoppingCart from './ShoppingCart'; // Importar el componente de carrito
 import { fetchCartUtils } from './cartUtils';
+import { API_URL as API_BASE_URL } from '../config';
 
 // Helper function to get cookie data - same as in AdminProfile
 const getCookie = (name) => {
@@ -17,7 +18,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [userData, setUserData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const searchRef = useRef(null);
   const [isCartOpen, setIsCartOpen] = useState(false); // Estado para controlar la visibilidad del carrito
 
@@ -51,7 +52,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
         console.log(parsedData.Data);
         setUserData(parsedData.Data);
 
-        if (parsedData && !(parsedData.Data.tipo_usuario == "administrador")&& !(parsedData.Data.tipo_usuario == "root")) {
+        if (parsedData && !(parsedData.Data.tipo_usuario === "administrador")&& !(parsedData.Data.tipo_usuario === "root")) {
           fetchCartUtils();
         }
         setIsLoading(false);
@@ -88,7 +89,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
       } 
       
       try {
-        const response = await axios.get(`https://librosfera.onrender.com/api/v1/libros/autocompletar`, {
+        const response = await axios.get(`${API_BASE_URL}/libros/autocompletar`, {
           params: {
             q: searchTerm.trim(),
             limit: 5
@@ -146,13 +147,13 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
     setUserData(null);
     
     // Redireccionar a la página de login
-    navigate('/login');
+    navigate('/Login');
   };
 
   // Función para ir al perfil de usuario según su tipo
   const goToProfile = () => {
     if (!userData) {
-      navigate('/login');
+      navigate('/Login');
       return;
     }
     
@@ -175,9 +176,6 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
 
   // Verificar el tipo de usuario (Si está logueado)
   const isLoggedIn = !!userData;
-  const userType = userData?.tipo_usuario?.toLowerCase();
-  const isAdminOrRoot = userType === 'administrador' || userType === 'root';
-  const isRegularUser = isLoggedIn && !isAdminOrRoot;
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
@@ -218,7 +216,7 @@ const UserLayout = ({ children, cartCount = 0, updateCartCount }) => {
               ) : (
                 // Opciones para usuarios no logueados
                 <>
-                  <Link to="/login" className="text-sm hover:underline">
+                  <Link to="/Login" className="text-sm hover:underline">
                     Iniciar Sesión
                   </Link>
                   <Link to="/register" className="text-sm hover:underline">

@@ -9,7 +9,7 @@ import CardPage from './UserProfilePageComponents/CardPage';
 import MessagesPage from './UserProfilePageComponents/MessagesPage';
 import ReturnsPage from './UserProfilePageComponents/ReturnsPage'; // Nuevo componente de devoluciones
 import EditProfile from './EditProfile';
-import { fetchUserData, logoutUser } from './UserProfilePageComponents/authUtils';
+import { fetchUserData } from './UserProfilePageComponents/authUtils';
 import { getCartCount } from './cartUtils';
 
 const UserProfile = () => {
@@ -17,7 +17,6 @@ const UserProfile = () => {
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -45,7 +44,7 @@ const UserProfile = () => {
       
       if (!dataCookie) {
         console.log("No data cookie found, redirecting to login");
-        window.location.replace('/Login');
+        navigate('/Login');
         return;
       }
       
@@ -64,15 +63,15 @@ const UserProfile = () => {
           
           if (userType === 'administrador') {
             console.log("Admin user detected, redirecting to AdminProfile");
-            window.location.replace('/AdminProfile');
+            navigate('/AdminProfile');
             return;
           } else if (userType === 'root') {
             console.log("Root user detected, redirecting to RootProfile");
-            window.location.replace('/RootProfile');
+            navigate('/RootProfile');
             return;
           } else if (userType !== 'usuario' && userType !== 'cliente') {
             console.log("Unknown user type, redirecting to login");
-            window.location.replace('/Login');
+            navigate('/Login');
             return;
           }
         }
@@ -82,7 +81,7 @@ const UserProfile = () => {
         setIsLoading(false);
       } catch (error) {
         console.error("Error checking user type:", error);
-        window.location.replace('/Login');
+        navigate('/Login');
       }
     };
     
@@ -102,9 +101,9 @@ const UserProfile = () => {
     if (result.success) {
       setUserData(result.data);
     } else {
-      window.location.replace('/Login');
+      navigate('/Login');
     }
-  }, []);
+  }, [navigate]);
 
   // SOLUCIÓN 3: Reducir llamadas innecesarias - solo refrescar en casos específicos
   useEffect(() => {
@@ -145,7 +144,7 @@ const UserProfile = () => {
         .replace(/=.*/, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/");
     });
     
-    navigate('/login');
+    navigate('/Login');
   };
 
   const goToProfile = () => {
@@ -207,7 +206,7 @@ const UserProfile = () => {
             <div className="h-full overflow-y-auto p-6">
               <EditProfile 
                 userData={userData}
-                userType="user"
+                userType={userData.tipo_usuario}
                 onGoBack={handleGoBack}
               />
             </div>
