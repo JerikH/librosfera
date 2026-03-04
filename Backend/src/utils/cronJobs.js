@@ -1,6 +1,7 @@
-// src/utils/cronJobs.js 
+// src/utils/cronJobs.js
 
 const cron = require('node-cron');
+const mongoose = require('mongoose');
 const devolucionService = require('../../Database/services/devolucionService');
 
 class DevolucionCronJobs {
@@ -9,16 +10,63 @@ class DevolucionCronJobs {
    */
   static inicializarJobs() {
     console.log('🔄 Inicializando jobs automáticos de devoluciones...');
-    
+
+    // Job cada 6 horas para mantener MongoDB activo
+    this.jobKeepAlive();
+
     // Job diario para procesar devoluciones expiradas (a las 2:00 AM)
     this.jobDevolucionesExpiradas();
-    
+
     // Job semanal para limpiar archivos temporales (domingos a las 3:00 AM)
     this.jobLimpiezaArchivos();
-    
+
     console.log('✅ Jobs de devoluciones inicializados correctamente');
   }
   
+  /**
+   * Job de keep-alive: hace consultas ligeras cada 6 horas para evitar
+   * que MongoDB Atlas entre en estado de inactividad y degrade el rendimiento.
+   */
+  static jobKeepAlive() {
+    cron.schedule('0 */6 * * *', async () => {
+      try {
+        const db = mongoose.connection.db;
+
+        if (!db) {
+          console.warn('[KeepAlive] Conexión a MongoDB no disponible, se omite el ping.');
+          return;
+        }
+
+        // Ping al servidor para confirmar conectividad
+        await db.command({ ping: 1 });
+
+        // Consultas ligeras en colecciones principales usando estimatedDocumentCount,
+        // que lee metadatos del servidor sin escanear documentos.
+        const colecciones = ['libros', 'usuarios', 'ventas'];
+        const resumen = [];
+
+        for (const nombre of colecciones) {
+          try {
+            const total = await db.collection(nombre).estimatedDocumentCount();
+            resumen.push(`${nombre}=${total}`);
+          } catch (_) {
+            // La colección puede no existir aún; no es un error crítico
+          }
+        }
+
+        console.log(`[KeepAlive] MongoDB activo. [${resumen.join(', ')}]`);
+
+      } catch (error) {
+        console.error('[KeepAlive] Error al mantener MongoDB activo:', error.message);
+      }
+    }, {
+      scheduled: true,
+      timezone: process.env.TIMEZONE || 'America/Bogota'
+    });
+
+    console.log('📅 Job programado: Keep-alive MongoDB (cada 6 horas)');
+  }
+
   /**
    * Job para procesar devoluciones expiradas diariamente
    */
