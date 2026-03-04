@@ -44,13 +44,13 @@ const userService = {
       }
 
       // URL para acceder a la imagen
-      const baseUrl = process.env.BASE_URL || 'https://librosfera.onrender.com';
+      const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
       const urlImagen = archivo.url || `${baseUrl}/uploads/profiles/${archivo.filename}`;
       
       console.log('URL de la imagen:', urlImagen);
       
       // Si ya existe una foto de perfil anterior y no es la default, eliminar físicamente
-      if (usuario.foto_perfil && !usuario.foto_perfil.includes('default')) {
+      if (usuario.foto_perfil && usuario.foto_perfil !== 'http://localhost:5000/uploads/profiles/default.jpg' && !usuario.foto_perfil.includes('default')) {
         try {
           // Extraer nombre del archivo de la URL
           const nombreArchivoActual = usuario.foto_perfil.split('/').pop();
@@ -115,7 +115,7 @@ const userService = {
       }
 
       // Si ya existe una foto de perfil y no es la default, eliminar físicamente
-      if (usuario.foto_perfil && !usuario.foto_perfil.includes('default')) {
+      if (usuario.foto_perfil && usuario.foto_perfil !== 'http://localhost:5000/uploads/profiles/default.jpg' && !usuario.foto_perfil.includes('default')) {
         try {
           // Extraer nombre del archivo de la URL
           const nombreArchivoActual = usuario.foto_perfil.split('/').pop();
