@@ -84,7 +84,7 @@ class ImageCacheService {
   // Reescribe URLs de dominios obsoletos al dominio actual
   normalizeImageUrl(url) {
     if (!url) return url;
-    const staleOrigins = ['https://librosfera.onrender.com'];
+    const staleOrigins = ['https://librosfera.onrender.com', 'http://localhost:5000'];
     const currentOrigin = process.env.REACT_APP_BASE_URL || 'http://localhost:5000';
     for (const stale of staleOrigins) {
       if (url.startsWith(stale)) {
