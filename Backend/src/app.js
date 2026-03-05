@@ -41,6 +41,10 @@ app.use(morgan('dev')); // Logging
 // middleware de activity logger a nivel global
 app.use(activityLogger);
 
+// Normaliza dominios obsoletos en URLs de respuestas JSON (migración entre hosts)
+const normalizeUrlsMiddleware = require('./middleware/normalizeUrlsMiddleware');
+app.use(normalizeUrlsMiddleware);
+
 // Añadir middleware de depuración en ambiente de desarrollo
 if (process.env.NODE_ENV === 'development' && process.env.DEBUG === 'true') {
   app.use(debugMiddleware);
