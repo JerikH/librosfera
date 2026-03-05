@@ -5,7 +5,7 @@ import UserLayout from './UserLayout';
 import CachedImage from './CachedImage';
 import { addToCart, getCartCount } from './cartUtils'; // Import cart utility functions
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
-import { API_URL as API_BASE_URL, BASE_URL } from '../config';
+import { API_URL as API_BASE_URL, BASE_URL, FRONT_URL } from '../config';
 
 const BookDetails = () => {
   const { bookId } = useParams();
@@ -699,7 +699,7 @@ const handleAddToCart = async () => {
                 />
               </svg>
               {book.categories && book.categories.length > 0 && (
-                <a href={`http://localhost:3000/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
+                <a href={`${FRONT_URL}/libros/categoria/${book.categories[0]}`} className="text-blue-600 hover:underline">
                   {book.categories[0]}
                 </a>
               )}

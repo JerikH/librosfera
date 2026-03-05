@@ -50,7 +50,7 @@ const userService = {
       console.log('URL de la imagen:', urlImagen);
       
       // Si ya existe una foto de perfil anterior y no es la default, eliminar físicamente
-      if (usuario.foto_perfil && usuario.foto_perfil !== 'http://localhost:5000/uploads/profiles/default.jpg' && !usuario.foto_perfil.includes('default')) {
+      if (usuario.foto_perfil && !usuario.foto_perfil.includes('default')) {
         try {
           // Extraer nombre del archivo de la URL
           const nombreArchivoActual = usuario.foto_perfil.split('/').pop();
@@ -58,12 +58,12 @@ const userService = {
             const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
             const profilesDir = path.join(uploadDir, 'profiles');
             const rutaArchivoActual = path.join(profilesDir, nombreArchivoActual);
-            
+
             // Verificar si el archivo existe antes de intentar eliminarlo
             const existeArchivo = await fs.access(rutaArchivoActual)
               .then(() => true)
               .catch(() => false);
-              
+
             if (existeArchivo) {
               await fs.unlink(rutaArchivoActual);
             }
@@ -115,7 +115,7 @@ const userService = {
       }
 
       // Si ya existe una foto de perfil y no es la default, eliminar físicamente
-      if (usuario.foto_perfil && usuario.foto_perfil !== 'http://localhost:5000/uploads/profiles/default.jpg' && !usuario.foto_perfil.includes('default')) {
+      if (usuario.foto_perfil && !usuario.foto_perfil.includes('default')) {
         try {
           // Extraer nombre del archivo de la URL
           const nombreArchivoActual = usuario.foto_perfil.split('/').pop();
@@ -123,12 +123,12 @@ const userService = {
             const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
             const profilesDir = path.join(uploadDir, 'profiles');
             const rutaArchivoActual = path.join(profilesDir, nombreArchivoActual);
-            
+
             // Verificar si el archivo existe antes de intentar eliminarlo
             const existeArchivo = await fs.access(rutaArchivoActual)
               .then(() => true)
               .catch(() => false);
-              
+
             if (existeArchivo) {
               await fs.unlink(rutaArchivoActual);
             }

@@ -17,7 +17,7 @@ router.get('/api/image-proxy', async (req, res) => {
     
     // Opcional: verificar que la URL pertenece a dominios permitidos por seguridad
     const baseUrlHostname = new URL(process.env.REACT_APP_BASE_URL || 'http://localhost:5000').host;
-    const allowedDomains = [baseUrlHostname, 'api.your-domain.com', 'librosfera.onrender.com'];
+    const allowedDomains = [baseUrlHostname, 'https://librosfera.jerik.dev', 'librosfera.onrender.com'];
     let urlIsAllowed = false;
     
     try {
