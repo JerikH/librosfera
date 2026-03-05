@@ -17,18 +17,15 @@ jobs:
           script: |
             set -e
             cd ~/apps/librosfera
-
             git pull origin master
 
-            # Rebuild frontend estático con variables de producción
             cd Frontend/login-app
             REACT_APP_BASE_URL=https://librosfera.jerik.dev \
             REACT_APP_FRONT_URL=https://librosfera.jerik.dev \
+            PUBLIC_URL=/ \
             npm ci --prefer-offline && npm run build
 
-            # Rebuild y restart backend Docker
             cd ~/apps/librosfera
             docker compose up -d --build
             docker image prune -f
-
             echo "✅ Librosfera deployed"
