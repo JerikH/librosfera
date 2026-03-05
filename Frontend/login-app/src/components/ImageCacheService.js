@@ -98,7 +98,7 @@ class ImageCacheService {
   // Si no está en cache, la descarga y la almacena
   async loadImage(url) {
     if (!url) return null;
-    url = this.normalizeImageUrl(url);
+    // url = this.normalizeImageUrl(url);
 
     try {
       // Intenta obtener la imagen de la caché
