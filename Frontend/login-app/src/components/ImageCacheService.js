@@ -81,10 +81,24 @@ class ImageCacheService {
     });
   }
 
+  // Reescribe URLs de dominios obsoletos al dominio actual
+  normalizeImageUrl(url) {
+    if (!url) return url;
+    const staleOrigins = ['https://librosfera.onrender.com'];
+    const currentOrigin = process.env.REACT_APP_BASE_URL || 'http://localhost:5000';
+    for (const stale of staleOrigins) {
+      if (url.startsWith(stale)) {
+        return currentOrigin + url.slice(stale.length);
+      }
+    }
+    return url;
+  }
+
   // Cargar una imagen, primero intentando recuperarla de la cache
   // Si no está en cache, la descarga y la almacena
   async loadImage(url) {
     if (!url) return null;
+    url = this.normalizeImageUrl(url);
 
     try {
       // Intenta obtener la imagen de la caché
