@@ -55,21 +55,14 @@
     <link rel="dns-prefetch" href="https://librosfera.jerik.dev" />
 
     <!-- Google Analytics 4 -->
-    <!-- REACT_APP_GA_MEASUREMENT_ID se sustituye en build time por CRA -->
-    <script
-      async
-      src="https://www.googletagmanager.com/gtag/js?id=%REACT_APP_GA_MEASUREMENT_ID%"
-    ></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-KBB25SJTMD"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag() {
         dataLayer.push(arguments);
       }
-      var gaId = '%REACT_APP_GA_MEASUREMENT_ID%';
-      if (gaId && gaId.indexOf('G-') === 0) {
-        gtag('js', new Date());
-        gtag('config', gaId, { send_page_view: false });
-      }
+      gtag('js', new Date());
+      gtag('config', 'G-KBB25SJTMD', { send_page_view: false });
     </script>
   </head>
   <body>
