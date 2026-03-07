@@ -5,6 +5,8 @@ import axios from 'axios';
 import CachedImage from './CachedImage';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL } from '../config';
+import SEO from './SEO/SEO';
+import { trackSearch } from '../utils/analytics';
 
 // URL base para las llamadas a la API
 
@@ -80,7 +82,8 @@ useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const query = queryParams.get('q') || '';
     setSearchTerm(query);
-    
+    if (query) trackSearch(query);
+
     // Realizar búsqueda con el término extraído
     searchBooks(query);
   }, [location.search]);
@@ -318,6 +321,16 @@ useEffect(() => {
 
   return (
     <UserLayout>
+      <SEO
+        title={searchTerm ? `Resultados para "${searchTerm}"` : 'Búsqueda de Libros'}
+        description={
+          searchTerm
+            ? `${searchResults.length} resultado${searchResults.length !== 1 ? 's' : ''} para "${searchTerm}" en Librosfera.`
+            : 'Busca libros en el catálogo de Librosfera.'
+        }
+        url={`/search${location.search}`}
+        noIndex={true}
+      />
       <div className="container mx-auto py-6 px-4">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-800">

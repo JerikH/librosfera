@@ -6,6 +6,10 @@ import CachedImage from './CachedImage';
 import { addToCart, getCartCount } from './cartUtils'; // Import cart utility functions
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL, BASE_URL, FRONT_URL } from '../config';
+import SEO from './SEO/SEO';
+import { BreadcrumbSchema } from './SEO/StructuredData';
+import { Helmet } from 'react-helmet-async';
+import { trackBookView, trackAddToCart } from '../utils/analytics';
 
 const BookDetails = () => {
   const { bookId } = useParams();
@@ -202,6 +206,13 @@ const BookDetails = () => {
           };
           
           setBook(bookData);
+          trackBookView({
+            _id: bookData._id,
+            titulo: bookData.title,
+            autor_nombre_completo: bookData.author,
+            genero: bookData.categories?.[0],
+            precio: bookData.price,
+          });
         } else {
           throw new Error('Formato de respuesta incorrecto');
         }
@@ -480,7 +491,10 @@ const handleAddToCart = async () => {
 
     if (response.data.status === 'success') {
       const result = addToCart(book, Math.min(quantity, 3));
-    
+      trackAddToCart(
+        { _id: book._id, titulo: book.title, autor_nombre_completo: book.author, genero: book.categories?.[0], precio: book.price },
+        Math.min(quantity, 3)
+      );
       console.log('BookDetails: Cart update result:', result);
       
       // Update cart count
@@ -675,8 +689,65 @@ const handleAddToCart = async () => {
     );
   }
 
+  const bookSeoImage = book?.image || `${FRONT_URL}/logo512.png`;
+  const bookDescription = book
+    ? book.description !== 'Sin descripción disponible'
+      ? book.description
+      : `Compra ${book.title} de ${book.author} en Librosfera. ${book.publisher}, ${book.publishedDate}.`
+    : '';
+
   return (
     <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>
+      {book && (
+        <>
+          <SEO
+            title={`${book.title} por ${book.author}`}
+            description={bookDescription}
+            image={bookSeoImage}
+            url={`/libro/${bookId}`}
+            type="product"
+            keywords={`${book.title}, ${book.author}, ${book.publisher}, comprar libro, librería online`}
+          />
+          <BreadcrumbSchema
+            items={[
+              { name: 'Inicio', url: '/Home' },
+              { name: 'Libros', url: '/libros' },
+              { name: book.title, url: `/libro/${bookId}` },
+            ]}
+          />
+          <Helmet>
+            <script type="application/ld+json">{JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Book',
+              name: book.title,
+              author: { '@type': 'Person', name: book.author },
+              publisher: { '@type': 'Organization', name: book.publisher },
+              image: bookSeoImage,
+              description: bookDescription,
+              url: `https://librosfera.jerik.dev/libro/${bookId}`,
+              bookFormat: 'https://schema.org/Paperback',
+              ...(book.pages && { numberOfPages: book.pages }),
+              offers: {
+                '@type': 'Offer',
+                price: (book.price || 0).toFixed(2),
+                priceCurrency: 'COP',
+                availability: book.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+                url: `https://librosfera.jerik.dev/libro/${bookId}`,
+                seller: { '@type': 'Organization', name: 'Librosfera' },
+              },
+              ...(book.reviews > 0 && {
+                aggregateRating: {
+                  '@type': 'AggregateRating',
+                  ratingValue: book.rating,
+                  reviewCount: book.reviews,
+                  bestRating: 5,
+                  worstRating: 1,
+                },
+              }),
+            })}</script>
+          </Helmet>
+        </>
+      )}
       <div className="container mx-auto py-8 px-4">
         {/* Breadcrumbs */}
         <nav className="flex mb-6 text-sm">

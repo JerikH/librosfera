@@ -6,6 +6,8 @@ import CachedImage from './CachedImage';
 import { getCartCount } from './cartUtils';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL, BASE_URL } from '../config';
+import SEO from './SEO/SEO';
+import { BreadcrumbSchema } from './SEO/StructuredData';
 
 // URL base for API calls
 
@@ -887,6 +889,13 @@ const HomePage = () => {
 
   return (
     <UserLayout cartCount={cartCount} updateCartCount={updateCartCount}>
+      <SEO
+        title="Librosfera - Tu Librería Online"
+        description="Explora el catálogo de Librosfera: libros destacados, descuentos de hasta 60%, ficción, ciencia, historia y más. Compra online con envío a domicilio."
+        url="/Home"
+        keywords="librería online, comprar libros, libros con descuento, libros destacados, catálogo de libros"
+      />
+      <BreadcrumbSchema items={[{ name: 'Inicio', url: '/Home' }]} />
       <HomeContent />
       {/* Toast notifications */}
       <Toast 

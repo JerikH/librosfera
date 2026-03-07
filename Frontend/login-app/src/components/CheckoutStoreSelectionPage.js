@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
 import axios from 'axios';
 import { API_URL as API_BASE_URL } from '../config';
+import SEO from './SEO/SEO';
 
 const CheckoutStoreSelectionPage = () => {
   const navigate = useNavigate();
@@ -326,6 +327,7 @@ const CheckoutStoreSelectionPage = () => {
 
   return (
     <UserLayout>
+      <SEO title="Checkout - Selección de Tienda" noIndex={true} />
       <div className="bg-gray-100 min-h-screen">
         <div className="container mx-auto py-8 px-4">
           {/* Navigation Buttons */}

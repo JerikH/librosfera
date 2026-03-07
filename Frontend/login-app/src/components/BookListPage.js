@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import UserLayout from './UserLayout';
@@ -6,6 +6,8 @@ import CachedImage from './CachedImage';
 import { useCallback } from 'react';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL, BASE_URL } from '../config';
+import SEO from './SEO/SEO';
+import { ItemListSchema, BreadcrumbSchema } from './SEO/StructuredData';
 
 const BookListPage = ({ category }) => {
     
@@ -923,8 +925,55 @@ const BookListPage = ({ category }) => {
     );
   };
 
+  const seoConfig = useMemo(() => {
+    switch (category) {
+      case 'destacados':
+        return {
+          title: 'Libros Destacados',
+          description: 'Descubre los libros más destacados de Librosfera. Los mejor calificados y más populares.',
+          url: '/libros/destacados',
+          keywords: 'libros destacados, mejores libros, libros populares, librería online',
+        };
+      case 'descuentos':
+        return {
+          title: 'Libros con Descuento - Hasta 60% OFF',
+          description: 'Libros con los mejores descuentos en Librosfera. Ahorra en tu próxima compra.',
+          url: '/libros/descuentos',
+          keywords: 'libros con descuento, libros baratos, ofertas libros, librería online',
+        };
+      case 'categoria':
+        return {
+          title: `Libros de ${categoryName}`,
+          description: `Explora nuestra colección de libros de ${categoryName} en Librosfera.`,
+          url: `/libros/categoria/${categoryName}`,
+          keywords: `${categoryName}, libros de ${categoryName}, librería online`,
+        };
+      default:
+        return {
+          title: 'Catálogo Completo de Libros',
+          description: 'Explora el catálogo completo de Librosfera. Libros de todas las categorías, géneros y autores.',
+          url: '/libros',
+          keywords: 'catálogo de libros, todos los libros, librería online, comprar libros',
+        };
+    }
+  }, [category, categoryName]);
+
+  const breadcrumbItems = useMemo(() => {
+    const items = [{ name: 'Inicio', url: '/Home' }, { name: 'Libros', url: '/libros' }];
+    if (category !== 'todos') items.push({ name: seoConfig.title, url: seoConfig.url });
+    return items;
+  }, [category, seoConfig]);
+
   return (
     <UserLayout>
+      <SEO
+        title={seoConfig.title}
+        description={seoConfig.description}
+        url={seoConfig.url}
+        keywords={seoConfig.keywords}
+      />
+      <ItemListSchema books={books} listName={seoConfig.title} listUrl={seoConfig.url} />
+      <BreadcrumbSchema items={breadcrumbItems} />
       <div className="container mx-auto py-6 px-4">
         <ListContent />
       </div>

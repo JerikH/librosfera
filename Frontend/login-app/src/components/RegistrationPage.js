@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL as API_BASE_URL } from '../config';
+import SEO from './SEO/SEO';
 
 const RegistrationPage = () => {
   const navigate = useNavigate();
@@ -493,6 +494,7 @@ const RegistrationPage = () => {
 
   return (
     <div className="w-full max-w-md mx-auto p-4">
+      <SEO title="Crear Cuenta" description="Crea tu cuenta en Librosfera y accede a descuentos exclusivos." url="/Register" noIndex={true} />
       <h1 className="text-2xl font-bold text-center mb-6">Registrarse</h1>
       
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>

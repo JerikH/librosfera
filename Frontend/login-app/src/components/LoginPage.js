@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import RegistrationPage from './RegistrationPage';
 import PasswordResetPage from './PasswordRequestRecuperation';
+import SEO from './SEO/SEO';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { API_URL as API_BASE_URL } from '../config';
@@ -202,6 +203,8 @@ const LoginPage = () => {
   }
 
   return (
+    <>
+      <SEO title="Iniciar Sesión" description="Inicia sesión en tu cuenta de Librosfera." url="/Login" noIndex={true} />
     <div className="flex h-screen w-full">
       {/* Left Side - Black Background with Logo */}
       <div className="hidden md:flex md:w-1/2 bg-black text-white flex-col items-center justify-center">
@@ -329,6 +332,7 @@ const LoginPage = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 

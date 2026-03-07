@@ -4,6 +4,8 @@ import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL } from '../config';
+import SEO from './SEO/SEO';
+import { trackBeginCheckout } from '../utils/analytics';
 
 const CheckoutDeliveryPage = () => {
   const navigate = useNavigate();
@@ -99,7 +101,8 @@ const CheckoutDeliveryPage = () => {
           return;
         }
         setCartItems(parsedCart);
-        
+        trackBeginCheckout(parsedCart, 0);
+
         // Get cart prices - THIS IS THE SINGLE SOURCE OF TRUTH
         const storedPrices = localStorage.getItem('CartPrices');
         if (storedPrices) {
@@ -258,6 +261,7 @@ const CheckoutDeliveryPage = () => {
 
   return (
     <UserLayout>
+      <SEO title="Checkout - Entrega" noIndex={true} />
       <div className="bg-gray-100 min-h-screen">
         <div className="container mx-auto py-8 px-4">
           

@@ -4,6 +4,8 @@ import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL } from '../config';
+import SEO from './SEO/SEO';
+import { trackPurchase } from '../utils/analytics';
 
 function CheckoutPaymentConfirmation() {
   const navigate = useNavigate();
@@ -204,6 +206,7 @@ function CheckoutPaymentConfirmation() {
           })
         });
         setShowSuccessModal(true);
+        trackPurchase(response.data.data.numero_venta || 'N/A', total, []);
         console.log("success response", response.data);
         
         // Auto redirect after 5 seconds
@@ -446,6 +449,7 @@ function CheckoutPaymentConfirmation() {
   
   return (
     <UserLayout>
+      <SEO title="Confirmación de Pago" noIndex={true} />
       {/* Success Modal */}
       <SuccessModal />
       <ErrorModal />

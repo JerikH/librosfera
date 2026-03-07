@@ -4,6 +4,7 @@ import UserLayout from './UserLayout';
 import axios from 'axios';
 import { getAuthToken } from './UserProfilePageComponents/authUtils';
 import { API_URL as API_BASE_URL } from '../config';
+import SEO from './SEO/SEO';
 
 function CheckoutPaymentPage() {
   const navigate = useNavigate();
@@ -267,6 +268,7 @@ function CheckoutPaymentPage() {
   
   return (
     <UserLayout>
+      <SEO title="Checkout - Pago" noIndex={true} />
       <div className="bg-gray-100 min-h-screen py-8">
         <div className="container mx-auto px-4">
           <div className="max-w-6xl mx-auto">

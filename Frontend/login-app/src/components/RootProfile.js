@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Sidebar from './AdminProfileComponents/Sidebar';
 import Dashboard from './AdminProfileComponents/Dashboard';
 import ManageUsers from './AdminProfileComponents/ManageUsers';
+import SEO from './SEO/SEO';
 import ProfilePage from './AdminProfileComponents/ProfilePage';
 import EditProfile from './EditProfile';
 
@@ -160,6 +161,7 @@ const RootProfile = () => {
   
   return (
     <div className="flex flex-col h-screen">
+      <SEO title="Panel Root" description="Panel root de Librosfera." url="/RootProfile" noIndex={true} />
       {/* Top navigation bar only */}
       <header className="bg-white shadow-sm w-full">
         <div className="bg-gray-800 text-white">

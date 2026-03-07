@@ -1,43 +1,82 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+
+    <!-- Primary Meta Tags -->
+    <title>Librosfera - Tu Librería Online | Compra Libros</title>
+    <meta name="title" content="Librosfera - Tu Librería Online | Compra Libros" />
     <meta
       name="description"
-      content="Web site created using create-react-app"
+      content="Librosfera es tu librería online. Encuentra libros de todas las categorías: ficción, ciencia, historia, tecnología y más. Compra con descuentos y envío a domicilio."
     />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
+    <meta
+      name="keywords"
+      content="librería online, comprar libros, libros baratos, librería, libros de ficción, libros de ciencia, libros con descuento"
+    />
+    <meta name="author" content="Librosfera" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://librosfera.jerik.dev/" />
 
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>React App</title>
+    <!-- Theme & PWA -->
+    <meta name="theme-color" content="#1e3a5f" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://librosfera.jerik.dev/" />
+    <meta property="og:site_name" content="Librosfera" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:title" content="Librosfera - Tu Librería Online | Compra Libros" />
+    <meta
+      property="og:description"
+      content="Librosfera es tu librería online. Encuentra libros de todas las categorías con descuentos y envío a domicilio."
+    />
+    <meta property="og:image" content="https://librosfera.jerik.dev/logo512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="Librosfera - Librería Online" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Librosfera - Tu Librería Online" />
+    <meta
+      name="twitter:description"
+      content="Tu librería online con libros de todas las categorías. Descuentos, envío a domicilio y gran catálogo."
+    />
+    <meta name="twitter:image" content="https://librosfera.jerik.dev/logo512.png" />
+
+    <!-- Performance: Preconnect -->
+    <link rel="preconnect" href="https://www.googletagmanager.com" />
+    <link rel="preconnect" href="https://www.google-analytics.com" />
+    <link rel="dns-prefetch" href="https://librosfera.jerik.dev" />
+
+    <!-- Google Analytics 4 -->
+    <!-- REACT_APP_GA_MEASUREMENT_ID se sustituye en build time por CRA -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=%REACT_APP_GA_MEASUREMENT_ID%"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      var gaId = '%REACT_APP_GA_MEASUREMENT_ID%';
+      if (gaId && gaId.indexOf('G-') === 0) {
+        gtag('js', new Date());
+        gtag('config', gaId, { send_page_view: false });
+      }
+    </script>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>
+      Para usar Librosfera necesitas habilitar JavaScript en tu navegador.
+      Visita <a href="https://librosfera.jerik.dev">Librosfera - Librería Online</a>.
+    </noscript>
     <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
   </body>
 </html>

@@ -131,6 +131,10 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
   customCss: '.swagger-ui .topbar { display: none }'
 }));
 
+// Sitemap dinámico
+const sitemapRoutes = require('./routes/sitemapRoutes');
+app.use('/', sitemapRoutes);
+
 // Middleware de manejo de errores
 app.use(notFound);
 app.use(errorHandler);

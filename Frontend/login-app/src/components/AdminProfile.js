@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Sidebar from './AdminProfileComponents/Sidebar';
 import Dashboard from './AdminProfileComponents/Dashboard';
 import ManageBooks from './AdminProfileComponents/ManageBooks';
+import SEO from './SEO/SEO';
 import ManageMessages from './AdminProfileComponents/ManageMessages';
 import ManageUsers from './AdminProfileComponents/ManageUsers';
 import ManageStores from './AdminProfileComponents/ManageStores';
@@ -165,6 +166,7 @@ const AdminProfile = () => {
   
   return (
     <div className="flex flex-col h-screen">
+      <SEO title="Panel de Administración" description="Panel de administración de Librosfera." url="/AdminProfile" noIndex={true} />
       {/* Top navigation bar only */}
       <header className="bg-white shadow-sm w-full">
         <div className="bg-gray-800 text-white">

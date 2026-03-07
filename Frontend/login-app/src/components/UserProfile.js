@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import SEO from './SEO/SEO';
 import Sidebar from './UserProfilePageComponents/Sidebar';
 import Dashboard from './UserProfilePageComponents/Dashboard';
 import ProfilePage from './UserProfilePageComponents/ProfilePage';
@@ -164,6 +165,7 @@ const UserProfile = () => {
   
   return (
     <div className="flex flex-col h-screen">
+      <SEO title="Mi Perfil" description="Gestiona tu cuenta en Librosfera." url="/Profile" noIndex={true} />
       <header className="bg-white shadow-sm w-full">
         <div className="bg-gray-800 text-white">
           <div className="container mx-auto px-4 py-2 flex items-center justify-between">

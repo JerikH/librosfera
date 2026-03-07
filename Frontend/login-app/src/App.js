@@ -1,4 +1,6 @@
-import { BrowserRouter as Router, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { OrganizationSchema, WebSiteSchema } from "./components/SEO/StructuredData";
 import LoginPage from "./components/LoginPage";
 import CreateAdminPage from "./components/CreateAdminPage";
 import RegistrationPage from './components/RegistrationPage';
@@ -19,6 +21,19 @@ import CheckoutPaymentConfirmation from './components/CheckoutPaymentConfirmatio
 import BookItemsList from './components/AdminProfileComponents/BookItemsList'; // Ruta corregida
 import PurchaseDetailsPage from "./components/UserProfilePageComponents/PurchaseDetailsPage";
 
+// Tracker de page views para GA4 — debe estar dentro de <Router>
+const GA4PageTracker = () => {
+  const location = useLocation();
+  useEffect(() => {
+    if (typeof window.gtag !== 'function') return;
+    window.gtag('event', 'page_view', {
+      page_path: location.pathname + location.search,
+      page_title: document.title,
+    });
+  }, [location]);
+  return null;
+};
+
 // Wrapper para el checkout para manejar más fácilmente cualquier estado compartido
 const CheckoutWrapper = () => {
   return (
@@ -34,6 +49,9 @@ const CheckoutWrapper = () => {
 const App = () => {
   return (
     <Router>
+      <OrganizationSchema />
+      <WebSiteSchema />
+      <GA4PageTracker />
       <Routes>
         {/* Redirect from / to /Login */}
         <Route path="/" element={<Navigate to="/Login" replace />} />
