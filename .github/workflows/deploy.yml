@@ -23,6 +23,7 @@ jobs:
             REACT_APP_BASE_URL=https://librosfera.jerik.dev \
             REACT_APP_FRONT_URL=https://librosfera.jerik.dev \
             PUBLIC_URL=/ \
+            REACT_APP_GA_MEASUREMENT_ID=G-KBB25SJTMD \
             npm ci --prefer-offline && npm run build
 
             cd ~/apps/librosfera
