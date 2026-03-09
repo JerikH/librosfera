@@ -1,7 +1,7 @@
 {
   "name": "login-app",
   "version": "0.1.0",
-  "homepage": ".",
+  "homepage": "/",
   "private": true,
   "dependencies": {
     "@babel/standalone": "^7.27.6",

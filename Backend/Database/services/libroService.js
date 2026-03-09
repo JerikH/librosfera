@@ -1107,23 +1107,8 @@ const libroService = {
       
       if (pipeline.length > 0) {
         // Si hay búsqueda de texto o filtros, usar pipeline completo
-        try {
-          libros = await Libro.aggregate(pipeline);
-          console.log(`Libros encontrados con pipeline: ${libros.length}`);
-        } catch (atlasError) {
-          console.warn('Atlas Search falló, usando búsqueda por regex como fallback:', atlasError.message);
-          const regexQuery = { activo: true };
-          if (termino && termino.trim() !== '') {
-            regexQuery.$or = [
-              { titulo: { $regex: termino, $options: 'i' } },
-              { autor_nombre_completo: { $regex: termino, $options: 'i' } },
-              { genero: { $regex: termino, $options: 'i' } },
-              { descripcion: { $regex: termino, $options: 'i' } },
-            ];
-          }
-          libros = await Libro.find(regexQuery).sort({ fecha_registro: -1 }).limit(limite).lean();
-          console.log(`Fallback regex: ${libros.length} libros encontrados`);
-        }
+        libros = await Libro.aggregate(pipeline);
+        console.log(`Libros encontrados con pipeline: ${libros.length}`);
       } else {
         // Si no hay búsqueda ni filtros, devolver libros por defecto (más recientes)
         const query = { activo: true };
