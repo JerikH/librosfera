@@ -38,10 +38,10 @@ const GA4PageTracker = () => {
 const CheckoutWrapper = () => {
   return (
     <Routes>
-      <Route path="/" element={<CheckoutDeliveryPage />} />
-      <Route path="/store-selection" element={<CheckoutStoreSelectionPage />} />
-      <Route path="/payment" element={<CheckoutPaymentPage />} />
-      <Route path="/confirm-payment" element={<CheckoutPaymentConfirmation />} />
+      <Route index element={<CheckoutDeliveryPage />} />
+      <Route path="store-selection" element={<CheckoutStoreSelectionPage />} />
+      <Route path="payment" element={<CheckoutPaymentPage />} />
+      <Route path="confirm-payment" element={<CheckoutPaymentConfirmation />} />
     </Routes>
   );
 };
@@ -88,6 +88,7 @@ const App = () => {
         <Route path="/Profile" element={<UserProfile />} />
         <Route path="/AdminProfile" element={<AdminProfile />} />
         <Route path="/RootProfile" element={<RootProfile />} />
+        <Route path="*" element={<Navigate to="/Login" replace />} />
       </Routes>
     </Router>
   );

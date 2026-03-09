@@ -67,8 +67,8 @@ const LoginPage = () => {
                 console.log("Admin user detected, redirecting to AdminProfile");
                 navigate('/AdminProfile');
               } else if (parsedData.Data.tipo_usuario === 'root') {
-                console.log("Root user detected, redirecting to Profile");
-                navigate('/Profile');
+                console.log("Root user detected, redirecting to RootProfile");
+                navigate('/RootProfile');
               } else {
                 console.log("Regular user detected, redirecting to Home");
                 navigate('/Home'); // Redirección a nueva página principal
@@ -117,8 +117,8 @@ const LoginPage = () => {
       console.log("Admin login detected, redirecting to AdminProfile");
       navigate('/AdminProfile');
     } else if (userData.Data.tipo_usuario === 'root') {
-      console.log("Root login detected, redirecting to Profile");
-      navigate('/Profile');
+      console.log("Root login detected, redirecting to RootProfile");
+      navigate('/RootProfile');
     } else {
       console.log("Regular user login detected, redirecting to Home");
       navigate('/Home'); // Redirección a nueva página principal

@@ -33,10 +33,22 @@ const app = express();
 
 // Middlewares de seguridad y utilidad
 app.use(helmet()); // Seguridad con headers HTTP
-app.use(cors()); // Habilitar CORS
+app.use(cors({
+  origin: process.env.FRONT_URL,
+  credentials: true,
+})); // Habilitar CORS
 app.use(express.json()); // Parsear JSON
 app.use(express.urlencoded({ extended: false }));
 app.use(morgan('dev')); // Logging
+
+// Rate limiter para rutas de autenticación
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Demasiados intentos. Intenta de nuevo en 15 minutos.' },
+});
 
 // middleware de activity logger a nivel global
 app.use(activityLogger);
@@ -90,7 +102,7 @@ try {
 // Rutas de la API
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/users', passwordResetRoutes);
-app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/libros', libroRoutes);
 app.use('/api/v1/activities', activityLogRoutes);
 app.use('/api/v1/tarjetas', tarjetaRoutes);

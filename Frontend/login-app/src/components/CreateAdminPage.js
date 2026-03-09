@@ -82,8 +82,15 @@ const CreateAdminPage = () => {
     checkAuth();
   }, [rawData, navigate]);
 
-  // Return null while checking authorization or if not authorized
-  if (isLoading || !isAuthorized) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin inline-block w-8 h-8 border-4 rounded-full border-t-transparent border-blue-600" role="status" />
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
     return null;
   }
 

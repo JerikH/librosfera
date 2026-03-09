@@ -25,44 +25,67 @@ const SearchResults = () => {
   const [, setCartCount] = useState(0);
   const [booksInCart, setBooksInCart] = useState(new Set());
 
+  const getBooksInCart = () => {
+    try {
+      const currentCart = localStorage.getItem('shoppingCart')
+        ? JSON.parse(localStorage.getItem('shoppingCart'))
+        : [];
 
-  useEffect(() => {
-  getBooksInCart();
-}, []);
+      const bookIds = new Set(currentCart.map(item => {
+        if (typeof item.bookId === 'string') {
+          return item.bookId;
+        } else if (item.bookId && typeof item.bookId === 'object') {
+          return item.bookId._id || item.bookId.id;
+        }
+        return null;
+      }).filter(id => id !== null));
 
-useEffect(() => {
-  // Add event listeners for cart synchronization
-  const handleCartUpdate = () => {
-    console.log('SearchResults: Received cart update event');
-    getBooksInCart();
-  };
-
-  const handleGlobalCartUpdate = () => {
-    console.log('SearchResults: Received global cart update event');
-    getBooksInCart();
-  };
-
-  // Listen for cart update events
-  window.addEventListener('cartUpdated', handleCartUpdate);
-  window.addEventListener('globalCartUpdate', handleGlobalCartUpdate);
-  
-  // Also listen for storage events (when localStorage changes in other tabs/components)
-  const handleStorageChange = (e) => {
-    if (e.key === 'shoppingCart') {
-      console.log('SearchResults: Storage changed, updating cart');
-      getBooksInCart();
+      console.log("ids in cart:", bookIds);
+      setBooksInCart(bookIds);
+      return bookIds;
+    } catch (error) {
+      console.error('Error al leer el carrito:', error);
+      return new Set();
     }
   };
-  
-  window.addEventListener('storage', handleStorageChange);
 
-  // Cleanup event listeners
-  return () => {
-    window.removeEventListener('cartUpdated', handleCartUpdate);
-    window.removeEventListener('globalCartUpdate', handleGlobalCartUpdate);
-    window.removeEventListener('storage', handleStorageChange);
-  };
-}, []);
+  useEffect(() => {
+    getBooksInCart();
+  }, []);
+
+  useEffect(() => {
+    // Add event listeners for cart synchronization
+    const handleCartUpdate = () => {
+      console.log('SearchResults: Received cart update event');
+      getBooksInCart();
+    };
+
+    const handleGlobalCartUpdate = () => {
+      console.log('SearchResults: Received global cart update event');
+      getBooksInCart();
+    };
+
+    // Listen for cart update events
+    window.addEventListener('cartUpdated', handleCartUpdate);
+    window.addEventListener('globalCartUpdate', handleGlobalCartUpdate);
+
+    // Also listen for storage events (when localStorage changes in other tabs/components)
+    const handleStorageChange = (e) => {
+      if (e.key === 'shoppingCart') {
+        console.log('SearchResults: Storage changed, updating cart');
+        getBooksInCart();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Cleanup event listeners
+    return () => {
+      window.removeEventListener('cartUpdated', handleCartUpdate);
+      window.removeEventListener('globalCartUpdate', handleGlobalCartUpdate);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
   // Function to show toast notifications
   const showToast = (message, type = 'success') => {
     setToast({ visible: true, message, type });
@@ -162,32 +185,6 @@ useEffect(() => {
     return stars;
   };
 
-  const getBooksInCart = () => {
-    try {
-      const currentCart = localStorage.getItem('shoppingCart') 
-        ? JSON.parse(localStorage.getItem('shoppingCart')) 
-        : [];
-      
-      // FIXED: Extract book IDs properly, handling both full book objects and ID strings
-      const bookIds = new Set(currentCart.map(item => {
-        if (typeof item.bookId === 'string') {
-          return item.bookId;
-        } else if (item.bookId && typeof item.bookId === 'object') {
-          return item.bookId._id || item.bookId.id;
-        }
-        return null;
-      }).filter(id => id !== null));
-      
-      console.log("ids in cart:", bookIds);
-      setBooksInCart(bookIds);
-      return bookIds;
-    } catch (error) {
-      console.error('Error al leer el carrito:', error);
-      return new Set();
-    }
-  };
-
-  
   const handleAddToCart = async (book) => {
   // If already in cart, don't do anything
   if (booksInCart.has(book._id)) {
