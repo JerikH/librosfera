@@ -145,7 +145,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
 
 // Sitemap dinámico
 const sitemapRoutes = require('./routes/sitemapRoutes');
-app.use('/', sitemapRoutes);
+app.use('/api', sitemapRoutes);
 
 // Middleware de manejo de errores
 app.use(notFound);

@@ -53,8 +53,8 @@ const App = () => {
       <WebSiteSchema />
       <GA4PageTracker />
       <Routes>
-        {/* Redirect from / to /Login */}
-        <Route path="/" element={<Navigate to="/Login" replace />} />
+        {/* Redirect from / to /Home */}
+        <Route path="/" element={<Navigate to="/Home" replace />} />
         
         {/* Rutas públicas/autenticación */}
         <Route path="/Login" element={<LoginPage />} />
@@ -88,7 +88,7 @@ const App = () => {
         <Route path="/Profile" element={<UserProfile />} />
         <Route path="/AdminProfile" element={<AdminProfile />} />
         <Route path="/RootProfile" element={<RootProfile />} />
-        <Route path="*" element={<Navigate to="/Login" replace />} />
+        <Route path="*" element={<Navigate to="/Home" replace />} />
       </Routes>
     </Router>
   );
