@@ -29,4 +29,10 @@ jobs:
             cd ~/apps/librosfera
             docker compose up -d --build
             docker image prune -f
+
+            sleep 8
+            curl -sf https://librosfera.jerik.dev/api/sitemap.xml \
+              -o ~/apps/librosfera/Frontend/login-app/build/sitemap.xml \
+              || echo "⚠️  Sitemap fetch failed, static file not updated"
+
             echo "✅ Librosfera deployed"

@@ -1,7 +1,6 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
 Allow: /
-Allow: /api/sitemap.xml
 
 # Páginas privadas — sin valor para indexar
 Disallow: /Login
@@ -16,4 +15,7 @@ Disallow: /CreateAdmin
 Disallow: /Welcome
 Disallow: /admin/
 
-Sitemap: https://librosfera.jerik.dev/api/sitemap.xml
+# Backend API
+Disallow: /api/
+
+Sitemap: https://librosfera.jerik.dev/sitemap.xml

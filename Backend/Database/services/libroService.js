@@ -1318,40 +1318,40 @@ const libroService = {
         return [];
       }
 
-      // Validar que el campo tenga soporte para autocompletado
-      const camposPermitidos = ['titulo', 'autor_nombre_completo', 'genero', 'editorial'];
-      if (!camposPermitidos.includes(campo)) {
-        campo = 'titulo'; // Valor por defecto si no es válido
-      }
-
-      // Pipeline para autocompletado usando Atlas Search
+      // Pipeline con compound should para buscar en título y autor simultáneamente
       const pipeline = [
         {
           $search: {
             index: "libro_search_index",
-            // Usar el subcampo autocomplete del campo solicitado
-            autocomplete: {
-              query: prefijo,
-              path: `${campo}.autocomplete`,
-              fuzzy: {
-                maxEdits: 1,
-                prefixLength: 1
-              }
+            compound: {
+              should: [
+                {
+                  autocomplete: {
+                    query: prefijo,
+                    path: "titulo",
+                    fuzzy: { maxEdits: 1, prefixLength: 1 }
+                  }
+                },
+                {
+                  autocomplete: {
+                    query: prefijo,
+                    path: "autor_nombre_completo",
+                    fuzzy: { maxEdits: 1, prefixLength: 1 }
+                  }
+                }
+              ],
+              minimumShouldMatch: 1
             }
           }
         },
-        // Obtener solo los campos necesarios y score
         {
           $project: {
             _id: 1,
             titulo: 1,
             autor_nombre_completo: 1,
-            [campo]: 1,
-            // Usar doble score para evitar el error de $meta
-            score: { $const: 1.0 } // Score constante como alternativa
+            score: { $const: 1.0 }
           }
         },
-        // Limitar cantidad de resultados
         {
           $limit: limite
         }
@@ -1360,39 +1360,30 @@ const libroService = {
       const resultados = await Libro.aggregate(pipeline);
       return resultados;
     } catch (error) {
-      console.error(`Error en autocompletado para ${campo}:`, error);
-      
+      console.error(`Error en autocompletado:`, error);
+
       // Plan B: Usar búsqueda de texto normal si falla autocomplete
       try {
-        console.log(`Intentando fallback para autocompletar ${campo} con búsqueda de texto normal`);
-        return await this.busquedaTextoSimple(prefijo, campo, limite);
+        console.log(`Intentando fallback para autocompletar con búsqueda de texto normal`);
+        return await this.busquedaTextoSimple(prefijo, limite);
       } catch (fallbackError) {
         console.error('Error en fallback de autocompletado:', fallbackError);
-        throw error; // Propagar el error original
+        throw error;
       }
     }
   },
 
   // Método fallback para autocompletado usando regex
-  async busquedaTextoSimple(prefijo, campo = "titulo", limite = 10) {
-    // Escapar caracteres especiales para regex
+  async busquedaTextoSimple(prefijo, limite = 10) {
     const terminoEscapado = prefijo.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    
-    // Crear condición de búsqueda
-    const query = { 
+    const query = {
       activo: true,
-      [campo]: { $regex: `^${terminoEscapado}`, $options: 'i' }
+      $or: [
+        { titulo: { $regex: terminoEscapado, $options: 'i' } },
+        { autor_nombre_completo: { $regex: terminoEscapado, $options: 'i' } }
+      ]
     };
-    
-    // Campos a seleccionar
-    const projection = { 
-      _id: 1, 
-      titulo: 1, 
-      autor_nombre_completo: 1,
-      [campo]: 1
-    };
-    
-    // Ejecutar consulta
+    const projection = { _id: 1, titulo: 1, autor_nombre_completo: 1 };
     return await Libro.find(query, projection).limit(limite);
   },
 
